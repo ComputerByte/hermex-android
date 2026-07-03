@@ -96,6 +96,30 @@ class CustomHeadersInterceptorTest {
     }
 
     @Test
+    fun `useServer repoints headers without rebuilding the module -- server A's header never reaches server B`() = runTest {
+        val storeA = FakeCustomHeadersStore(listOf(CustomHttpHeader(name = "X-Server-A-Key", value = "a-secret")))
+        val storeB = FakeCustomHeadersStore(listOf(CustomHttpHeader(name = "X-Server-B-Key", value = "b-secret")))
+        val module = NetworkModule(FakeCookieStore(), customHeadersStore = storeA, onUnauthorized = {})
+        server.enqueue(MockResponse().setBody("""{"status":"ok"}"""))
+        server.enqueue(MockResponse().setBody("""{"status":"ok"}"""))
+
+        // Same module/api-building path is reused for both servers -- only the active scope
+        // changes, never the OkHttpClient/Retrofit machinery itself.
+        val apiForA = module.createApi(server.url("/").toString())
+        safeApiCall { apiForA.health() }
+        val requestToA = server.takeRequest()
+        assertEquals("a-secret", requestToA.getHeader("X-Server-A-Key"))
+
+        module.useServer(FakeCookieStore(), storeB)
+        val apiForB = module.createApi(server.url("/").toString())
+        safeApiCall { apiForB.health() }
+        val requestToB = server.takeRequest()
+
+        assertNull("server A's header must never reach server B", requestToB.getHeader("X-Server-A-Key"))
+        assertEquals("b-secret", requestToB.getHeader("X-Server-B-Key"))
+    }
+
+    @Test
     fun `the SSE client shares the same interceptor -- custom headers apply to raw streamed requests too`() {
         val store = FakeCustomHeadersStore(listOf(CustomHttpHeader(name = "X-Test-Header", value = "test123")))
         server.enqueue(MockResponse().setBody("event: message\ndata: {}\n\n"))

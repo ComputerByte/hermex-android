@@ -8,7 +8,7 @@ import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.CustomHttpHeader
-import com.hermex.android.core.storage.ServerStore
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -23,13 +23,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-
-private class FakeServerStore(initial: String?) : ServerStore {
-    var stored: String? = initial
-    override suspend fun save(serverUrl: String) { stored = serverUrl }
-    override suspend fun load(): String? = stored
-    override suspend fun clear() { stored = null }
-}
 
 private class FakeChatPreferencesStore(private var expandThinkingByDefault: Boolean = false) : ChatPreferencesStore {
     override suspend fun loadExpandThinkingByDefault(): Boolean = expandThinkingByDefault
@@ -105,7 +98,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `signOut clears auth state back to Unconfigured`() = runTest {
+    fun `signOut clears the session and demotes to LoggedOut, keeping the server configured`() = runTest {
         val repo = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}""")) // GET /api/settings
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}""")) // GET /api/models
@@ -118,9 +111,13 @@ class SettingsViewModelTest {
         // AuthRepository.state leaves LoggedIn), so assert completion on the repository's own
         // state flow rather than waiting on SettingsUiState for a signal that never comes.
         repo.state.test {
-            assertEquals(server.url("/").toString(), (awaitItem() as AuthState.LoggedIn).serverUrl)
+            val loggedIn = awaitItem() as AuthState.LoggedIn
+            assertEquals(server.url("/").toString(), loggedIn.serverUrl)
             viewModel.signOut()
-            assertEquals(AuthState.Unconfigured, awaitItem())
+            // Multi-server: signing out only clears this server's session -- it stays configured
+            // (still shows in the server list) rather than being fully forgotten, mirroring how a
+            // 401 already demotes to LoggedOut without discarding the server URL.
+            assertEquals(AuthState.LoggedOut(loggedIn.serverId, loggedIn.serverUrl), awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }

@@ -10,7 +10,7 @@ import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.network.ToolEventPayload
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.storage.ChatPreferencesStore
-import com.hermex.android.core.storage.ServerStore
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -30,13 +30,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-
-private class FakeServerStore(initial: String?) : ServerStore {
-    var stored: String? = initial
-    override suspend fun save(serverUrl: String) { stored = serverUrl }
-    override suspend fun load(): String? = stored
-    override suspend fun clear() { stored = null }
-}
 
 private class FakeSseClient(private val flowProvider: (HttpUrl) -> Flow<SseEvent>) : SseStreamSource {
     var lastUrl: HttpUrl? = null

@@ -24,10 +24,18 @@ private val Context.customHeadersDataStore by preferencesDataStore(name = "herme
  * EncryptedSharedPreferences" convention) -- consider moving to encrypted storage later if a
  * specific deployment needs it.
  *
+ * Headers are scoped by [serverId] -- a reverse-proxy auth header for one self-hosted server has
+ * no business being sent to another, so switching (or holding several configured) servers must
+ * never mix them. Pre-multi-server installs had a single headers blob under an unscoped key; the
+ * first [load]/[snapshot] for a given [serverId] migrates that blob in (see
+ * [migrateLegacyIfNeeded]) -- in practice only the one server created by [DataStoreServerStore]'s
+ * legacy-URL migration will ever find it, for the same reason described on [DataStoreCookieStore].
+ *
  * Never logs the raw stored string or an individual header's name/value -- both may be secrets.
  */
-class DataStoreCustomHeadersStore(private val context: Context) : CustomHeadersStore {
-    private val key = stringPreferencesKey("headers_json")
+class DataStoreCustomHeadersStore(private val context: Context, private val serverId: String) : CustomHeadersStore {
+    private val legacyKey = stringPreferencesKey("headers_json")
+    private val key = stringPreferencesKey("headers_json_$serverId")
 
     private val _headers = MutableStateFlow<List<CustomHttpHeader>>(emptyList())
     override val headers: StateFlow<List<CustomHttpHeader>> = _headers.asStateFlow()
@@ -37,12 +45,14 @@ class DataStoreCustomHeadersStore(private val context: Context) : CustomHeadersS
 
     // Mirrors PersistentCookieJar.ensureLoaded(): the OkHttp interceptor needs the header list
     // synchronously on every request, but DataStore reads are suspend-only, so the very first
-    // access blocks once (only on the first request after process start) to hydrate the
-    // in-memory cache; every call after that is a plain in-memory read.
+    // access blocks once (only on the first request after process start, or right after
+    // switching to a server whose headers haven't been read yet) to hydrate the in-memory cache;
+    // every call after that is a plain in-memory read.
     private fun ensureLoaded() {
         if (loaded) return
         synchronized(this) {
             if (loaded) return
+            runBlocking(Dispatchers.IO) { migrateLegacyIfNeeded() }
             _headers.value = decode(runBlocking(Dispatchers.IO) { readRaw() })
             loaded = true
         }
@@ -54,6 +64,7 @@ class DataStoreCustomHeadersStore(private val context: Context) : CustomHeadersS
     }
 
     override suspend fun load(): List<CustomHttpHeader> {
+        migrateLegacyIfNeeded()
         val decoded = decode(readRaw())
         _headers.value = decoded
         loaded = true
@@ -75,6 +86,18 @@ class DataStoreCustomHeadersStore(private val context: Context) : CustomHeadersS
         }
         _headers.value = sanitized
         loaded = true
+    }
+
+    /** Copies the legacy (unscoped) headers blob into this server's scoped key the first time
+     * it's asked for, then removes the legacy key so it only ever runs once. No-op if there's
+     * nothing to migrate, or if this server's scoped key is already populated. */
+    private suspend fun migrateLegacyIfNeeded() {
+        context.customHeadersDataStore.edit { prefs ->
+            if (prefs.contains(key)) return@edit
+            val legacy = prefs[legacyKey] ?: return@edit
+            prefs[key] = legacy
+            prefs.remove(legacyKey)
+        }
     }
 
     private suspend fun readRaw(): String? = context.customHeadersDataStore.data.firstOrNull()?.get(key)

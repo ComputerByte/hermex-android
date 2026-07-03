@@ -34,9 +34,13 @@ private data class SerializableCookie(
  *
  * Shared by both the REST and SSE `OkHttpClient`s (see [NetworkModule]) -- the SSE stream
  * endpoint is itself authenticated and must carry the same session cookie as REST calls.
+ *
+ * [useStore] repoints this same jar instance at a different (already server-scoped)
+ * [CookieStore] -- e.g. when the active server changes -- instead of the app needing to tear
+ * down and rebuild the whole `OkHttpClient`/Retrofit stack. See [NetworkModule.useServer].
  */
 class PersistentCookieJar(
-    private val cookieStore: CookieStore,
+    @Volatile private var cookieStore: CookieStore,
     private val json: Json = HermexJson,
 ) : CookieJar {
     private val memoryCache = ConcurrentHashMap<String, Cookie>()
@@ -46,13 +50,16 @@ class PersistentCookieJar(
     private var loaded = false
 
     // Cookies are read/written from OkHttp's network dispatcher threads. The one-time load is a
-    // blocking DataStore read; acceptable because it only happens once, on the very first
-    // request after process start, and every subsequent call hits the in-memory cache.
+    // blocking DataStore read; acceptable because it only happens once per active store -- on
+    // the very first request after process start, or right after switching to a server whose
+    // cookies haven't been loaded into memory yet -- and every subsequent call hits the
+    // in-memory cache.
     private fun ensureLoaded() {
         if (loaded) return
         synchronized(this) {
             if (loaded) return
-            val stored = runBlocking(Dispatchers.IO) { cookieStore.load() }
+            val store = cookieStore
+            val stored = runBlocking(Dispatchers.IO) { store.load() }
             if (stored != null) {
                 runCatching { json.decodeFromString<List<SerializableCookie>>(stored) }
                     .getOrNull()
@@ -82,13 +89,31 @@ class PersistentCookieJar(
     fun clear() {
         ensureLoaded()
         memoryCache.clear()
-        persistScope.launch { cookieStore.clear() }
+        // Capture the store reference synchronously -- see the comment in persist().
+        val store = cookieStore
+        persistScope.launch { store.clear() }
+    }
+
+    /** Repoints this jar at [newStore] (a different server's scope) and drops the in-memory
+     * cache so nothing from the previous server's cookies can leak into the new scope -- the
+     * next [ensureLoaded] call lazily rehydrates from [newStore] instead. Synchronized with
+     * [ensureLoaded] so a request racing a server switch never sees a half-swapped jar. */
+    @Synchronized
+    fun useStore(newStore: CookieStore) {
+        memoryCache.clear()
+        loaded = false
+        cookieStore = newStore
     }
 
     private fun persist() {
         val snapshot = memoryCache.values.map { it.toSerializable() }
         val encoded = json.encodeToString(snapshot)
-        persistScope.launch { cookieStore.save(encoded) }
+        // Capture the store reference synchronously, on the caller's thread -- cookieStore is
+        // @Volatile and could be swapped by useStore() before this coroutine actually runs on
+        // persistScope, which would otherwise write this server's cookies into the *new* active
+        // server's store.
+        val store = cookieStore
+        persistScope.launch { store.save(encoded) }
     }
 
     private fun cacheKey(name: String, domain: String, path: String) = "$name@$domain$path"

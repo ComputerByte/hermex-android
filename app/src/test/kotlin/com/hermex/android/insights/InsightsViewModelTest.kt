@@ -11,7 +11,7 @@ import com.hermex.android.core.network.dto.InsightsDailyToken
 import com.hermex.android.core.network.dto.InsightsModelBreakdown
 import com.hermex.android.core.network.dto.InsightsResponse
 import com.hermex.android.core.network.dto.SessionSummary
-import com.hermex.android.core.storage.ServerStore
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -28,13 +28,6 @@ import org.junit.Before
 import org.junit.Test
 import java.time.Instant
 import java.time.ZoneId
-
-private class FakeServerStore(initial: String?) : ServerStore {
-    var stored: String? = initial
-    override suspend fun save(serverUrl: String) { stored = serverUrl }
-    override suspend fun load(): String? = stored
-    override suspend fun clear() { stored = null }
-}
 
 private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean): T {
     var item = awaitItem()

@@ -6,7 +6,7 @@ import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.dto.ModelCatalogOption
-import com.hermex.android.core.storage.ServerStore
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -21,13 +21,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-
-private class FakeServerStore(initial: String?) : ServerStore {
-    var stored: String? = initial
-    override suspend fun save(serverUrl: String) { stored = serverUrl }
-    override suspend fun load(): String? = stored
-    override suspend fun clear() { stored = null }
-}
 
 private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean): T {
     var item = awaitItem()

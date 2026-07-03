@@ -35,6 +35,8 @@ import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
 import com.hermex.android.settings.CustomHeadersScreen
 import com.hermex.android.settings.CustomHeadersViewModel
+import com.hermex.android.settings.ServersScreen
+import com.hermex.android.settings.ServersViewModel
 import com.hermex.android.settings.SettingsScreen
 import com.hermex.android.settings.SettingsViewModel
 import com.hermex.android.skills.SkillDetailScreen
@@ -75,6 +77,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val DEFAULT_MODEL = "settings/defaultModel"
     const val CUSTOM_HEADERS = "settings/customHeaders"
+    const val SERVERS = "settings/servers"
 }
 
 /**
@@ -150,6 +153,18 @@ fun HermexNavGraph(appContainer: AppContainer) {
                 onBack = { navController.popBackStack() },
                 onOpenDefaultModel = { navController.navigate(Routes.DEFAULT_MODEL) },
                 onOpenCustomHeaders = { navController.navigate(Routes.CUSTOM_HEADERS) },
+                onOpenServers = { navController.navigate(Routes.SERVERS) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.SERVERS) {
+            val viewModel: ServersViewModel = viewModel(factory = appContainer.serversViewModelFactory())
+            ServersScreen(
+                viewModel = viewModel,
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
+                    navController.popBackStack()
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

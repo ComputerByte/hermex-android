@@ -5,7 +5,7 @@ import app.cash.turbine.test
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
-import com.hermex.android.core.storage.ServerStore
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -27,13 +27,6 @@ private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean):
     var item = awaitItem()
     while (!predicate(item)) item = awaitItem()
     return item
-}
-
-private class FakeServerStore(initial: String?) : ServerStore {
-    var stored: String? = initial
-    override suspend fun save(serverUrl: String) { stored = serverUrl }
-    override suspend fun load(): String? = stored
-    override suspend fun clear() { stored = null }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

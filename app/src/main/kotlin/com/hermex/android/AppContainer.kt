@@ -12,6 +12,8 @@ import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
 import com.hermex.android.core.storage.DataStoreCustomHeadersStore
 import com.hermex.android.core.storage.DataStoreServerStore
+import com.hermex.android.core.storage.InMemoryCookieStore
+import com.hermex.android.core.storage.NoOpCustomHeadersStore
 import com.hermex.android.insights.InsightsViewModel
 import com.hermex.android.memory.MemoryViewModel
 import com.hermex.android.models.DefaultModelViewModel
@@ -20,6 +22,7 @@ import com.hermex.android.profiles.ProfilesViewModel
 import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListViewModel
 import com.hermex.android.settings.CustomHeadersViewModel
+import com.hermex.android.settings.ServersViewModel
 import com.hermex.android.settings.SettingsViewModel
 import com.hermex.android.skills.SkillDetailViewModel
 import com.hermex.android.skills.SkillsViewModel
@@ -38,17 +41,23 @@ import com.hermex.android.tasks.TasksViewModel
  * constructed -- a standard way to break constructor-order circular deps in manual DI.
  */
 class AppContainer(context: Context) {
-    private val cookieStore = DataStoreCookieStore(context)
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
-    private val customHeadersStore = DataStoreCustomHeadersStore(context)
 
     private lateinit var authRepositoryRef: AuthRepository
 
+    // Placeholder scope only -- AuthRepository.restoreSavedServer() (called right after this is
+    // built, see HermexApplication) repoints this via NetworkModule.useServer() before any real
+    // request happens, so nothing ever actually reads/writes through these two.
     val networkModule: NetworkModule =
-        NetworkModule(cookieStore, customHeadersStore) { authRepositoryRef.handleUnauthorized() }
+        NetworkModule(InMemoryCookieStore(), NoOpCustomHeadersStore) { authRepositoryRef.handleUnauthorized() }
 
-    val authRepository: AuthRepository = AuthRepository(networkModule, serverStore).also { authRepositoryRef = it }
+    val authRepository: AuthRepository = AuthRepository(
+        networkModule = networkModule,
+        serverStore = serverStore,
+        cookieStoreFactory = { serverId -> DataStoreCookieStore(context, serverId) },
+        customHeadersStoreFactory = { serverId -> DataStoreCustomHeadersStore(context, serverId) },
+    ).also { authRepositoryRef = it }
 
     private val sseClient: SseStreamSource = SseClient(networkModule.sseClient)
 
@@ -97,11 +106,22 @@ class AppContainer(context: Context) {
     }
 
     fun settingsViewModelFactory() = viewModelFactory {
-        initializer { SettingsViewModel(authRepository, chatPreferencesStore, customHeadersStore) }
+        initializer {
+            SettingsViewModel(
+                authRepository,
+                chatPreferencesStore,
+                authRepository.customHeadersStoreForActiveServer() ?: NoOpCustomHeadersStore,
+                serverStore,
+            )
+        }
     }
 
     fun customHeadersViewModelFactory() = viewModelFactory {
-        initializer { CustomHeadersViewModel(customHeadersStore) }
+        initializer { CustomHeadersViewModel(authRepository.customHeadersStoreForActiveServer() ?: NoOpCustomHeadersStore) }
+    }
+
+    fun serversViewModelFactory() = viewModelFactory {
+        initializer { ServersViewModel(authRepository, serverStore) }
     }
 
     fun defaultModelViewModelFactory() = viewModelFactory {

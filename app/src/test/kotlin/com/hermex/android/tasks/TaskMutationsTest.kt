@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher

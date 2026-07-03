@@ -7,6 +7,8 @@ import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.CustomHeadersStore
+import com.hermex.android.core.storage.NoOpServerStore
+import com.hermex.android.core.storage.ServerStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +19,7 @@ class SettingsViewModel(
     private val authRepository: AuthRepository,
     private val chatPreferencesStore: ChatPreferencesStore,
     private val customHeadersStore: CustomHeadersStore,
+    private val serverStore: ServerStore = NoOpServerStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -26,7 +29,12 @@ class SettingsViewModel(
     fun load() {
         viewModelScope.launch {
             _uiState.update {
-                it.copy(isLoading = true, errorMessage = null, serverUrl = authRepository.activeServerBaseUrl())
+                it.copy(
+                    isLoading = true,
+                    errorMessage = null,
+                    serverUrl = authRepository.activeServerBaseUrl(),
+                    activeServerName = serverStore.state.value.activeServer?.name,
+                )
             }
             // Local-only, independent of server connectivity -- loaded regardless of whether the
             // rest of this call succeeds.

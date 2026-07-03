@@ -49,6 +49,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDefaultModel: () -> Unit,
     onOpenCustomHeaders: () -> Unit,
+    onOpenServers: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -109,7 +110,11 @@ fun SettingsScreen(
 
                 SectionLabel("Active Server")
                 Card {
-                    SettingsRow("Server URL", uiState.serverUrl ?: "--")
+                    SettingsRow(
+                        "Server",
+                        uiState.activeServerName?.let { "$it — ${uiState.serverUrl}" } ?: (uiState.serverUrl ?: "--"),
+                        onClick = onOpenServers,
+                    )
                     SettingsRow("Status", if (uiState.serverUrl != null) "Connected" else "Not signed in")
                     SettingsRow("Default Model", uiState.defaultModel ?: "--", onClick = onOpenDefaultModel)
                     SettingsRow(

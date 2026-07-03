@@ -33,12 +33,24 @@ class NetworkModule(
      * [com.hermex.android.AppContainer] wires a real, persisted store. Placed before
      * [onUnauthorized] (rather than after) so every existing `NetworkModule(cookieStore) { ... }`
      * trailing-lambda call site -- which binds to the *last* parameter -- keeps compiling
-     * unchanged. */
-    private val customHeadersStore: CustomHeadersStore = NoOpCustomHeadersStore,
+     * unchanged. Mutable (see [useServer]) so switching the active server repoints headers
+     * without rebuilding this module or its `OkHttpClient`s. */
+    private var customHeadersStore: CustomHeadersStore = NoOpCustomHeadersStore,
     /** Fired when an authenticated (non-login) call gets a 401 -- the session cookie is stale. */
     private val onUnauthorized: () -> Unit,
 ) {
     val cookieJar = PersistentCookieJar(cookieStore, HermexJson)
+
+    /** Repoints this same [NetworkModule] -- and therefore [restClient]/[sseClient], which never
+     * get rebuilt -- at a different (already server-scoped) [CookieStore]/[CustomHeadersStore],
+     * e.g. when the active server changes. Avoids the risk of a stale Retrofit/OkHttp instance
+     * still pointing at the previous server: since [createApi] already builds a fresh Retrofit
+     * per call bound to whatever base URL it's given, the only genuinely stateful pieces here are
+     * the cookie jar and the custom-headers snapshot, both of which this swaps atomically. */
+    fun useServer(cookieStore: CookieStore, customHeadersStore: CustomHeadersStore) {
+        cookieJar.useStore(cookieStore)
+        this.customHeadersStore = customHeadersStore
+    }
 
     private val unauthorizedInterceptor = Interceptor { chain ->
         val request = chain.request()

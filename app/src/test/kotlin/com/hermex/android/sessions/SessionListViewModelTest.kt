@@ -6,7 +6,7 @@ import com.hermex.android.auth.AuthRepository
 import com.hermex.android.auth.AuthState
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
-import com.hermex.android.core.storage.ServerStore
+import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -21,13 +21,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-
-private class FakeServerStore(initial: String?) : ServerStore {
-    var stored: String? = initial
-    override suspend fun save(serverUrl: String) { stored = serverUrl }
-    override suspend fun load(): String? = stored
-    override suspend fun clear() { stored = null }
-}
 
 /**
  * Retrofit/OkHttp calls resume on OkHttp's own real background thread (they are not part of
@@ -109,7 +102,7 @@ class SessionListViewModelTest {
     @Test
     fun `a 401 while loading routes auth state back to LoggedOut, keeping the server URL`() = runTest {
         authRepository = loggedInRepository()
-        val serverUrl = (authRepository.state.value as AuthState.LoggedIn).serverUrl
+        val loggedIn = authRepository.state.value as AuthState.LoggedIn
         server.enqueue(MockResponse().setResponseCode(401))
 
         val viewModel = SessionListViewModel(authRepository)
@@ -118,7 +111,7 @@ class SessionListViewModelTest {
             awaitUntil { !it.isLoading }
             cancelAndIgnoreRemainingEvents()
         }
-        assertEquals(AuthState.LoggedOut(serverUrl), authRepository.state.value)
+        assertEquals(AuthState.LoggedOut(loggedIn.serverId, loggedIn.serverUrl), authRepository.state.value)
     }
 
     @Test

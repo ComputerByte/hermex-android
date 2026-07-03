@@ -263,4 +263,22 @@ class AuthRepositoryTest {
         assertEquals(second.id, state.serverId)
         assertEquals(listOf(second.id), serverStore.state.value.servers.map { it.id })
     }
+
+    @Test
+    fun `forgetServer invokes onServerForgotten so other server-scoped stores can clean up too`() = runTest {
+        val forgottenIds = mutableListOf<String>()
+        val networkModule = NetworkModule(FakeCookieStore()) { repository.handleUnauthorized() }
+        repository = AuthRepository(
+            networkModule = networkModule,
+            serverStore = serverStore,
+            cookieStoreFactory = { id -> cookieStores.getOrPut(id) { FakeCookieStore() } },
+            customHeadersStoreFactory = { NoOpCustomHeadersStore },
+            onServerForgotten = { id -> forgottenIds.add(id) },
+        )
+        val config = serverStore.addServer("A", "https://a.example.com/")
+
+        repository.forgetServer(config.id)
+
+        assertEquals(listOf(config.id), forgottenIds)
+    }
 }

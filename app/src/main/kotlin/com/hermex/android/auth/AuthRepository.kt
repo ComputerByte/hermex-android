@@ -37,12 +37,16 @@ const val PASSKEY_ONLY_MESSAGE = "This server signs in with passkeys, which Herm
  * server while also guaranteeing cookies/headers never leak between servers. [cookieStoreFactory]
  * / [customHeadersStoreFactory] build a server's scoped store given its id; results are memoized
  * here so repeated switches back to a previously-seen server reuse the same instance.
+ * [onServerForgotten] is a centralized cleanup hook: [forgetServer] invokes it after removing the
+ * server from [serverStore], so any other server-scoped store (e.g. the offline session cache)
+ * gets its data deleted too without this class needing to know that store exists.
  */
 class AuthRepository(
     private val networkModule: NetworkModule,
     private val serverStore: ServerStore,
     private val cookieStoreFactory: (serverId: String) -> CookieStore = { InMemoryCookieStore() },
     private val customHeadersStoreFactory: (serverId: String) -> CustomHeadersStore = { NoOpCustomHeadersStore },
+    private val onServerForgotten: suspend (serverId: String) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<AuthState>(AuthState.Unconfigured)
     val state: StateFlow<AuthState> = _state.asStateFlow()
@@ -67,6 +71,11 @@ class AuthRepository(
     /** The active server's canonical base URL, or null when not logged in. Used to build the
      * chat SSE URL, which bypasses Retrofit (see [com.hermex.android.core.network.chatStreamUrl]). */
     fun activeServerBaseUrl(): String? = (_state.value as? AuthState.LoggedIn)?.serverUrl
+
+    /** The active server's stable id, or null when not logged in -- used to scope the offline
+     * session cache (see [com.hermex.android.core.cache.OfflineCacheRepository]) so switching
+     * servers never shows a different server's cached data. */
+    fun activeServerId(): String? = (_state.value as? AuthState.LoggedIn)?.serverId
 
     /** The active server's own scoped custom-headers store, or null when not logged in -- used
      * by the Settings/Custom-Headers screens to edit headers for whichever server is active. */
@@ -268,6 +277,7 @@ class AuthRepository(
 
         val wasActive = serverStore.state.value.activeServerId == serverId
         serverStore.removeServer(serverId)
+        onServerForgotten(serverId)
         if (!wasActive) return
 
         val newActive = serverStore.state.value.activeServer

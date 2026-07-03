@@ -4,8 +4,10 @@ import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.auth.AuthState
+import com.hermex.android.core.cache.FakeOfflineCacheRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
+import com.hermex.android.core.network.dto.SessionSummary
 import com.hermex.android.core.storage.FakeAppearancePreferencesStore
 import com.hermex.android.core.storage.FakeServerStore
 import com.hermex.android.core.storage.HeaderLogoColor
@@ -272,5 +274,115 @@ class SessionListViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertEquals(1, server.requestCount) // only the one /api/sessions call from init's load()
+    }
+
+    @Test
+    fun `cached sessions are shown immediately, then replaced by a successful network fetch`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        cache.saveSessions(serverId, listOf(SessionSummary(sessionId = "cached-1", title = "Cached session")))
+        server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"fresh-1","title":"Fresh session"}]}"""))
+
+        val viewModel = SessionListViewModel(authRepository, offlineCacheRepository = cache)
+
+        viewModel.uiState.test {
+            val cachedFirst = awaitUntil { it.isShowingCachedData }
+            assertEquals("Cached session", cachedFirst.sessions.single().title)
+
+            val fresh = awaitUntil { !it.isLoading }
+            assertEquals("Fresh session", fresh.sessions.single().title)
+            assertTrue(!fresh.isShowingCachedData)
+            assertNull(fresh.cacheStatusMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(listOf("Fresh session"), cache.cachedSessions(serverId).map { it.title })
+    }
+
+    @Test
+    fun `a network failure with a cache falls back to cached sessions with a stale banner`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        cache.saveSessions(serverId, listOf(SessionSummary(sessionId = "cached-1", title = "Cached session")))
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val viewModel = SessionListViewModel(authRepository, offlineCacheRepository = cache)
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertEquals("Cached session", settled.sessions.single().title)
+            assertTrue(settled.isShowingCachedData)
+            assertNull("a cache fallback is not an error state", settled.errorMessage)
+            assertTrue(settled.cacheStatusMessage != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a network failure with no cache shows the normal error state, not fake data`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val viewModel = SessionListViewModel(authRepository, offlineCacheRepository = FakeOfflineCacheRepository())
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertTrue(settled.sessions.isEmpty())
+            assertTrue(!settled.isShowingCachedData)
+            assertNull(settled.cacheStatusMessage)
+            assertTrue(settled.errorMessage != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `refresh failure relabels currently-displayed sessions as stale instead of clearing them`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"a","title":"A"}]}"""))
+        val viewModel = SessionListViewModel(authRepository, offlineCacheRepository = FakeOfflineCacheRepository())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(MockResponse().setResponseCode(500))
+        viewModel.uiState.test {
+            viewModel.refresh()
+            awaitUntil { it.isRefreshing } // must observe it turn true before waiting for it to clear again
+            val settled = awaitUntil { !it.isRefreshing }
+            assertEquals(listOf("A"), settled.sessions.map { it.title })
+            assertTrue(settled.isShowingCachedData)
+            assertNull(settled.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `each server only ever sees its own cached sessions`() = runTest {
+        val cache = FakeOfflineCacheRepository()
+
+        // Two distinct "servers" (distinct ids from FakeServerStore, matching how multi-server
+        // switching works in the real app) both happen to point at the same mock server here --
+        // only the cache's serverId-scoping is under test, not real host isolation.
+        val storeA = FakeServerStore(server.url("/").toString())
+        val idA = storeA.activeServerSnapshot()!!.id
+        cache.saveSessions(idA, listOf(SessionSummary(sessionId = "a1", title = "Server A session")))
+
+        val storeB = FakeServerStore(server.url("/").toString())
+        val idB = storeB.activeServerSnapshot()!!.id
+        cache.saveSessions(idB, listOf(SessionSummary(sessionId = "b1", title = "Server B session")))
+
+        lateinit var repoB: AuthRepository
+        val networkModuleB = NetworkModule(FakeCookieStore()) { repoB.handleUnauthorized() }
+        repoB = AuthRepository(networkModuleB, storeB)
+        repoB.restoreSavedServer()
+        server.enqueue(MockResponse().setResponseCode(500)) // force a cache fallback for server B
+
+        val viewModel = SessionListViewModel(repoB, offlineCacheRepository = cache)
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertEquals(listOf("Server B session"), settled.sessions.map { it.title })
+            assertTrue(settled.sessions.none { it.title == "Server A session" })
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

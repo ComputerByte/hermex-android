@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -79,6 +80,12 @@ dependencies {
 
     // Local storage
     implementation("androidx.datastore:datastore-preferences:1.2.1")
+
+    // Offline cache -- Room, for structured/queryable local data (session lists, message
+    // history) that DataStore's key-value model isn't suited for.
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

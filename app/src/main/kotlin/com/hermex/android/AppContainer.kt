@@ -4,10 +4,14 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.room.Room
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.chat.ChatViewModel
 import com.hermex.android.core.appicon.AppIconSwitcher
 import com.hermex.android.core.appicon.PackageManagerAppIconAliasWriter
+import com.hermex.android.core.cache.HermexDatabase
+import com.hermex.android.core.cache.OfflineCacheRepository
+import com.hermex.android.core.cache.RoomOfflineCacheRepository
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
@@ -49,6 +53,14 @@ class AppContainer(context: Context) {
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
     private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
 
+    // Structured, queryable offline cache (session lists today; message history is a deferred
+    // follow-up) -- distinct from the DataStore-backed stores above, which are for small
+    // preference values, not this kind of payload. Never holds cookies/custom headers/secrets.
+    private val database: HermexDatabase = Room
+        .databaseBuilder(context.applicationContext, HermexDatabase::class.java, "hermex_cache.db")
+        .build()
+    private val offlineCacheRepository: OfflineCacheRepository = RoomOfflineCacheRepository(database.cachedSessionDao())
+
     /** [AppIconSwitcher.resolvedAlias] for `SYSTEM` is re-evaluated from this lambda every time
      * it's called (not cached) -- see [reconcileAppIcon] for where that matters. */
     val appIconSwitcher = AppIconSwitcher(
@@ -71,6 +83,7 @@ class AppContainer(context: Context) {
         serverStore = serverStore,
         cookieStoreFactory = { serverId -> DataStoreCookieStore(context, serverId) },
         customHeadersStoreFactory = { serverId -> DataStoreCustomHeadersStore(context, serverId) },
+        onServerForgotten = { serverId -> offlineCacheRepository.clearServer(serverId) },
     ).also { authRepositoryRef = it }
 
     private val sseClient: SseStreamSource = SseClient(networkModule.sseClient)
@@ -80,7 +93,7 @@ class AppContainer(context: Context) {
     }
 
     fun sessionListViewModelFactory() = viewModelFactory {
-        initializer { SessionListViewModel(authRepository, appearancePreferencesStore) }
+        initializer { SessionListViewModel(authRepository, appearancePreferencesStore, offlineCacheRepository) }
     }
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {

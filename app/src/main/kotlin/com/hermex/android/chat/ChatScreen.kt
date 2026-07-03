@@ -128,7 +128,9 @@ fun ChatScreen(
                         item(key = message.stableId) { MessageBubble(message) }
                     }
                     if (uiState.streamingReasoning.isNotEmpty()) {
-                        item(key = "streaming-reasoning") { ReasoningBlock(uiState.streamingReasoning) }
+                        item(key = "streaming-reasoning") {
+                            ReasoningBlock(uiState.streamingReasoning, initiallyExpanded = uiState.expandThinkingByDefault)
+                        }
                     }
                     // The current, not-yet-finalized turn's tool calls: anchored at the index
                     // the eventual finalized reply will occupy, i.e. messages.size right now.

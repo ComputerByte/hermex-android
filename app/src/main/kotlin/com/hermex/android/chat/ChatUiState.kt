@@ -22,6 +22,9 @@ data class ChatUiState(
      * different profile mid-conversation doesn't switch this session in place (matching iOS: an
      * existing transcript stays on its original profile), it offers a fresh one instead. */
     val pendingProfileSwitch: String? = null,
+    /** Loaded once from [com.hermex.android.core.storage.ChatPreferencesStore] -- whether a fresh
+     * [ReasoningBlock] should start expanded rather than collapsed. */
+    val expandThinkingByDefault: Boolean = false,
 )
 
 data class ToolCallUi(

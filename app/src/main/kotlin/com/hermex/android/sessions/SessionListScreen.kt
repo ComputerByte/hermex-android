@@ -11,15 +11,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -51,6 +54,8 @@ fun SessionListScreen(
     onOpenTasks: () -> Unit,
     onOpenProfiles: () -> Unit,
     onOpenProjects: () -> Unit,
+    onOpenInsights: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -60,6 +65,11 @@ fun SessionListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Hermex") },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.AccountCircle, contentDescription = "Settings")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -110,10 +120,17 @@ fun SessionListScreen(
                         leadingContent = { Icon(Icons.Filled.Face, contentDescription = null) },
                     )
                 }
+                item(key = "nav-insights") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenInsights),
+                        headlineContent = { Text("Insights") },
+                        leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
+                    )
+                }
                 item(key = "nav-profiles") {
                     ListItem(
                         modifier = Modifier.clickable(onClick = onOpenProfiles),
-                        headlineContent = { Text("Profiles") },
+                        headlineContent = { Text("Active Profile") },
                         leadingContent = { Icon(Icons.Filled.Person, contentDescription = null) },
                     )
                 }

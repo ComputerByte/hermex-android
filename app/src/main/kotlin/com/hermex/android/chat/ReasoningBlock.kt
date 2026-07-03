@@ -27,9 +27,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ReasoningBlock(
     text: String,
+    initiallyExpanded: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
 
     Column(
         modifier = modifier

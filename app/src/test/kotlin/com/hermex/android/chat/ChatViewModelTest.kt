@@ -8,6 +8,7 @@ import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseEvent
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.network.ToolEventPayload
+import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.ServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,6 +43,11 @@ private class FakeSseClient(private val flowProvider: (HttpUrl) -> Flow<SseEvent
         lastUrl = url
         return flowProvider(url)
     }
+}
+
+private class FakeChatPreferencesStore(private var expandThinkingByDefault: Boolean = false) : ChatPreferencesStore {
+    override suspend fun loadExpandThinkingByDefault(): Boolean = expandThinkingByDefault
+    override suspend fun setExpandThinkingByDefault(value: Boolean) { expandThinkingByDefault = value }
 }
 
 /** See [com.hermex.android.sessions.SessionListViewModelTest] for why this pattern (Turbine +
@@ -90,7 +96,7 @@ class ChatViewModelTest {
         )
         server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
 
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
 
         viewModel.uiState.test {
             val loaded = awaitUntil { !it.isLoading }
@@ -115,7 +121,7 @@ class ChatViewModelTest {
             SseEvent.Done(null, null),
         )
         val fakeSseClient = FakeSseClient { scriptedEvents.asFlow() }
-        val viewModel = ChatViewModel("s1", authRepository, fakeSseClient)
+        val viewModel = ChatViewModel("s1", authRepository, fakeSseClient, FakeChatPreferencesStore())
 
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
@@ -182,7 +188,7 @@ class ChatViewModelTest {
             callCount += 1
             if (callCount == 1) turnOneEvents.asFlow() else turnTwoEvents.asFlow()
         }
-        val viewModel = ChatViewModel("s1", authRepository, fakeSseClient)
+        val viewModel = ChatViewModel("s1", authRepository, fakeSseClient, FakeChatPreferencesStore())
 
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
@@ -220,7 +226,7 @@ class ChatViewModelTest {
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
 
         val scriptedEvents = listOf(SseEvent.Token("partial reply"), SseEvent.Error("connection reset"))
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { scriptedEvents.asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { scriptedEvents.asFlow() }, FakeChatPreferencesStore())
 
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
@@ -248,7 +254,7 @@ class ChatViewModelTest {
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
 
         val scriptedEvents = listOf(SseEvent.Unknown, SseEvent.Token("x"), SseEvent.Unknown, SseEvent.Done(null, null))
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { scriptedEvents.asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { scriptedEvents.asFlow() }, FakeChatPreferencesStore())
 
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
@@ -279,7 +285,7 @@ class ChatViewModelTest {
             emit(SseEvent.Token("still typing"))
             awaitCancellation()
         }
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
 
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
@@ -305,7 +311,7 @@ class ChatViewModelTest {
         server.enqueue(
             MockResponse().setBody("""{"active":"default","profiles":[{"name":"default"},{"name":"work"}]}"""),
         )
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
         viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
 
         server.enqueue(MockResponse().setBody("""{"active":"work","profiles":[{"name":"default"},{"name":"work"}]}"""))
@@ -337,7 +343,7 @@ class ChatViewModelTest {
             ),
         )
         server.enqueue(MockResponse().setBody("""{"active":"default","profiles":[{"name":"default"},{"name":"work"}]}"""))
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             // loadProfiles() fires on whichever real thread the session response callback lands
@@ -370,7 +376,7 @@ class ChatViewModelTest {
             ),
         )
         server.enqueue(MockResponse().setBody("""{"profiles":[{"name":"default"},{"name":"work"}]}"""))
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             awaitUntil { it.profileOptions.isNotEmpty() } // see comment in the selectProfile test above
@@ -400,7 +406,7 @@ class ChatViewModelTest {
             ),
         )
         server.enqueue(MockResponse().setBody("""{"profiles":[{"name":"default"},{"name":"work"}]}"""))
-        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
         viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
         viewModel.selectProfile("work")
 
@@ -426,5 +432,25 @@ class ChatViewModelTest {
         val newSessionRequest = server.takeRequest()
         assertTrue(newSessionRequest.path?.contains("/api/session/new") == true)
         assertTrue(newSessionRequest.body.readUtf8().contains("\"profile\":\"work\""))
+    }
+
+    @Test
+    fun `loads expandThinkingByDefault from the preferences store at init`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(expandThinkingByDefault = true),
+        )
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { it.expandThinkingByDefault }
+            assertTrue(loaded.expandThinkingByDefault)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

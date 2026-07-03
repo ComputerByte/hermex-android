@@ -19,8 +19,12 @@ import com.hermex.android.AppContainer
 import com.hermex.android.auth.AuthState
 import com.hermex.android.chat.ChatScreen
 import com.hermex.android.chat.ChatViewModel
+import com.hermex.android.insights.InsightsScreen
+import com.hermex.android.insights.InsightsViewModel
 import com.hermex.android.memory.MemoryScreen
 import com.hermex.android.memory.MemoryViewModel
+import com.hermex.android.models.DefaultModelScreen
+import com.hermex.android.models.DefaultModelViewModel
 import com.hermex.android.onboarding.OnboardingScreen
 import com.hermex.android.onboarding.OnboardingViewModel
 import com.hermex.android.profiles.ProfilesScreen
@@ -29,6 +33,8 @@ import com.hermex.android.projects.ProjectsScreen
 import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
+import com.hermex.android.settings.SettingsScreen
+import com.hermex.android.settings.SettingsViewModel
 import com.hermex.android.skills.SkillDetailScreen
 import com.hermex.android.skills.SkillDetailViewModel
 import com.hermex.android.skills.SkillsScreen
@@ -61,6 +67,11 @@ private object Routes {
     const val PROFILES = "profiles"
 
     const val PROJECTS = "projects"
+
+    const val INSIGHTS = "insights"
+
+    const val SETTINGS = "settings"
+    const val DEFAULT_MODEL = "settings/defaultModel"
 }
 
 /**
@@ -112,6 +123,48 @@ fun HermexNavGraph(appContainer: AppContainer) {
                 onOpenTasks = { navController.navigate(Routes.TASKS) },
                 onOpenProfiles = { navController.navigate(Routes.PROFILES) },
                 onOpenProjects = { navController.navigate(Routes.PROJECTS) },
+                onOpenInsights = { navController.navigate(Routes.INSIGHTS) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.SETTINGS) { backStackEntry ->
+            val viewModel: SettingsViewModel = viewModel(factory = appContainer.settingsViewModelFactory())
+            // SettingsViewModel's instance persists across a push-to-DefaultModel-and-back trip,
+            // since this back stack entry never leaves the graph -- so a model change made there
+            // won't otherwise be reflected here without an explicit signal.
+            val shouldRefresh by backStackEntry.savedStateHandle
+                .getStateFlow("refreshSettings", false)
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(shouldRefresh) {
+                if (shouldRefresh) {
+                    viewModel.load()
+                    backStackEntry.savedStateHandle["refreshSettings"] = false
+                }
+            }
+            SettingsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenDefaultModel = { navController.navigate(Routes.DEFAULT_MODEL) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.DEFAULT_MODEL) {
+            val viewModel: DefaultModelViewModel = viewModel(factory = appContainer.defaultModelViewModelFactory())
+            DefaultModelScreen(
+                viewModel = viewModel,
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
+                    navController.popBackStack()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.INSIGHTS) {
+            val viewModel: InsightsViewModel = viewModel(factory = appContainer.insightsViewModelFactory())
+            InsightsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
         }

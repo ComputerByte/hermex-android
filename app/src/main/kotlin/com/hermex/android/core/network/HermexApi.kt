@@ -11,10 +11,15 @@ import com.hermex.android.core.network.dto.CronOutputResponse
 import com.hermex.android.core.network.dto.CronStatusResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.HealthResponse
+import com.hermex.android.core.network.dto.InsightsResponse
 import com.hermex.android.core.network.dto.LoginRequest
 import com.hermex.android.core.network.dto.LoginResponse
-import com.hermex.android.core.network.dto.MemoryResponse
 import com.hermex.android.core.network.dto.CreateProjectRequest
+import com.hermex.android.core.network.dto.DefaultModelRequest
+import com.hermex.android.core.network.dto.DefaultModelResponse
+import com.hermex.android.core.network.dto.MemoryResponse
+import com.hermex.android.core.network.dto.ModelsLiveResponse
+import com.hermex.android.core.network.dto.ModelsResponse
 import com.hermex.android.core.network.dto.NewSessionRequest
 import com.hermex.android.core.network.dto.ProfileSwitchRequest
 import com.hermex.android.core.network.dto.ProfileSwitchResponse
@@ -23,6 +28,7 @@ import com.hermex.android.core.network.dto.ProjectIdRequest
 import com.hermex.android.core.network.dto.ProjectMutationResponse
 import com.hermex.android.core.network.dto.ProjectsResponse
 import com.hermex.android.core.network.dto.RenameProjectRequest
+import com.hermex.android.core.network.dto.ServerSettingsResponse
 import com.hermex.android.core.network.dto.SessionResponse
 import com.hermex.android.core.network.dto.SessionsResponse
 import com.hermex.android.core.network.dto.SkillDetailResponse
@@ -122,4 +128,19 @@ interface HermexApi {
 
     @POST("/api/projects/delete")
     suspend fun deleteProject(@Body body: ProjectIdRequest): ProjectMutationResponse
+
+    @GET("/api/insights")
+    suspend fun insights(@Query("days") days: Int): InsightsResponse
+
+    @GET("/api/settings")
+    suspend fun serverSettings(): ServerSettingsResponse
+
+    @GET("/api/models")
+    suspend fun models(): ModelsResponse
+
+    @GET("/api/models/live")
+    suspend fun modelsLive(): ModelsLiveResponse
+
+    @POST("/api/default-model")
+    suspend fun setDefaultModel(@Body body: DefaultModelRequest): DefaultModelResponse
 }

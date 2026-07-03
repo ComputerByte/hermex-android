@@ -45,7 +45,7 @@ fun ProfilesScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Profiles") },
+                title = { Text("Active Profile") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

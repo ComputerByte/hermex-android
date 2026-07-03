@@ -8,13 +8,17 @@ import com.hermex.android.chat.ChatViewModel
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
+import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
 import com.hermex.android.core.storage.DataStoreServerStore
+import com.hermex.android.insights.InsightsViewModel
 import com.hermex.android.memory.MemoryViewModel
+import com.hermex.android.models.DefaultModelViewModel
 import com.hermex.android.onboarding.OnboardingViewModel
 import com.hermex.android.profiles.ProfilesViewModel
 import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListViewModel
+import com.hermex.android.settings.SettingsViewModel
 import com.hermex.android.skills.SkillDetailViewModel
 import com.hermex.android.skills.SkillsViewModel
 import com.hermex.android.tasks.TaskDetailViewModel
@@ -34,6 +38,7 @@ import com.hermex.android.tasks.TasksViewModel
 class AppContainer(context: Context) {
     private val cookieStore = DataStoreCookieStore(context)
     private val serverStore = DataStoreServerStore(context)
+    private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
 
     private lateinit var authRepositoryRef: AuthRepository
 
@@ -52,7 +57,7 @@ class AppContainer(context: Context) {
     }
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {
-        initializer { ChatViewModel(sessionId, authRepository, sseClient) }
+        initializer { ChatViewModel(sessionId, authRepository, sseClient, chatPreferencesStore) }
     }
 
     fun skillsViewModelFactory() = viewModelFactory {
@@ -81,5 +86,17 @@ class AppContainer(context: Context) {
 
     fun projectsViewModelFactory() = viewModelFactory {
         initializer { ProjectsViewModel(authRepository) }
+    }
+
+    fun insightsViewModelFactory() = viewModelFactory {
+        initializer { InsightsViewModel(authRepository) }
+    }
+
+    fun settingsViewModelFactory() = viewModelFactory {
+        initializer { SettingsViewModel(authRepository, chatPreferencesStore) }
+    }
+
+    fun defaultModelViewModelFactory() = viewModelFactory {
+        initializer { DefaultModelViewModel(authRepository) }
     }
 }

@@ -14,6 +14,7 @@ import com.hermex.android.core.network.dto.ChatStartRequest
 import com.hermex.android.core.network.dto.NewSessionRequest
 import com.hermex.android.core.network.dto.ProfileSwitchRequest
 import com.hermex.android.core.network.safeApiCall
+import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.util.HermexLog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +33,7 @@ class ChatViewModel(
     private val sessionId: String,
     private val authRepository: AuthRepository,
     private val sseClient: SseStreamSource,
+    private val chatPreferencesStore: ChatPreferencesStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -41,6 +43,10 @@ class ChatViewModel(
 
     init {
         loadSession()
+        viewModelScope.launch {
+            val expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()
+            _uiState.update { it.copy(expandThinkingByDefault = expandThinkingByDefault) }
+        }
     }
 
     /** Runs after the session load, in the same coroutine rather than a concurrent one, so the

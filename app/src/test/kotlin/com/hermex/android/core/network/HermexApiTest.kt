@@ -24,7 +24,8 @@ class HermexApiTest {
         server.shutdown()
     }
 
-    private fun newModule(onUnauthorized: () -> Unit = {}) = NetworkModule(FakeCookieStore(), onUnauthorized)
+    private fun newModule(onUnauthorized: () -> Unit = {}) =
+        NetworkModule(FakeCookieStore(), onUnauthorized = onUnauthorized)
 
     @Test
     fun `health decodes tolerantly with unknown extra fields present`() = runTest {

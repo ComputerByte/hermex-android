@@ -83,6 +83,13 @@ fun ChatScreen(
                 selectedProfileName = uiState.selectedProfileName,
                 isSwitchingProfile = uiState.isSwitchingProfile,
                 onSelectProfile = viewModel::selectProfile,
+                modelCatalogGroups = uiState.modelCatalogGroups,
+                currentModel = uiState.currentModel,
+                currentModelProvider = uiState.currentModelProvider,
+                isLoadingModelCatalog = uiState.isLoadingModelCatalog,
+                isUpdatingComposerConfiguration = uiState.isUpdatingComposerConfiguration,
+                onOpenModelPicker = viewModel::refreshModelCatalogForPickerOpen,
+                onSelectModel = viewModel::selectComposerModel,
             )
         },
     ) { innerPadding ->

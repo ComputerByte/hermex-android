@@ -6,6 +6,7 @@ import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
+import com.hermex.android.core.storage.CustomHeadersStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(
     private val authRepository: AuthRepository,
     private val chatPreferencesStore: ChatPreferencesStore,
+    private val customHeadersStore: CustomHeadersStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -29,6 +31,8 @@ class SettingsViewModel(
             // Local-only, independent of server connectivity -- loaded regardless of whether the
             // rest of this call succeeds.
             _uiState.update { it.copy(expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()) }
+            val customHeaders = customHeadersStore.load()
+            _uiState.update { it.copy(customHeaderCount = customHeaders.size) }
             val api = authRepository.apiForActiveServer()
             if (api == null) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = "Not signed in.") }

@@ -177,4 +177,59 @@ class SessionListViewModelTest {
         }
         assertNull(createdId)
     }
+
+    @Test
+    fun `onSearchQueryChanged filters sessions by title, case-insensitively`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"sessions":[{"session_id":"a","title":"Fix login bug"},{"session_id":"b","title":"Refactor sessions list"}]}""",
+            ),
+        )
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onSearchQueryChanged("login")
+            val filtered = awaitUntil { it.searchQuery == "login" }
+            assertEquals(1, filtered.filteredSessions.size)
+            assertEquals("Fix login bug", filtered.filteredSessions.first().title)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `an empty or blank search query returns every session unfiltered`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"sessions":[{"session_id":"a","title":"First"},{"session_id":"b","title":"Second"}]}""",
+            ),
+        )
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(2, loaded.filteredSessions.size)
+            viewModel.onSearchQueryChanged("   ")
+            val blank = awaitUntil { it.searchQuery == "   " }
+            assertEquals(2, blank.filteredSessions.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a session with no title never matches a non-blank search`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"a"}]}"""))
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onSearchQueryChanged("anything")
+            val filtered = awaitUntil { it.searchQuery == "anything" }
+            assertTrue(filtered.filteredSessions.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

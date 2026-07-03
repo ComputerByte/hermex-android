@@ -10,6 +10,9 @@ data class ChatStartRequest(
     val model: String? = null,
     val modelProvider: String? = null,
     val profile: String? = null,
+    /** Only ever sent as `true` or omitted, never explicit `false` -- matches iOS's
+     * `explicitModelPick ? true : nil`. */
+    val explicitModelPick: Boolean? = null,
 )
 
 @Serializable

@@ -14,7 +14,16 @@ data class ModelCatalogOption(
     val id: String,
     val displayName: String,
     val providerId: String?,
-)
+) {
+    /** Whether this option is the one already selected -- if [providerId] (the currently
+     * selected provider) is null, only the model id needs to match (mirrors iOS's
+     * `matchesSelection(modelID:providerID:)`, used to no-op a re-pick of the current model). */
+    fun matchesSelection(modelId: String?, providerId: String?): Boolean {
+        if (id != modelId) return false
+        if (providerId == null) return true
+        return this.providerId == providerId
+    }
+}
 
 /** Parses the untyped-on-iOS `groups`/`models` shape into [ModelCatalogGroup]/[ModelCatalogOption],
  * matching iOS's `ModelCatalogParser` field-by-field: a group with no models is dropped entirely,

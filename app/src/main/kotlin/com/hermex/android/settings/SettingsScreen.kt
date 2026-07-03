@@ -48,6 +48,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
     onOpenDefaultModel: () -> Unit,
+    onOpenCustomHeaders: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -111,6 +112,11 @@ fun SettingsScreen(
                     SettingsRow("Server URL", uiState.serverUrl ?: "--")
                     SettingsRow("Status", if (uiState.serverUrl != null) "Connected" else "Not signed in")
                     SettingsRow("Default Model", uiState.defaultModel ?: "--", onClick = onOpenDefaultModel)
+                    SettingsRow(
+                        "Connection Headers",
+                        if (uiState.customHeaderCount == 0) "None" else "${uiState.customHeaderCount} configured",
+                        onClick = onOpenCustomHeaders,
+                    )
                     SettingsRow("Version", uiState.serverVersion ?: "--", showDivider = false)
                 }
 

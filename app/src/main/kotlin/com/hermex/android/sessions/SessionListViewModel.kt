@@ -38,6 +38,10 @@ class SessionListViewModel(
         }
     }
 
+    fun onSearchQueryChanged(value: String) {
+        _uiState.update { it.copy(searchQuery = value) }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }

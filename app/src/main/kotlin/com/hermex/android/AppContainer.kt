@@ -10,6 +10,7 @@ import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
+import com.hermex.android.core.storage.DataStoreCustomHeadersStore
 import com.hermex.android.core.storage.DataStoreServerStore
 import com.hermex.android.insights.InsightsViewModel
 import com.hermex.android.memory.MemoryViewModel
@@ -18,6 +19,7 @@ import com.hermex.android.onboarding.OnboardingViewModel
 import com.hermex.android.profiles.ProfilesViewModel
 import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListViewModel
+import com.hermex.android.settings.CustomHeadersViewModel
 import com.hermex.android.settings.SettingsViewModel
 import com.hermex.android.skills.SkillDetailViewModel
 import com.hermex.android.skills.SkillsViewModel
@@ -39,10 +41,12 @@ class AppContainer(context: Context) {
     private val cookieStore = DataStoreCookieStore(context)
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
+    private val customHeadersStore = DataStoreCustomHeadersStore(context)
 
     private lateinit var authRepositoryRef: AuthRepository
 
-    val networkModule: NetworkModule = NetworkModule(cookieStore) { authRepositoryRef.handleUnauthorized() }
+    val networkModule: NetworkModule =
+        NetworkModule(cookieStore, customHeadersStore) { authRepositoryRef.handleUnauthorized() }
 
     val authRepository: AuthRepository = AuthRepository(networkModule, serverStore).also { authRepositoryRef = it }
 
@@ -93,7 +97,11 @@ class AppContainer(context: Context) {
     }
 
     fun settingsViewModelFactory() = viewModelFactory {
-        initializer { SettingsViewModel(authRepository, chatPreferencesStore) }
+        initializer { SettingsViewModel(authRepository, chatPreferencesStore, customHeadersStore) }
+    }
+
+    fun customHeadersViewModelFactory() = viewModelFactory {
+        initializer { CustomHeadersViewModel(customHeadersStore) }
     }
 
     fun defaultModelViewModelFactory() = viewModelFactory {

@@ -11,8 +11,12 @@ import com.hermex.android.core.network.ToolEventPayload
 import com.hermex.android.core.network.chatStreamUrl
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ChatStartRequest
+import com.hermex.android.core.network.dto.ModelCatalogOption
+import com.hermex.android.core.network.dto.ModelCatalogParser
 import com.hermex.android.core.network.dto.NewSessionRequest
 import com.hermex.android.core.network.dto.ProfileSwitchRequest
+import com.hermex.android.core.network.dto.UpdateSessionRequest
+import com.hermex.android.core.network.dto.mergingLiveModels
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.util.HermexLog
@@ -78,11 +82,92 @@ class ChatViewModel(
             }
             try {
                 val response = safeApiCall { api.session(sessionId = sessionId, messages = 1, msgLimit = 50) }
-                _uiState.update { it.copy(isLoading = false, messages = response.session?.messages.orEmpty()) }
+                val session = response.session
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        messages = session?.messages.orEmpty(),
+                        currentWorkspace = session?.workspace,
+                        currentModel = session?.model,
+                        currentModelProvider = session?.modelProvider,
+                    )
+                }
             } catch (e: ApiError) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Could not load session.") }
             }
             loadProfiles(api)
+        }
+    }
+
+    /** Refetches `/api/models` (so the picker stops pinning the chat-load-time snapshot), then
+     * overlays the active provider's live list -- both best-effort, matching iOS's
+     * `refreshModelCatalogForPickerOpen`: a failure just means the picker keeps whatever it
+     * already had. */
+    fun refreshModelCatalogForPickerOpen() {
+        val api = authRepository.apiForActiveServer() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingModelCatalog = true) }
+            try {
+                val response = safeApiCall { api.models() }
+                val groups = ModelCatalogParser.parseGroups(response)
+                if (groups.isNotEmpty()) {
+                    _uiState.update { it.copy(modelCatalogGroups = groups) }
+                }
+            } catch (e: ApiError) {
+                HermexLog.w("Chat", "Could not refresh model catalog: ${e.message}")
+            }
+            val live = runCatching { safeApiCall { api.modelsLive() } }.getOrNull()
+            if (live != null) {
+                _uiState.update { it.copy(modelCatalogGroups = it.modelCatalogGroups.mergingLiveModels(live)) }
+            }
+            _uiState.update { it.copy(isLoadingModelCatalog = false) }
+        }
+    }
+
+    /** Updates *this* session's model/provider in place via `/api/session/update` -- unlike
+     * profile switching, this never starts a new session. Blocked while a stream is actively
+     * running (matching iOS's `activeStreamID == nil` guard); a no-op if [option] is already the
+     * current selection. */
+    fun selectComposerModel(option: ModelCatalogOption) {
+        val state = _uiState.value
+        if (option.matchesSelection(state.currentModel, state.currentModelProvider)) return
+        if (state.isStreaming) {
+            _uiState.update { it.copy(errorMessage = "Wait for the current response to finish before changing models.") }
+            return
+        }
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(errorMessage = "Not signed in.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingComposerConfiguration = true, errorMessage = null) }
+            try {
+                val response = safeApiCall {
+                    api.updateSession(
+                        UpdateSessionRequest(
+                            sessionId = sessionId,
+                            workspace = state.currentWorkspace,
+                            model = option.id,
+                            modelProvider = option.providerId,
+                        ),
+                    )
+                }
+                _uiState.update {
+                    it.copy(
+                        isUpdatingComposerConfiguration = false,
+                        currentModel = response.session?.model ?: option.id,
+                        currentModelProvider = response.session?.modelProvider ?: option.providerId,
+                        currentWorkspace = response.session?.workspace ?: it.currentWorkspace,
+                        pendingExplicitModelPick = true,
+                    )
+                }
+            } catch (e: ApiError) {
+                // Keeps the previous model/provider on failure -- only the error surfaces.
+                _uiState.update {
+                    it.copy(isUpdatingComposerConfiguration = false, errorMessage = e.message ?: "Could not change model.")
+                }
+            }
         }
     }
 
@@ -176,10 +261,29 @@ class ChatViewModel(
         }
 
         viewModelScope.launch {
+            val state = _uiState.value
+            // Captured now, not re-read on completion: if the user picks a *different* model
+            // while this request is in flight, that pick's own true value must win, not get
+            // clobbered by this (now-stale) request's completion. Only sent when there's an
+            // actual current model to attribute the pick to, matching iOS's
+            // `explicitModelPickForChatStart`.
+            val explicitModelPick = state.pendingExplicitModelPick && !state.currentModel.isNullOrBlank()
             _uiState.update { it.copy(isSending = true, errorMessage = null) }
 
             val startResponse = try {
-                safeApiCall { api.chatStart(ChatStartRequest(sessionId = sessionId, message = text)) }
+                safeApiCall {
+                    api.chatStart(
+                        ChatStartRequest(
+                            sessionId = sessionId,
+                            message = text,
+                            workspace = state.currentWorkspace,
+                            model = state.currentModel,
+                            modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
+                            profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
+                            explicitModelPick = if (explicitModelPick) true else null,
+                        ),
+                    )
+                }
             } catch (e: ApiError) {
                 _uiState.update { it.copy(isSending = false, errorMessage = e.message ?: "Could not send message.") }
                 return@launch
@@ -213,6 +317,7 @@ class ChatViewModel(
                     // index it belongs to (see ToolCallUi.anchorMessageCount / ChatScreen), so
                     // past turns' tool cards must persist across a new send to stay visible in
                     // their correct position in the transcript.
+                    pendingExplicitModelPick = if (explicitModelPick) false else it.pendingExplicitModelPick,
                 )
             }
 

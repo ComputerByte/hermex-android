@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -27,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.hermex.android.core.network.dto.ModelCatalogGroup
+import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ProfileSummary
 
 @Composable
@@ -41,6 +45,13 @@ fun ChatComposer(
     selectedProfileName: String?,
     isSwitchingProfile: Boolean,
     onSelectProfile: (String) -> Unit,
+    modelCatalogGroups: List<ModelCatalogGroup>,
+    currentModel: String?,
+    currentModelProvider: String?,
+    isLoadingModelCatalog: Boolean,
+    isUpdatingComposerConfiguration: Boolean,
+    onOpenModelPicker: () -> Unit,
+    onSelectModel: (ModelCatalogOption) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // enableEdgeToEdge() (MainActivity) draws the app behind the system navigation bar, so a
@@ -65,6 +76,15 @@ fun ChatComposer(
                 selectedProfileName = selectedProfileName,
                 isSwitchingProfile = isSwitchingProfile,
                 onSelectProfile = onSelectProfile,
+            )
+            ModelSelectorButton(
+                modelCatalogGroups = modelCatalogGroups,
+                currentModel = currentModel,
+                currentModelProvider = currentModelProvider,
+                isLoadingModelCatalog = isLoadingModelCatalog,
+                isUpdatingComposerConfiguration = isUpdatingComposerConfiguration,
+                onOpenModelPicker = onOpenModelPicker,
+                onSelectModel = onSelectModel,
             )
             OutlinedTextField(
                 value = text,
@@ -119,6 +139,71 @@ private fun ProfileSelectorButton(
                     onSelectProfile(name)
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun ModelSelectorButton(
+    modelCatalogGroups: List<ModelCatalogGroup>,
+    currentModel: String?,
+    currentModelProvider: String?,
+    isLoadingModelCatalog: Boolean,
+    isUpdatingComposerConfiguration: Boolean,
+    onOpenModelPicker: () -> Unit,
+    onSelectModel: (ModelCatalogOption) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    if (isUpdatingComposerConfiguration) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        return
+    }
+
+    IconButton(onClick = {
+        menuExpanded = true
+        onOpenModelPicker()
+    }) {
+        Icon(Icons.Filled.Settings, contentDescription = "Model: ${currentModel ?: "none"}")
+    }
+    DropdownMenu(
+        expanded = menuExpanded,
+        onDismissRequest = { menuExpanded = false },
+        modifier = Modifier.heightIn(max = 400.dp),
+    ) {
+        when {
+            isLoadingModelCatalog && modelCatalogGroups.isEmpty() -> DropdownMenuItem(
+                text = { Text("Loading models...") },
+                onClick = {},
+                enabled = false,
+            )
+            modelCatalogGroups.isEmpty() -> DropdownMenuItem(
+                text = { Text("No models available") },
+                onClick = {},
+                enabled = false,
+            )
+            else -> modelCatalogGroups.forEach { group ->
+                Text(
+                    text = group.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+                group.models.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.displayName) },
+                        trailingIcon = {
+                            if (option.matchesSelection(currentModel, currentModelProvider)) {
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onSelectModel(option)
+                        },
+                    )
+                }
+            }
         }
     }
 }

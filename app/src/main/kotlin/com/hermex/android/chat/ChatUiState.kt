@@ -1,6 +1,7 @@
 package com.hermex.android.chat
 
 import com.hermex.android.core.network.dto.ChatMessage
+import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ProfileSummary
 
 data class ChatUiState(
@@ -25,6 +26,22 @@ data class ChatUiState(
     /** Loaded once from [com.hermex.android.core.storage.ChatPreferencesStore] -- whether a fresh
      * [ReasoningBlock] should start expanded rather than collapsed. */
     val expandThinkingByDefault: Boolean = false,
+    /** This session's own workspace/model/provider, loaded from [ChatMessage]'s sibling
+     * `SessionDetail` when the session loads and kept in sync after every
+     * `/api/session/update` -- sent on every `/api/chat/start` so an existing conversation keeps
+     * using whatever it was already using (or whatever the composer just switched it to). */
+    val currentWorkspace: String? = null,
+    val currentModel: String? = null,
+    val currentModelProvider: String? = null,
+    val modelCatalogGroups: List<ModelCatalogGroup> = emptyList(),
+    val isLoadingModelCatalog: Boolean = false,
+    /** Covers both the model-switch and (existing) profile-switch API calls -- either one
+     * updates this session's live configuration in place. */
+    val isUpdatingComposerConfiguration: Boolean = false,
+    /** Set to true right after a manual model pick succeeds; sent as `explicit_model_pick: true`
+     * on the *next* `/api/chat/start` only, then cleared -- tells the server this model change
+     * was deliberate rather than an implicit default, matching iOS exactly. */
+    val pendingExplicitModelPick: Boolean = false,
 )
 
 data class ToolCallUi(

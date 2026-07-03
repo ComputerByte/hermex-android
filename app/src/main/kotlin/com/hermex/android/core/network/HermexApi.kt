@@ -33,6 +33,7 @@ import com.hermex.android.core.network.dto.SessionResponse
 import com.hermex.android.core.network.dto.SessionsResponse
 import com.hermex.android.core.network.dto.SkillDetailResponse
 import com.hermex.android.core.network.dto.SkillsResponse
+import com.hermex.android.core.network.dto.UpdateSessionRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -68,6 +69,9 @@ interface HermexApi {
 
     @POST("/api/session/new")
     suspend fun newSession(@Body body: NewSessionRequest): SessionResponse
+
+    @POST("/api/session/update")
+    suspend fun updateSession(@Body body: UpdateSessionRequest): SessionResponse
 
     @POST("/api/chat/start")
     suspend fun chatStart(@Body body: ChatStartRequest): ChatStartResponse

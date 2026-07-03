@@ -82,3 +82,14 @@ data class NewSessionRequest(
     val modelProvider: String? = null,
     val profile: String? = null,
 )
+
+/** `POST /api/session/update` -- updates an *existing* session's workspace/model/provider in
+ * place (unlike profile switching, which may start a new session, this never does). Response is
+ * a plain [SessionResponse], same shape as session load/create. */
+@Serializable
+data class UpdateSessionRequest(
+    val sessionId: String,
+    val workspace: String? = null,
+    val model: String? = null,
+    val modelProvider: String? = null,
+)

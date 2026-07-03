@@ -1,6 +1,8 @@
 package com.hermex.android.core.network
 
 import com.hermex.android.core.storage.CookieStore
+import com.hermex.android.core.storage.CustomHeadersStore
+import com.hermex.android.core.storage.NoOpCustomHeadersStore
 import com.hermex.android.core.util.HermexLog
 import java.util.concurrent.TimeUnit
 import okhttp3.Interceptor
@@ -26,6 +28,13 @@ import retrofit2.Retrofit
  */
 class NetworkModule(
     cookieStore: CookieStore,
+    /** Defaults to a no-op so the many tests that construct a bare `NetworkModule` (just to get a
+     * working `AuthRepository`) don't need to care about custom headers at all -- only
+     * [com.hermex.android.AppContainer] wires a real, persisted store. Placed before
+     * [onUnauthorized] (rather than after) so every existing `NetworkModule(cookieStore) { ... }`
+     * trailing-lambda call site -- which binds to the *last* parameter -- keeps compiling
+     * unchanged. */
+    private val customHeadersStore: CustomHeadersStore = NoOpCustomHeadersStore,
     /** Fired when an authenticated (non-login) call gets a 401 -- the session cookie is stale. */
     private val onUnauthorized: () -> Unit,
 ) {
@@ -53,10 +62,37 @@ class NetworkModule(
     private val loggingInterceptor = HttpLoggingInterceptor { message -> HermexLog.d("Http", message) }
         .apply { level = HttpLoggingInterceptor.Level.BASIC }
 
+    /** Header names the app/OkHttp/Retrofit already manage -- a user-supplied header can never
+     * override one of these, regardless of what's saved. Checked case-insensitively. */
+    private val blockedCustomHeaderNames = setOf(
+        "accept", "content-type", "cookie", "host", "content-length",
+        "connection", "transfer-encoding", "te", "trailer", "upgrade",
+    )
+
+    /** Applies every saved, [com.hermex.android.core.storage.CustomHttpHeader.isApplicable]
+     * custom header to every outgoing request (REST and SSE both go through
+     * [baseClientBuilder], so both are covered) -- for self-hosters behind an authenticated
+     * reverse proxy or a token-gated server. Never logs a header's name or value. */
+    private val customHeadersInterceptor = Interceptor { chain ->
+        val headers = customHeadersStore.snapshot()
+        if (headers.isEmpty()) {
+            chain.proceed(chain.request())
+        } else {
+            val requestBuilder = chain.request().newBuilder()
+            for (header in headers) {
+                if (!header.isApplicable) continue
+                if (header.sanitizedName.lowercase() in blockedCustomHeaderNames) continue
+                requestBuilder.header(header.sanitizedName, header.sanitizedValue)
+            }
+            chain.proceed(requestBuilder.build())
+        }
+    }
+
     private fun baseClientBuilder(): OkHttpClient.Builder =
         OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .addInterceptor(loggingInterceptor)
+            .addInterceptor(customHeadersInterceptor)
             .addInterceptor(unauthorizedInterceptor)
 
     /** REST calls: normal bounded timeouts. */

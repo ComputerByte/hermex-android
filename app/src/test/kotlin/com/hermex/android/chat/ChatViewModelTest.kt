@@ -8,6 +8,7 @@ import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseEvent
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.network.ToolEventPayload
+import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.ServerStore
 import kotlinx.coroutines.Dispatchers
@@ -452,5 +453,241 @@ class ChatViewModelTest {
             assertTrue(loaded.expandThinkingByDefault)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    // -- Model switching inside chats --
+
+    @Test
+    fun `loadSession stores the session's current workspace, model, and modelProvider`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[],"workspace":"/home/user","model":"gpt-5.5","model_provider":"openai"}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals("/home/user", loaded.currentWorkspace)
+            assertEquals("gpt-5.5", loaded.currentModel)
+            assertEquals("openai", loaded.currentModelProvider)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `refreshModelCatalogForPickerOpen loads the catalog and overlays live models`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(MockResponse().setBody("""{"groups":[{"provider_id":"openai","models":[{"id":"gpt-5.5"}]}]}"""))
+        server.enqueue(MockResponse().setBody("""{"provider":"openai","models":[{"id":"gpt-5.5"},{"id":"gpt-5.5-mini"}]}"""))
+
+        viewModel.uiState.test {
+            viewModel.refreshModelCatalogForPickerOpen()
+            awaitUntil { it.isLoadingModelCatalog }
+            val loaded = awaitUntil { !it.isLoadingModelCatalog }
+            assertEquals(1, loaded.modelCatalogGroups.size)
+            assertEquals(2, loaded.modelCatalogGroups.first().models.size) // live overlay landed
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `selectComposerModel updates the session in place via session update, not a new session`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[],"workspace":"/ws","model":"a","model_provider":"openai"}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","model":"b","model_provider":"anthropic","workspace":"/ws"}}""",
+            ),
+        )
+
+        viewModel.uiState.test {
+            viewModel.selectComposerModel(ModelCatalogOption(id = "b", displayName = "b", providerId = "anthropic"))
+            awaitUntil { it.isUpdatingComposerConfiguration }
+            val afterUpdate = awaitUntil { !it.isUpdatingComposerConfiguration }
+            assertEquals("b", afterUpdate.currentModel)
+            assertEquals("anthropic", afterUpdate.currentModelProvider)
+            assertTrue(afterUpdate.pendingExplicitModelPick)
+            assertNull(afterUpdate.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val updateRequest = server.takeRequest()
+        assertTrue(updateRequest.path?.contains("/api/session/update") == true)
+        assertTrue(updateRequest.body.readUtf8().contains("\"model\":\"b\""))
+        assertTrue(!updateRequest.path.orEmpty().contains("/api/session/new"))
+    }
+
+    @Test
+    fun `selectComposerModel is a no-op when the option already matches the current selection`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[],"model":"a","model_provider":"openai"}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+        server.takeRequest()
+        server.takeRequest()
+
+        viewModel.selectComposerModel(ModelCatalogOption(id = "a", displayName = "a", providerId = "openai"))
+
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `selectComposerModel is blocked while a stream is active`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[],"model":"a"}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("still typing"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+        repeat(3) { server.takeRequest() } // session, profiles, chat/start
+
+        viewModel.uiState.test {
+            viewModel.selectComposerModel(ModelCatalogOption(id = "b", displayName = "b", providerId = "openai"))
+            val afterAttempt = awaitUntil { it.errorMessage != null }
+            assertEquals("Wait for the current response to finish before changing models.", afterAttempt.errorMessage)
+            assertEquals("a", afterAttempt.currentModel) // unchanged
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS)) // no session/update fired
+    }
+
+    @Test
+    fun `selectComposerModel failure keeps the previous model and surfaces an error`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody("""{"session":{"session_id":"s1","messages":[],"model":"a","model_provider":"openai"}}"""),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        viewModel.uiState.test {
+            viewModel.selectComposerModel(ModelCatalogOption(id = "b", displayName = "b", providerId = "anthropic"))
+            awaitUntil { it.isUpdatingComposerConfiguration }
+            val afterUpdate = awaitUntil { !it.isUpdatingComposerConfiguration }
+            assertEquals("a", afterUpdate.currentModel)
+            assertEquals("openai", afterUpdate.currentModelProvider)
+            assertTrue(afterUpdate.errorMessage != null)
+            assertTrue(!afterUpdate.pendingExplicitModelPick)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `sendMessage includes the session's current workspace, model, modelProvider, and profile`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[],"workspace":"/ws","model":"gpt-5.5","model_provider":"openai"}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"active":"work","profiles":[{"name":"work"}]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val chatStartRequest = server.takeRequest().body.readUtf8()
+        assertTrue(chatStartRequest.contains("\"workspace\":\"/ws\""))
+        assertTrue(chatStartRequest.contains("\"model\":\"gpt-5.5\""))
+        assertTrue(chatStartRequest.contains("\"model_provider\":\"openai\""))
+        assertTrue(chatStartRequest.contains("\"profile\":\"work\""))
+    }
+
+    @Test
+    fun `explicitModelPick is sent once after a manual model selection, then cleared`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[],"workspace":"/ws","model":"a","model_provider":"openai"}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(
+            MockResponse().setBody("""{"session":{"session_id":"s1","model":"b","model_provider":"anthropic","workspace":"/ws"}}"""),
+        )
+        viewModel.uiState.test {
+            viewModel.selectComposerModel(ModelCatalogOption(id = "b", displayName = "b", providerId = "anthropic"))
+            awaitUntil { it.pendingExplicitModelPick }
+            cancelAndIgnoreRemainingEvents()
+        }
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        server.takeRequest() // session/update
+
+        // First send after the pick: explicit_model_pick should be true, and clear afterwards.
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("first")
+            viewModel.sendMessage()
+            val afterSend = awaitUntil { it.isStreaming }
+            assertTrue(!afterSend.pendingExplicitModelPick)
+            cancelAndIgnoreRemainingEvents()
+        }
+        val firstChatStart = server.takeRequest().body.readUtf8()
+        assertTrue(firstChatStart.contains("\"explicit_model_pick\":true"))
+        server.enqueue(MockResponse().setBody("""{"ok":true}""")) // GET /api/chat/cancel
+        viewModel.cancelStream()
+        server.takeRequest() // chat/cancel
+
+        // Second send: no pick pending anymore, so the field is omitted entirely.
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-2","session_id":"s1"}"""))
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("second")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+        val secondChatStart = server.takeRequest().body.readUtf8()
+        assertTrue(!secondChatStart.contains("explicit_model_pick"))
     }
 }

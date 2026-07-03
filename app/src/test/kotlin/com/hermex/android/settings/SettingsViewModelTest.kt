@@ -7,6 +7,7 @@ import com.hermex.android.auth.AuthState
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.storage.ChatPreferencesStore
+import com.hermex.android.core.storage.CustomHttpHeader
 import com.hermex.android.core.storage.ServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,7 +73,7 @@ class SettingsViewModelTest {
         server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}""")) // GET /api/settings
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}""")) // GET /api/models
 
-        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore())
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
 
         viewModel.uiState.test {
             val loaded = awaitUntil { !it.isLoading }
@@ -90,7 +91,7 @@ class SettingsViewModelTest {
         server.enqueue(MockResponse().setResponseCode(500)) // GET /api/settings
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}""")) // GET /api/models
 
-        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore())
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
 
         viewModel.uiState.test {
             val loaded = awaitUntil { !it.isLoading }
@@ -108,7 +109,7 @@ class SettingsViewModelTest {
         val repo = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}""")) // GET /api/settings
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}""")) // GET /api/models
-        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore())
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
         viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
 
         server.enqueue(MockResponse().setBody("""{"ok":true}""")) // /api/auth/logout
@@ -130,7 +131,7 @@ class SettingsViewModelTest {
         server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
 
-        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(expandThinkingByDefault = true))
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(expandThinkingByDefault = true), FakeCustomHeadersStore())
 
         viewModel.uiState.test {
             val loaded = awaitUntil { !it.isLoading }
@@ -145,7 +146,7 @@ class SettingsViewModelTest {
         server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
         val store = FakeChatPreferencesStore()
-        val viewModel = SettingsViewModel(repo, store)
+        val viewModel = SettingsViewModel(repo, store, FakeCustomHeadersStore())
         viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
 
         viewModel.uiState.test {
@@ -155,5 +156,38 @@ class SettingsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertTrue(store.loadExpandThinkingByDefault())
+    }
+
+    @Test
+    fun `load reflects the saved custom header count`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+        val headersStore = FakeCustomHeadersStore(
+            listOf(CustomHttpHeader(name = "X-Api-Key", value = "secret"), CustomHttpHeader(name = "Authorization", value = "Bearer x")),
+        )
+
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), headersStore)
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(2, loaded.customHeaderCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `customHeaderCount is 0 when no headers are saved`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(0, loaded.customHeaderCount)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

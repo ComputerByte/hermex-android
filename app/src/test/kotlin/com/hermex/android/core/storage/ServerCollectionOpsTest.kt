@@ -77,6 +77,18 @@ class ServerCollectionOpsTest {
     }
 
     @Test
+    fun `updateServer on the active server changes its url but leaves activeServerId pointed at the same id`() {
+        val (state, original) = ServerStoreState().withAddedServer("A", "https://a.example.com/")
+        assertEquals(original.id, state.activeServerId)
+
+        val (updated, edited) = state.withUpdatedServer(original.id, "A", "https://edited.example.com/")
+
+        assertEquals(original.id, updated.activeServerId) // still the same server, just a new url
+        assertEquals("https://edited.example.com/", updated.activeServer?.baseUrl)
+        assertEquals(edited.id, original.id)
+    }
+
+    @Test
     fun `updateServer with an unknown id does not crash and leaves the collection unchanged`() {
         val (state, original) = ServerStoreState().withAddedServer("A", "https://a.example.com/")
 

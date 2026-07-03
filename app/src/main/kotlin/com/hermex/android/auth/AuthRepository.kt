@@ -254,6 +254,27 @@ class AuthRepository(
         HermexLog.w("Auth", "handleUnauthorized -> LoggedOut (server kept)")
     }
 
+    /** Re-syncs live networking after an in-place edit to a server's own config (Settings ->
+     * Servers -> Edit) -- without this, [state] would keep serving the pre-edit URL from
+     * [activeServerBaseUrl]/[apiForActiveServer] until the app restarts, since [state] is
+     * otherwise only ever set by [login]/[restoreSavedServer]/[switchActiveServer]/[forgetServer],
+     * never by an out-of-band [ServerStore] edit. No-ops if [serverId] isn't the currently active
+     * server, or if its baseUrl didn't actually change (an edit to just the display name never
+     * needs to touch networking). Cookies/custom headers are untouched either way: both are
+     * scoped by [HermexServerConfig.id], which an edit never changes. */
+    fun refreshActiveServerUrl(serverId: String) {
+        val current = _state.value
+        if (current.serverIdOrNull != serverId) return
+        val updatedUrl = serverStore.activeServerSnapshot()?.takeIf { it.id == serverId }?.baseUrl ?: return
+        if (updatedUrl == current.serverUrlOrNull) return
+        cachedApi = null // the cached Retrofit instance was bound to the pre-edit URL string
+        _state.value = when (current) {
+            is AuthState.LoggedIn -> current.copy(serverUrl = updatedUrl)
+            is AuthState.LoggedOut -> current.copy(serverUrl = updatedUrl)
+            AuthState.Unconfigured -> return
+        }
+    }
+
     /** Switches the active server: repoints networking at its scope and optimistically sets
      * [state] to LoggedIn, exactly like [restoreSavedServer] does at startup -- a stale/missing
      * cookie is caught by the next request's 401 via [handleUnauthorized], not synchronously

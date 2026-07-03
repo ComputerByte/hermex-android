@@ -89,6 +89,10 @@ class ServersViewModel(
             _uiState.update { it.copy(isSavingEditor = true) }
             if (editingId != null) {
                 serverStore.updateServer(editingId, name, normalizedUrl)
+                // No-ops unless editingId is the currently active server and its URL actually
+                // changed -- see AuthRepository.refreshActiveServerUrl for why this is needed at
+                // all (an edit here never otherwise reaches AuthRepository's own live state).
+                authRepository.refreshActiveServerUrl(editingId)
             } else {
                 serverStore.addServer(name, normalizedUrl)
             }

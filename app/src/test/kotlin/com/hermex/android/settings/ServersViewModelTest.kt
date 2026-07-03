@@ -122,6 +122,81 @@ class ServersViewModelTest {
     }
 
     @Test
+    fun `editing the active server's url triggers a live networking repoint`() = runTest {
+        val store = FakeServerStore("https://a.example.com/")
+        val active = store.activeServerSnapshot()!!
+        val repo = repositoryFor(store)
+        repo.restoreSavedServer()
+        val viewModel = ServersViewModel(repo, store)
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.startEditing(active)
+        viewModel.updateEditorUrl("a-edited.example.com")
+        viewModel.saveEditor()
+
+        assertEquals("https://a-edited.example.com/", store.activeServerSnapshot()?.baseUrl)
+        val state = repo.state.value as AuthState.LoggedIn
+        assertEquals(active.id, state.serverId) // same server identity
+        assertEquals("https://a-edited.example.com/", state.serverUrl) // repointed, no restart needed
+    }
+
+    @Test
+    fun `editing the active server's display name only does not disrupt the active server url`() = runTest {
+        val store = FakeServerStore("https://a.example.com/")
+        val active = store.activeServerSnapshot()!!
+        val repo = repositoryFor(store)
+        repo.restoreSavedServer()
+        val before = repo.state.value as AuthState.LoggedIn
+        val viewModel = ServersViewModel(repo, store)
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.startEditing(active)
+        viewModel.updateEditorName("Renamed")
+        viewModel.saveEditor()
+
+        assertEquals(before, repo.state.value) // untouched: no url change, nothing to repoint
+    }
+
+    @Test
+    fun `editing an inactive server's url leaves the active server's live networking alone`() = runTest {
+        val store = FakeServerStore()
+        val first = store.addServer("A", "https://a.example.com/")
+        val second = store.addServer("B", "https://b.example.com/")
+        val repo = repositoryFor(store)
+        repo.restoreSavedServer() // A (first added) is active
+        val viewModel = ServersViewModel(repo, store)
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.startEditing(second)
+        viewModel.updateEditorUrl("b-edited.example.com")
+        viewModel.saveEditor()
+
+        assertEquals("https://b-edited.example.com/", store.state.value.servers.first { it.id == second.id }.baseUrl)
+        val state = repo.state.value as AuthState.LoggedIn
+        assertEquals(first.id, state.serverId)
+        assertEquals("https://a.example.com/", state.serverUrl) // active server's url untouched
+    }
+
+    @Test
+    fun `a validation error while editing the active server does not repoint anything`() = runTest {
+        val store = FakeServerStore("https://a.example.com/")
+        val active = store.activeServerSnapshot()!!
+        val repo = repositoryFor(store)
+        repo.restoreSavedServer()
+        val before = repo.state.value as AuthState.LoggedIn
+        val viewModel = ServersViewModel(repo, store)
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.startEditing(active)
+        viewModel.updateEditorUrl("   ")
+        viewModel.saveEditor()
+
+        assertTrue(viewModel.uiState.value.editorError != null)
+        assertEquals(before, repo.state.value)
+        assertEquals("https://a.example.com/", store.activeServerSnapshot()?.baseUrl)
+    }
+
+    @Test
     fun `switchTo makes another server active`() = runTest {
         val store = FakeServerStore()
         val first = store.addServer("A", "https://a.example.com/")

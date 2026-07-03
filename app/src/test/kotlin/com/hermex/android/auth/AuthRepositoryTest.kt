@@ -237,6 +237,72 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `refreshActiveServerUrl repoints REST requests to the edited active server's new URL`() = runTest {
+        val active = serverStore.addServer("A", baseUrl())
+        repository.restoreSavedServer()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+        val api = repository.apiForActiveServer()!!
+        api.sessions() // warms the cached Retrofit instance bound to the pre-edit URL
+
+        val newServer = MockWebServer().apply { start() }
+        try {
+            val newUrl = newServer.url("/").toString()
+            serverStore.updateServer(active.id, active.name, newUrl)
+
+            repository.refreshActiveServerUrl(active.id)
+
+            assertEquals(newUrl, (repository.state.value as AuthState.LoggedIn).serverUrl)
+            newServer.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+            repository.apiForActiveServer()!!.sessions()
+            assertEquals(1, newServer.requestCount) // the repointed api actually reaches the new host
+        } finally {
+            newServer.shutdown()
+        }
+    }
+
+    @Test
+    fun `refreshActiveServerUrl is a no-op when the edited server is not the active one`() = runTest {
+        val first = serverStore.addServer("A", "https://a.example.com/")
+        val second = serverStore.addServer("B", "https://b.example.com/")
+        repository.restoreSavedServer()
+        assertEquals(first.id, (repository.state.value as AuthState.LoggedIn).serverId)
+
+        serverStore.updateServer(second.id, "B", "https://b-edited.example.com/")
+        repository.refreshActiveServerUrl(second.id)
+
+        val state = repository.state.value as AuthState.LoggedIn
+        assertEquals(first.id, state.serverId)
+        assertEquals("https://a.example.com/", state.serverUrl) // untouched
+    }
+
+    @Test
+    fun `refreshActiveServerUrl is a no-op when only the display name changed`() = runTest {
+        val active = serverStore.addServer("A", "https://a.example.com/")
+        repository.restoreSavedServer()
+        val before = repository.state.value as AuthState.LoggedIn
+
+        serverStore.updateServer(active.id, "Renamed", "https://a.example.com/")
+        repository.refreshActiveServerUrl(active.id)
+
+        assertEquals(before, repository.state.value) // same instance-equal LoggedIn, nothing repointed
+    }
+
+    @Test
+    fun `refreshActiveServerUrl never touches the active server's cookies or another server's`() = runTest {
+        val active = serverStore.addServer("A", baseUrl())
+        val other = serverStore.addServer("B", "https://b.example.com/")
+        repository.restoreSavedServer()
+        cookieStores.getOrPut(active.id) { FakeCookieStore() }.stored = "active-cookie"
+        cookieStores.getOrPut(other.id) { FakeCookieStore() }.stored = "other-cookie"
+
+        serverStore.updateServer(active.id, "A", "https://a-edited.example.com/")
+        repository.refreshActiveServerUrl(active.id)
+
+        assertEquals("active-cookie", cookieStores[active.id]!!.stored)
+        assertEquals("other-cookie", cookieStores[other.id]!!.stored)
+    }
+
+    @Test
     fun `forgetServer removes the server and clears its cookies`() = runTest {
         server.enqueue(MockResponse().setBody("""{"status":"ok"}"""))
         server.enqueue(MockResponse().setBody("""{"auth_enabled":false}"""))

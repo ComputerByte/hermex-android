@@ -1,0 +1,50 @@
+package com.hermex.android
+
+import android.content.Context
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.hermex.android.auth.AuthRepository
+import com.hermex.android.chat.ChatViewModel
+import com.hermex.android.core.network.NetworkModule
+import com.hermex.android.core.network.SseClient
+import com.hermex.android.core.network.SseStreamSource
+import com.hermex.android.core.storage.DataStoreCookieStore
+import com.hermex.android.core.storage.DataStoreServerStore
+import com.hermex.android.onboarding.OnboardingViewModel
+import com.hermex.android.sessions.SessionListViewModel
+
+/**
+ * Manual dependency wiring for the whole app -- no Hilt for a 3-screen MVP (the dependency
+ * graph is small enough that a DI framework's build-time cost isn't worth it yet; Hilt is the
+ * natural upgrade once module/screen count grows).
+ *
+ * [authRepository] closes a two-way dependency: [NetworkModule]'s 401 interceptor needs a
+ * callback into [AuthRepository], but [AuthRepository] needs [NetworkModule]'s cookie jar and
+ * per-server API factory. The lambda passed to `NetworkModule` captures `authRepositoryRef` by
+ * reference and is only ever invoked later (on an actual 401), by which point both are fully
+ * constructed -- a standard way to break constructor-order circular deps in manual DI.
+ */
+class AppContainer(context: Context) {
+    private val cookieStore = DataStoreCookieStore(context)
+    private val serverStore = DataStoreServerStore(context)
+
+    private lateinit var authRepositoryRef: AuthRepository
+
+    val networkModule: NetworkModule = NetworkModule(cookieStore) { authRepositoryRef.handleUnauthorized() }
+
+    val authRepository: AuthRepository = AuthRepository(networkModule, serverStore).also { authRepositoryRef = it }
+
+    private val sseClient: SseStreamSource = SseClient(networkModule.sseClient)
+
+    fun onboardingViewModelFactory() = viewModelFactory {
+        initializer { OnboardingViewModel(authRepository) }
+    }
+
+    fun sessionListViewModelFactory() = viewModelFactory {
+        initializer { SessionListViewModel(authRepository) }
+    }
+
+    fun chatViewModelFactory(sessionId: String) = viewModelFactory {
+        initializer { ChatViewModel(sessionId, authRepository, sseClient) }
+    }
+}

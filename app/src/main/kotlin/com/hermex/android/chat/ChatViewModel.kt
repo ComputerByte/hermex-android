@@ -3,6 +3,7 @@ package com.hermex.android.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
+import com.hermex.android.auth.serverIdOrNull
 import com.hermex.android.core.cache.NoOpOfflineCacheRepository
 import com.hermex.android.core.cache.OfflineCacheRepository
 import com.hermex.android.core.network.ApiError
@@ -35,7 +36,13 @@ private const val OFFLINE_CACHE_MESSAGE = "Unable to reach server -- showing cac
  * Drives one chat session: loads recent history, sends a message, opens the SSE stream for the
  * reply, and folds each [SseEvent] into [ChatUiState] as it arrives. Mirrors iOS's
  * `ChatViewModel` streaming state machine, minus reconnect-with-replay (explicitly deferred --
- * see API_CONTRACT.md) and the approval/clarification/attachment features out of MVP scope.
+ * see API_CONTRACT.md) and the attachment features out of MVP scope.
+ *
+ * TODO(v0.3.0 audit): steer-while-running and approval/clarification are NOT implemented. Neither
+ * has a documented endpoint or SSE event shape in API_CONTRACT.md, and [SseEventParser] doesn't
+ * decode an `approval`/`clarification` event today (an event named `approval` currently degrades
+ * to [SseEvent.Unknown], see `SseEventParserTest`) -- wiring either up would mean inventing a wire
+ * contract with no way to verify it. Revisit once the server side documents the real shapes.
  */
 class ChatViewModel(
     private val sessionId: String,
@@ -55,6 +62,22 @@ class ChatViewModel(
         viewModelScope.launch {
             val expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()
             _uiState.update { it.copy(expandThinkingByDefault = expandThinkingByDefault) }
+        }
+        viewModelScope.launch {
+            var previousServerId: String? = null
+            var sawFirstState = false
+            authRepository.state.collect { state ->
+                val currentServerId = state.serverIdOrNull
+                // Only react to an actual *change* after streaming started -- the first emission
+                // here is just this collector's own startup snapshot (StateFlow always replays
+                // its current value to a new collector), not a real switch.
+                if (sawFirstState && currentServerId != previousServerId && _uiState.value.isStreaming) {
+                    HermexLog.w("Chat", "active server changed mid-stream -- closing the local stream")
+                    finalizeStream(errorMessage = "The active server changed, so this run was stopped.")
+                }
+                previousServerId = currentServerId
+                sawFirstState = true
+            }
         }
     }
 
@@ -477,16 +500,34 @@ class ChatViewModel(
         }
     }
 
-    /** Stop button. Fires a best-effort cancel request to the server, and finalizes locally
-     * immediately rather than waiting for a `cancel` event to arrive on the stream, so the UI
-     * feels instant. */
+    /** Stop button. Fires a cancel request to the server, and finalizes locally immediately
+     * rather than waiting for a `cancel` event to arrive on the stream, so the UI feels instant.
+     * The local finalize happens either way (matching iOS -- a stuck "stop" button that keeps
+     * waiting on a flaky server is worse than a possibly-still-running server turn the user can
+     * no longer see); a failed cancel just surfaces an error afterward without reopening the
+     * stream or touching [ChatUiState.messages]. No-ops with a "reconnect" error instead of
+     * calling the server at all when showing cached data offline -- see [ChatUiState.isShowingCachedData]. */
     fun cancelStream() {
+        if (_uiState.value.isShowingCachedData) {
+            _uiState.update { it.copy(errorMessage = "Reconnect to control this run.") }
+            return
+        }
         val streamId = activeStreamId ?: return
         HermexLog.d("Chat", "cancelStream: streamId=$streamId")
         val api = authRepository.apiForActiveServer()
         if (api != null) {
             viewModelScope.launch {
-                runCatching { safeApiCall { api.chatCancel(streamId) } }
+                try {
+                    val response = safeApiCall { api.chatCancel(streamId) }
+                    if (response.error != null) {
+                        _uiState.update { it.copy(errorMessage = response.error) }
+                    }
+                } catch (e: ApiError) {
+                    HermexLog.w("Chat", "chat/cancel failed: ${e.message}")
+                    _uiState.update {
+                        it.copy(errorMessage = e.message ?: "Could not confirm the stop with the server.")
+                    }
+                }
             }
         }
         finalizeStream()

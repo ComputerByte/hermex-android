@@ -332,6 +332,233 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun `cancelStream success clears streaming and allows sending the next message`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true,"cancelled":true}""")) // /api/chat/cancel
+        // cancelStream() -> finalizeStream() always fires an untracked background cache refresh
+        // (see ChatViewModel.refreshCacheInBackground); queue its response too so it doesn't
+        // steal the "second send" response enqueued further down.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("still typing"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "still typing" }
+
+            viewModel.cancelStream()
+            val afterCancel = awaitUntil { !it.isStreaming }
+            assertNull(afterCancel.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+        repeat(5) { server.takeRequest() } // session, profiles, chat/start, chat/cancel, background cache refresh
+
+        // A second send must actually be allowed (isSending/isStreaming both settled false).
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-2","session_id":"s1"}"""))
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("another message")
+            viewModel.sendMessage()
+            val afterSecondSend = awaitUntil { it.isStreaming }
+            assertTrue(afterSecondSend.messages.any { it.content == "another message" })
+            cancelAndIgnoreRemainingEvents()
+        }
+        val secondChatStart = server.takeRequest()
+        assertTrue(secondChatStart.path?.contains("/api/chat/start") == true)
+    }
+
+    @Test
+    fun `cancelStream failure surfaces an error but still finalizes locally without corrupting messages`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setResponseCode(500)) // /api/chat/cancel fails
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("still typing"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "still typing" }
+
+            viewModel.cancelStream()
+            // The local finalize (isStreaming -> false) happens synchronously; the server-side
+            // failure surfaces slightly later as errorMessage, once the failed call returns.
+            val afterCancel = awaitUntil { !it.isStreaming }
+            assertEquals("", afterCancel.streamingText)
+            assertEquals(2, afterCancel.messages.size) // user message + the finalized partial reply
+            assertEquals("still typing", afterCancel.messages[1].content)
+
+            val afterFailure = awaitUntil { it.errorMessage != null }
+            assertTrue(afterFailure.errorMessage != null)
+            // The failure must not have reopened the stream or touched the already-finalized messages.
+            assertEquals(false, afterFailure.isStreaming)
+            assertEquals(2, afterFailure.messages.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelStream does not restart the stream or send a second chat-start`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}""")) // /api/chat/cancel
+        // cancelStream() -> finalizeStream() always fires an untracked background cache refresh --
+        // queue its response too so it doesn't hang around unconsumed.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("still typing"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "still typing" }
+
+            viewModel.cancelStream()
+            awaitUntil { !it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        server.takeRequest() // chat/start
+        val cancelRequest = server.takeRequest()
+        assertTrue(cancelRequest.path?.contains("/api/chat/cancel") == true)
+        server.takeRequest() // background cache refresh
+        // Nothing else was ever sent -- specifically no second /api/chat/start.
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `cancelStream while showing cached data asks to reconnect instead of calling the server`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        cache.cacheSessionDetail(
+            serverId,
+            "s1",
+            SessionDetail(sessionId = "s1", messages = listOf(ChatMessage(role = "user", content = "cached msg"))),
+        )
+        server.enqueue(MockResponse().setResponseCode(500)) // initial load fails -> falls back to cache
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertTrue(settled.isShowingCachedData)
+            cancelAndIgnoreRemainingEvents()
+        }
+        server.takeRequest() // session (failed)
+        server.takeRequest() // profiles
+
+        viewModel.uiState.test {
+            viewModel.cancelStream()
+            val afterAttempt = awaitUntil { it.errorMessage != null }
+            assertEquals("Reconnect to control this run.", afterAttempt.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS)) // no chat/cancel fired
+    }
+
+    @Test
+    fun `switching the active server mid-stream closes the local stream instead of leaving it pointed at the old server`() = runTest {
+        val serverStore = FakeServerStore(server.url("/").toString())
+        val secondConfig = serverStore.addServer("Second", server.url("/").toString())
+        val networkModule = NetworkModule(FakeCookieStore()) { authRepository.handleUnauthorized() }
+        authRepository = AuthRepository(networkModule, serverStore)
+        authRepository.restoreSavedServer()
+
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        // What refreshCacheInBackground() fetches once the switch finalizes the stream -- the
+        // second "server" here is the same MockWebServer instance (only serverId-scoping is under
+        // test, matching the established convention in the multi-server cache-isolation tests
+        // above), so this response is genuinely consumed rather than hitting a real host.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("still typing"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+
+            authRepository.switchActiveServer(secondConfig.id)
+
+            val afterSwitch = awaitUntil { !it.isStreaming }
+            assertTrue(afterSwitch.errorMessage?.contains("active server changed") == true)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val chatStartRequest = server.takeRequest()
+        assertTrue(chatStartRequest.path?.contains("/api/chat/start") == true)
+        // No /api/chat/cancel was ever sent -- the stale server's stream was closed locally only.
+        val nextRequest = server.takeRequest()
+        assertTrue(
+            "the only remaining request should be the background cache refresh, not a chat/cancel",
+            nextRequest.path?.contains("/api/chat/cancel") != true,
+        )
+    }
+
+    @Test
+    fun `repeated identical token text is appended, never deduplicated`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        // "la" arrives three times in a row -- a naive dedup pass would collapse these.
+        val scriptedEvents = listOf(SseEvent.Token("la"), SseEvent.Token("la"), SseEvent.Token("la"), SseEvent.Done(null, null))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { scriptedEvents.asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("sing it")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            val finalState = awaitUntil { !it.isStreaming }
+            assertEquals("lalala", finalState.messages.last().content)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `selectProfile switches the active profile immediately when the session has no messages`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))

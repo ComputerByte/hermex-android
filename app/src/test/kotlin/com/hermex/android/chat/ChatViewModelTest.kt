@@ -88,6 +88,7 @@ class ChatViewModelTest {
                 """{"session":{"session_id":"s1","messages":[{"role":"user","content":"hi"}]}}""",
             ),
         )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
 
         val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
 
@@ -103,6 +104,7 @@ class ChatViewModelTest {
     fun `a full turn -- tokens, tool start+complete, done -- finalizes the message and clears streaming state`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
 
         val scriptedEvents = listOf(
@@ -156,6 +158,7 @@ class ChatViewModelTest {
     fun `tool calls from different turns anchor to their own turn's message index, not the last one`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
 
         // Two chat/start calls (one per turn), each opening its own scripted SSE flow via a
         // request-counting FakeSseClient below.
@@ -213,6 +216,7 @@ class ChatViewModelTest {
     fun `an error mid-stream finalizes with whatever partial content exists and sets errorMessage`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
 
         val scriptedEvents = listOf(SseEvent.Token("partial reply"), SseEvent.Error("connection reset"))
@@ -240,6 +244,7 @@ class ChatViewModelTest {
     fun `unrecognized events never touch chat state`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
 
         val scriptedEvents = listOf(SseEvent.Unknown, SseEvent.Token("x"), SseEvent.Unknown, SseEvent.Done(null, null))
@@ -264,6 +269,7 @@ class ChatViewModelTest {
     fun `cancelStream finalizes immediately without waiting for the stream to close on its own`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
         server.enqueue(MockResponse().setBody("""{"ok":true}""")) // /api/chat/cancel
 
@@ -290,5 +296,135 @@ class ChatViewModelTest {
 
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `selectProfile switches the active profile immediately when the session has no messages`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(
+            MockResponse().setBody("""{"active":"default","profiles":[{"name":"default"},{"name":"work"}]}"""),
+        )
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.enqueue(MockResponse().setBody("""{"active":"work","profiles":[{"name":"default"},{"name":"work"}]}"""))
+
+        viewModel.uiState.test {
+            viewModel.selectProfile("work")
+            // isSwitchingProfile defaults to false, so confirm the switch actually started before
+            // waiting for it to finish -- otherwise "!it.isSwitchingProfile" matches the
+            // pre-switch state too.
+            awaitUntil { it.isSwitchingProfile }
+            val afterSwitch = awaitUntil { !it.isSwitchingProfile }
+            assertEquals("work", afterSwitch.selectedProfileName)
+            assertNull(afterSwitch.pendingProfileSwitch)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val switchRequest = server.takeRequest()
+        assertTrue(switchRequest.path?.contains("/api/profile/switch") == true)
+    }
+
+    @Test
+    fun `selectProfile with existing messages asks for confirmation instead of switching immediately`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[{"role":"user","content":"hi"}]}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"active":"default","profiles":[{"name":"default"},{"name":"work"}]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            // loadProfiles() fires on whichever real thread the session response callback lands
+            // on, with no happens-before relationship to this test thread -- waiting for
+            // profileOptions to actually populate (rather than just "isLoading flipped") is what
+            // guarantees the profiles request has already landed before we drain it below.
+            awaitUntil { it.profileOptions.isNotEmpty() }
+            cancelAndIgnoreRemainingEvents()
+        }
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+
+        viewModel.uiState.test {
+            viewModel.selectProfile("work")
+            val afterSelect = awaitUntil { it.pendingProfileSwitch != null }
+            assertEquals("work", afterSelect.pendingProfileSwitch)
+            assertEquals("default", afterSelect.selectedProfileName) // not switched yet
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS)) // no network call fired
+    }
+
+    @Test
+    fun `dismissPendingProfileSwitch clears the pending switch without calling the API`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[{"role":"user","content":"hi"}]}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[{"name":"default"},{"name":"work"}]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            awaitUntil { it.profileOptions.isNotEmpty() } // see comment in the selectProfile test above
+            cancelAndIgnoreRemainingEvents()
+        }
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+
+        viewModel.selectProfile("work")
+
+        viewModel.uiState.test {
+            viewModel.dismissPendingProfileSwitch()
+            val afterDismiss = awaitUntil { it.pendingProfileSwitch == null }
+            assertNull(afterDismiss.pendingProfileSwitch)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `confirmPendingProfileSwitch switches the profile, creates a new session, and hands off the new session id`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[{"role":"user","content":"hi"}]}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[{"name":"default"},{"name":"work"}]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() })
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+        viewModel.selectProfile("work")
+
+        server.enqueue(MockResponse().setBody("""{"active":"work","profiles":[{"name":"default"},{"name":"work"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s2"}}"""))
+        var newSessionId: String? = null
+
+        viewModel.uiState.test {
+            viewModel.confirmPendingProfileSwitch { newSessionId = it }
+            awaitUntil { it.isSwitchingProfile }
+            val afterSwitch = awaitUntil { !it.isSwitchingProfile }
+            assertNull(afterSwitch.pendingProfileSwitch)
+            assertEquals("work", afterSwitch.selectedProfileName)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertEquals("s2", newSessionId)
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val switchRequest = server.takeRequest()
+        assertTrue(switchRequest.path?.contains("/api/profile/switch") == true)
+        val newSessionRequest = server.takeRequest()
+        assertTrue(newSessionRequest.path?.contains("/api/session/new") == true)
+        assertTrue(newSessionRequest.body.readUtf8().contains("\"profile\":\"work\""))
     }
 }

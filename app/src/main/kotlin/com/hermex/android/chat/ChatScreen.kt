@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -16,6 +17,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -31,9 +33,27 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun ChatScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit,
+    onSwitchedSession: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    uiState.pendingProfileSwitch?.let { profileName ->
+        val displayName = uiState.profileOptions.firstOrNull { it.normalizedName == profileName }?.displayName ?: profileName
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPendingProfileSwitch,
+            title = { Text("Start a new session?") },
+            text = { Text("Switching to \"$displayName\" starts a new session on that profile. This chat's history stays here.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmPendingProfileSwitch(onSwitchedSession) }) {
+                    Text("Start New Session")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissPendingProfileSwitch) { Text("Cancel") }
+            },
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -59,6 +79,10 @@ fun ChatScreen(
                 onStop = viewModel::cancelStream,
                 isStreaming = uiState.isStreaming,
                 isSending = uiState.isSending,
+                profileOptions = uiState.profileOptions,
+                selectedProfileName = uiState.selectedProfileName,
+                isSwitchingProfile = uiState.isSwitchingProfile,
+                onSelectProfile = viewModel::selectProfile,
             )
         },
     ) { innerPadding ->

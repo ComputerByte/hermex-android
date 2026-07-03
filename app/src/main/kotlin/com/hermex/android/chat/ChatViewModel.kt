@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.ApiError
+import com.hermex.android.core.network.HermexApi
 import com.hermex.android.core.network.SseEvent
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.network.ToolEventPayload
 import com.hermex.android.core.network.chatStreamUrl
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ChatStartRequest
+import com.hermex.android.core.network.dto.NewSessionRequest
+import com.hermex.android.core.network.dto.ProfileSwitchRequest
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.util.HermexLog
 import kotlinx.coroutines.Job
@@ -40,6 +43,25 @@ class ChatViewModel(
         loadSession()
     }
 
+    /** Runs after the session load, in the same coroutine rather than a concurrent one, so the
+     * two requests hit the server in a fixed order (session, then profiles) -- deterministic for
+     * tests against a single-queue MockWebServer, and irrelevant in production either way. */
+    private suspend fun loadProfiles(api: HermexApi) {
+        try {
+            val response = safeApiCall { api.profiles() }
+            _uiState.update {
+                it.copy(
+                    profileOptions = response.profiles.orEmpty(),
+                    selectedProfileName = response.effectiveDefaultProfileName,
+                )
+            }
+        } catch (e: ApiError) {
+            // Best-effort: the composer profile selector just stays empty/disabled. Not worth
+            // surfacing as a hard error alongside the session transcript itself.
+            HermexLog.w("Chat", "Could not load profiles: ${e.message}")
+        }
+    }
+
     fun loadSession() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -54,11 +76,86 @@ class ChatViewModel(
             } catch (e: ApiError) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Could not load session.") }
             }
+            loadProfiles(api)
         }
     }
 
     fun onComposerTextChanged(value: String) {
         _uiState.update { it.copy(composerText = value) }
+    }
+
+    /** Picking a profile from the composer selector. An empty transcript just switches the
+     * server's active profile in place; once messages exist, switching profiles instead offers
+     * to start a fresh session on that profile (see [pendingProfileSwitch] and
+     * [confirmPendingProfileSwitch]), matching iOS. */
+    fun selectProfile(name: String) {
+        val state = _uiState.value
+        if (name == state.selectedProfileName || state.isSwitchingProfile) return
+        if (state.messages.isEmpty()) {
+            performProfileSwitch(name)
+        } else {
+            _uiState.update { it.copy(pendingProfileSwitch = name) }
+        }
+    }
+
+    fun dismissPendingProfileSwitch() {
+        _uiState.update { it.copy(pendingProfileSwitch = null) }
+    }
+
+    /** Confirms starting a new session on [ChatUiState.pendingProfileSwitch]'s profile. Switches
+     * the server's active profile, creates a new session on it, and hands the new session id to
+     * [onNewSession] so the caller can navigate there -- this view model has no navigation
+     * authority of its own. */
+    fun confirmPendingProfileSwitch(onNewSession: (String) -> Unit) {
+        val name = _uiState.value.pendingProfileSwitch ?: return
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(pendingProfileSwitch = null, errorMessage = "Not signed in.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(pendingProfileSwitch = null, isSwitchingProfile = true, errorMessage = null) }
+            try {
+                safeApiCall { api.switchProfile(ProfileSwitchRequest(name)) }
+                val sessionResponse = safeApiCall { api.newSession(NewSessionRequest(profile = name)) }
+                val newSessionId = sessionResponse.session?.sessionId
+                _uiState.update { it.copy(isSwitchingProfile = false, selectedProfileName = name) }
+                if (newSessionId != null) {
+                    onNewSession(newSessionId)
+                } else {
+                    _uiState.update { it.copy(errorMessage = "Server did not return a session id.") }
+                }
+            } catch (e: ApiError) {
+                _uiState.update {
+                    it.copy(isSwitchingProfile = false, errorMessage = e.message ?: "Could not switch profile.")
+                }
+            }
+        }
+    }
+
+    private fun performProfileSwitch(name: String) {
+        val api = authRepository.apiForActiveServer() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSwitchingProfile = true, errorMessage = null) }
+            try {
+                val response = safeApiCall { api.switchProfile(ProfileSwitchRequest(name)) }
+                if (response.error != null) {
+                    _uiState.update { it.copy(isSwitchingProfile = false, errorMessage = response.error) }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isSwitchingProfile = false,
+                            profileOptions = response.profiles ?: it.profileOptions,
+                            selectedProfileName = response.active ?: name,
+                        )
+                    }
+                }
+            } catch (e: ApiError) {
+                _uiState.update {
+                    it.copy(isSwitchingProfile = false, errorMessage = e.message ?: "Could not switch profile.")
+                }
+            }
+        }
     }
 
     fun sendMessage() {

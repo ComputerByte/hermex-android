@@ -1,5 +1,6 @@
 package com.hermex.android.sessions
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,11 +10,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -28,11 +35,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+/**
+ * The nav destinations that live above the session list (Skills, and -- as each phase lands --
+ * Memory/Tasks/Profiles/Projects/Insights) render as leading rows in one continuous scrollable
+ * list here, mirroring the iOS app's single-screen layout rather than hiding them behind a
+ * separate drawer.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionListScreen(
     viewModel: SessionListViewModel,
     onOpenSession: (String) -> Unit,
+    onOpenSkills: () -> Unit,
+    onOpenMemory: () -> Unit,
+    onOpenTasks: () -> Unit,
+    onOpenProfiles: () -> Unit,
+    onOpenProjects: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -41,7 +59,7 @@ fun SessionListScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Sessions") },
+                title = { Text("Hermex") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -65,29 +83,85 @@ fun SessionListScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when {
-                uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                // Bottom padding clears the FAB, which floats over the list and isn't
+                // otherwise accounted for by Scaffold's innerPadding.
+                contentPadding = PaddingValues(bottom = 96.dp),
+            ) {
+                item(key = "nav-tasks") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenTasks),
+                        headlineContent = { Text("Tasks") },
+                        leadingContent = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                    )
+                }
+                item(key = "nav-skills") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenSkills),
+                        headlineContent = { Text("Skills") },
+                        leadingContent = { Icon(Icons.Filled.Build, contentDescription = null) },
+                    )
+                }
+                item(key = "nav-memory") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenMemory),
+                        headlineContent = { Text("Memory") },
+                        leadingContent = { Icon(Icons.Filled.Face, contentDescription = null) },
+                    )
+                }
+                item(key = "nav-profiles") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenProfiles),
+                        headlineContent = { Text("Profiles") },
+                        leadingContent = { Icon(Icons.Filled.Person, contentDescription = null) },
+                    )
+                }
+                item(key = "nav-projects") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenProjects),
+                        headlineContent = { Text("Projects") },
+                        leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    )
+                }
+                item(key = "sessions-header") {
+                    Text(
+                        text = "Sessions",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
                 }
 
-                uiState.sessions.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No sessions yet", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Tap + to start one.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                when {
+                    uiState.isLoading -> item(key = "loading") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
-                }
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    // Bottom padding clears the FAB, which floats over the list and isn't
-                    // otherwise accounted for by Scaffold's innerPadding.
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                ) {
-                    items(uiState.sessions, key = { it.sessionId ?: it.hashCode() }) { session ->
+                    uiState.sessions.isEmpty() -> item(key = "empty") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("No sessions yet", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Tap + to start one.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    else -> items(uiState.sessions, key = { it.sessionId ?: it.hashCode() }) { session ->
                         SessionRow(
                             session = session,
                             onClick = { session.sessionId?.let(onOpenSession) },

@@ -4,13 +4,29 @@ import com.hermex.android.core.network.dto.AuthStatusResponse
 import com.hermex.android.core.network.dto.ChatCancelResponse
 import com.hermex.android.core.network.dto.ChatStartRequest
 import com.hermex.android.core.network.dto.ChatStartResponse
+import com.hermex.android.core.network.dto.CronJobIdRequest
+import com.hermex.android.core.network.dto.CronJobsResponse
+import com.hermex.android.core.network.dto.CronMutationResponse
+import com.hermex.android.core.network.dto.CronOutputResponse
+import com.hermex.android.core.network.dto.CronStatusResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.HealthResponse
 import com.hermex.android.core.network.dto.LoginRequest
 import com.hermex.android.core.network.dto.LoginResponse
+import com.hermex.android.core.network.dto.MemoryResponse
+import com.hermex.android.core.network.dto.CreateProjectRequest
 import com.hermex.android.core.network.dto.NewSessionRequest
+import com.hermex.android.core.network.dto.ProfileSwitchRequest
+import com.hermex.android.core.network.dto.ProfileSwitchResponse
+import com.hermex.android.core.network.dto.ProfilesResponse
+import com.hermex.android.core.network.dto.ProjectIdRequest
+import com.hermex.android.core.network.dto.ProjectMutationResponse
+import com.hermex.android.core.network.dto.ProjectsResponse
+import com.hermex.android.core.network.dto.RenameProjectRequest
 import com.hermex.android.core.network.dto.SessionResponse
 import com.hermex.android.core.network.dto.SessionsResponse
+import com.hermex.android.core.network.dto.SkillDetailResponse
+import com.hermex.android.core.network.dto.SkillsResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -52,4 +68,58 @@ interface HermexApi {
 
     @GET("/api/chat/cancel")
     suspend fun chatCancel(@Query("stream_id") streamId: String): ChatCancelResponse
+
+    @GET("/api/skills")
+    suspend fun skills(): SkillsResponse
+
+    @GET("/api/skills/content")
+    suspend fun skillContent(
+        @Query("name") name: String,
+        @Query("file") file: String? = null,
+    ): SkillDetailResponse
+
+    @GET("/api/memory")
+    suspend fun memory(): MemoryResponse
+
+    @GET("/api/crons")
+    suspend fun crons(): CronJobsResponse
+
+    @GET("/api/crons/status")
+    suspend fun cronStatus(@Query("job_id") jobId: String): CronStatusResponse
+
+    @GET("/api/crons/output")
+    suspend fun cronOutput(
+        @Query("job_id") jobId: String,
+        @Query("limit") limit: Int? = 5,
+    ): CronOutputResponse
+
+    @POST("/api/crons/run")
+    suspend fun cronRun(@Body body: CronJobIdRequest): CronMutationResponse
+
+    @POST("/api/crons/pause")
+    suspend fun cronPause(@Body body: CronJobIdRequest): CronMutationResponse
+
+    @POST("/api/crons/resume")
+    suspend fun cronResume(@Body body: CronJobIdRequest): CronMutationResponse
+
+    @POST("/api/crons/delete")
+    suspend fun cronDelete(@Body body: CronJobIdRequest): CronMutationResponse
+
+    @GET("/api/profiles")
+    suspend fun profiles(): ProfilesResponse
+
+    @POST("/api/profile/switch")
+    suspend fun switchProfile(@Body body: ProfileSwitchRequest): ProfileSwitchResponse
+
+    @GET("/api/projects")
+    suspend fun projects(): ProjectsResponse
+
+    @POST("/api/projects/create")
+    suspend fun createProject(@Body body: CreateProjectRequest): ProjectMutationResponse
+
+    @POST("/api/projects/rename")
+    suspend fun renameProject(@Body body: RenameProjectRequest): ProjectMutationResponse
+
+    @POST("/api/projects/delete")
+    suspend fun deleteProject(@Body body: ProjectIdRequest): ProjectMutationResponse
 }

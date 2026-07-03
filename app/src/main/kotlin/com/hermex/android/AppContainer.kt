@@ -10,8 +10,15 @@ import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.storage.DataStoreCookieStore
 import com.hermex.android.core.storage.DataStoreServerStore
+import com.hermex.android.memory.MemoryViewModel
 import com.hermex.android.onboarding.OnboardingViewModel
+import com.hermex.android.profiles.ProfilesViewModel
+import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListViewModel
+import com.hermex.android.skills.SkillDetailViewModel
+import com.hermex.android.skills.SkillsViewModel
+import com.hermex.android.tasks.TaskDetailViewModel
+import com.hermex.android.tasks.TasksViewModel
 
 /**
  * Manual dependency wiring for the whole app -- no Hilt for a 3-screen MVP (the dependency
@@ -46,5 +53,33 @@ class AppContainer(context: Context) {
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {
         initializer { ChatViewModel(sessionId, authRepository, sseClient) }
+    }
+
+    fun skillsViewModelFactory() = viewModelFactory {
+        initializer { SkillsViewModel(authRepository) }
+    }
+
+    fun skillDetailViewModelFactory(skillName: String) = viewModelFactory {
+        initializer { SkillDetailViewModel(skillName, authRepository) }
+    }
+
+    fun memoryViewModelFactory() = viewModelFactory {
+        initializer { MemoryViewModel(authRepository) }
+    }
+
+    fun tasksViewModelFactory() = viewModelFactory {
+        initializer { TasksViewModel(authRepository) }
+    }
+
+    fun taskDetailViewModelFactory(jobId: String) = viewModelFactory {
+        initializer { TaskDetailViewModel(jobId, authRepository) }
+    }
+
+    fun profilesViewModelFactory() = viewModelFactory {
+        initializer { ProfilesViewModel(authRepository) }
+    }
+
+    fun projectsViewModelFactory() = viewModelFactory {
+        initializer { ProjectsViewModel(authRepository) }
     }
 }

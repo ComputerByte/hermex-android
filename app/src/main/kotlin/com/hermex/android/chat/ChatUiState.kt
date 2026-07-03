@@ -1,6 +1,7 @@
 package com.hermex.android.chat
 
 import com.hermex.android.core.network.dto.ChatMessage
+import com.hermex.android.core.network.dto.ProfileSummary
 
 data class ChatUiState(
     val isLoading: Boolean = true,
@@ -14,6 +15,13 @@ data class ChatUiState(
     val activeToolCalls: List<ToolCallUi> = emptyList(),
     val composerText: String = "",
     val errorMessage: String? = null,
+    val profileOptions: List<ProfileSummary> = emptyList(),
+    val selectedProfileName: String? = null,
+    val isSwitchingProfile: Boolean = false,
+    /** Set while waiting on a "start a new session with this profile?" confirmation -- picking a
+     * different profile mid-conversation doesn't switch this session in place (matching iOS: an
+     * existing transcript stays on its original profile), it offers a fresh one instead. */
+    val pendingProfileSwitch: String? = null,
 )
 
 data class ToolCallUi(

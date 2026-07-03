@@ -19,16 +19,48 @@ import com.hermex.android.AppContainer
 import com.hermex.android.auth.AuthState
 import com.hermex.android.chat.ChatScreen
 import com.hermex.android.chat.ChatViewModel
+import com.hermex.android.memory.MemoryScreen
+import com.hermex.android.memory.MemoryViewModel
 import com.hermex.android.onboarding.OnboardingScreen
 import com.hermex.android.onboarding.OnboardingViewModel
+import com.hermex.android.profiles.ProfilesScreen
+import com.hermex.android.profiles.ProfilesViewModel
+import com.hermex.android.projects.ProjectsScreen
+import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
+import com.hermex.android.skills.SkillDetailScreen
+import com.hermex.android.skills.SkillDetailViewModel
+import com.hermex.android.skills.SkillsScreen
+import com.hermex.android.skills.SkillsViewModel
+import com.hermex.android.tasks.TaskDetailScreen
+import com.hermex.android.tasks.TaskDetailViewModel
+import com.hermex.android.tasks.TasksScreen
+import com.hermex.android.tasks.TasksViewModel
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 private object Routes {
     const val ONBOARDING = "onboarding"
     const val SESSION_LIST = "sessionList"
     const val CHAT_PATTERN = "chat/{sessionId}"
     fun chat(sessionId: String) = "chat/$sessionId"
+    const val SKILLS = "skills"
+    const val SKILL_DETAIL_PATTERN = "skills/{name}"
+
+    // Skill names are arbitrary server-provided strings (may contain spaces/slashes), so they
+    // must be encoded to survive as a single path segment.
+    fun skillDetail(name: String) = "skills/${URLEncoder.encode(name, "UTF-8")}"
+
+    const val MEMORY = "memory"
+
+    const val TASKS = "tasks"
+    const val TASK_DETAIL_PATTERN = "tasks/{jobId}"
+    fun taskDetail(jobId: String) = "tasks/${URLEncoder.encode(jobId, "UTF-8")}"
+
+    const val PROFILES = "profiles"
+
+    const val PROJECTS = "projects"
 }
 
 /**
@@ -75,6 +107,101 @@ fun HermexNavGraph(appContainer: AppContainer) {
             SessionListScreen(
                 viewModel = viewModel,
                 onOpenSession = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
+                onOpenSkills = { navController.navigate(Routes.SKILLS) },
+                onOpenMemory = { navController.navigate(Routes.MEMORY) },
+                onOpenTasks = { navController.navigate(Routes.TASKS) },
+                onOpenProfiles = { navController.navigate(Routes.PROFILES) },
+                onOpenProjects = { navController.navigate(Routes.PROJECTS) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.PROFILES) {
+            val viewModel: ProfilesViewModel = viewModel(factory = appContainer.profilesViewModelFactory())
+            ProfilesScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.PROJECTS) {
+            val viewModel: ProjectsViewModel = viewModel(factory = appContainer.projectsViewModelFactory())
+            ProjectsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.TASKS) { backStackEntry ->
+            val viewModel: TasksViewModel = viewModel(factory = appContainer.tasksViewModelFactory())
+            // TasksViewModel's instance (and its list state) persists across a push-to-detail-
+            // and-back trip, since this back stack entry never leaves the graph -- so a delete
+            // on the detail screen won't otherwise be reflected here without an explicit signal.
+            val shouldRefresh by backStackEntry.savedStateHandle
+                .getStateFlow("refreshTasks", false)
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(shouldRefresh) {
+                if (shouldRefresh) {
+                    viewModel.load()
+                    backStackEntry.savedStateHandle["refreshTasks"] = false
+                }
+            }
+            TasksScreen(
+                viewModel = viewModel,
+                onOpenTask = { jobId -> navController.navigate(Routes.taskDetail(jobId)) },
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(
+            route = Routes.TASK_DETAIL_PATTERN,
+            arguments = listOf(navArgument("jobId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val encodedJobId = backStackEntry.arguments?.getString("jobId").orEmpty()
+            val jobId = URLDecoder.decode(encodedJobId, "UTF-8")
+            val viewModel: TaskDetailViewModel = viewModel(
+                key = jobId,
+                factory = appContainer.taskDetailViewModelFactory(jobId),
+            )
+            TaskDetailScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onDeleted = {
+                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshTasks", true)
+                    navController.popBackStack()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.MEMORY) {
+            val viewModel: MemoryViewModel = viewModel(factory = appContainer.memoryViewModelFactory())
+            MemoryScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(Routes.SKILLS) {
+            val viewModel: SkillsViewModel = viewModel(factory = appContainer.skillsViewModelFactory())
+            SkillsScreen(
+                viewModel = viewModel,
+                onOpenSkill = { name -> navController.navigate(Routes.skillDetail(name)) },
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(
+            route = Routes.SKILL_DETAIL_PATTERN,
+            arguments = listOf(navArgument("name") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val encodedName = backStackEntry.arguments?.getString("name").orEmpty()
+            val skillName = URLDecoder.decode(encodedName, "UTF-8")
+            val viewModel: SkillDetailViewModel = viewModel(
+                key = skillName,
+                factory = appContainer.skillDetailViewModelFactory(skillName),
+            )
+            SkillDetailScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -90,6 +217,11 @@ fun HermexNavGraph(appContainer: AppContainer) {
             ChatScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
+                onSwitchedSession = { newSessionId ->
+                    navController.navigate(Routes.chat(newSessionId)) {
+                        popUpTo(Routes.chat(sessionId)) { inclusive = true }
+                    }
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

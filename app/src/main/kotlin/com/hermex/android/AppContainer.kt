@@ -1,10 +1,13 @@
 package com.hermex.android
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.chat.ChatViewModel
+import com.hermex.android.core.appicon.AppIconSwitcher
+import com.hermex.android.core.appicon.PackageManagerAppIconAliasWriter
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
@@ -45,6 +48,15 @@ class AppContainer(context: Context) {
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
     private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
+
+    /** [AppIconSwitcher.resolvedAlias] for `SYSTEM` is re-evaluated from this lambda every time
+     * it's called (not cached) -- see [reconcileAppIcon] for where that matters. */
+    val appIconSwitcher = AppIconSwitcher(
+        aliasWriter = PackageManagerAppIconAliasWriter(context),
+        isDarkModeProvider = {
+            (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        },
+    )
 
     private lateinit var authRepositoryRef: AuthRepository
 
@@ -115,6 +127,7 @@ class AppContainer(context: Context) {
                 authRepository.customHeadersStoreForActiveServer() ?: NoOpCustomHeadersStore,
                 serverStore,
                 appearancePreferencesStore,
+                appIconSwitcher,
             )
         }
     }
@@ -129,5 +142,14 @@ class AppContainer(context: Context) {
 
     fun defaultModelViewModelFactory() = viewModelFactory {
         initializer { DefaultModelViewModel(authRepository) }
+    }
+
+    /** Re-applies the stored [com.hermex.android.core.storage.AppIconVariant] on every app start
+     * (see [HermexApplication]) -- Android has no live notification for "the device's dark/light
+     * mode changed while the app was closed," so `SYSTEM` has to be re-resolved here rather than
+     * observed continuously. Safe to call unconditionally; re-enabling an already-enabled alias
+     * is a no-op. */
+    suspend fun reconcileAppIcon() {
+        appIconSwitcher.applyVariant(appearancePreferencesStore.loadAppIconVariant())
     }
 }

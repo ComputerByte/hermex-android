@@ -2,12 +2,22 @@ package com.hermex.android.core.storage
 
 /** Shared in-memory [AppearancePreferencesStore] test double -- avoids needing a real Android
  * Context/DataStore. */
-internal class FakeAppearancePreferencesStore(initial: HeaderLogoColor = HeaderLogoColor.DEFAULT) : AppearancePreferencesStore {
-    var stored: HeaderLogoColor = initial
+internal class FakeAppearancePreferencesStore(
+    initialHeaderLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
+    initialAppIconVariant: AppIconVariant = AppIconVariant.SYSTEM,
+) : AppearancePreferencesStore {
+    var stored: HeaderLogoColor = initialHeaderLogoColor
+    var storedIcon: AppIconVariant = initialAppIconVariant
 
     override suspend fun loadHeaderLogoColor(): HeaderLogoColor = stored
 
     override suspend fun setHeaderLogoColor(color: HeaderLogoColor) {
         stored = color
+    }
+
+    override suspend fun loadAppIconVariant(): AppIconVariant = storedIcon
+
+    override suspend fun setAppIconVariant(variant: AppIconVariant) {
+        storedIcon = variant
     }
 }

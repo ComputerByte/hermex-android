@@ -3,39 +3,66 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!--
-      Runtime app icon switching (per-variant launcher icon) is intentionally not implemented yet.
-      This app has no bundled launcher icon assets at all right now (no android:icon here, no
-      files under res/mipmap-*), so there is nothing for an icon variant to point at. Implementing
-      it would require, at minimum:
-        - Real icon image assets (adaptive icon foreground/background or legacy PNGs) per variant,
-          under res/mipmap-*.
-        - One activity-alias element per variant, each with android:targetActivity=".MainActivity"
-          and its own android:icon/android:roundIcon, declared here at build time (aliases can't
-          be added dynamically).
-        - Exactly one alias enabled (the others start disabled), toggled at runtime via
-          PackageManager.setComponentEnabledSetting(..., DONT_KILL_APP) and persisted so the
-          right one is (re)enabled on next app start.
-        - Awareness that some launchers don't refresh the icon immediately, or briefly remove and
-          re-add it, after a component's enabled state changes.
-      Do this once real icon assets are provided; see the Header Logo Color preference (Settings
-      screen) for the theming feature that is implemented in this pass.
-    -->
     <application
         android:name=".HermexApplication"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:theme="@style/Theme.Hermex"
         android:usesCleartextTraffic="true">
+        <!--
+          MainActivity itself is not launcher-visible; the three activity-alias entries below own
+          the MAIN/LAUNCHER intent-filter instead, so exactly one of them (never MainActivity
+          directly) shows as the app's launcher icon. This is what lets the runtime app-icon
+          switcher (see AppIconSwitcher) change which icon is visible via
+          PackageManager.setComponentEnabledSetting() without needing to reinstall the app.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.Hermex">
+            android:theme="@style/Theme.Hermex" />
+
+        <!-- Light is the manifest-level default (enabled="true"); HermexApplication reconciles
+             this against the stored AppIconVariant + current device dark mode on every app start,
+             so a fresh install briefly shows Light before the very first reconciliation runs (or
+             stays Light if that's what System/Light already resolves to). -->
+        <activity-alias
+            android:name=".LauncherLight"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_light"
+            android:roundIcon="@mipmap/ic_launcher_light_round"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherDark"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_dark"
+            android:roundIcon="@mipmap/ic_launcher_dark_round"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherDisco"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_disco"
+            android:roundIcon="@mipmap/ic_launcher_disco_round"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
     </application>
 
 </manifest>

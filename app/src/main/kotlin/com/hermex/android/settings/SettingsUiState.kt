@@ -1,5 +1,6 @@
 package com.hermex.android.settings
 
+import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
 
 data class SettingsUiState(
@@ -18,4 +19,5 @@ data class SettingsUiState(
      * "None" / "N configured" subtitle on the Connection Headers row. */
     val customHeaderCount: Int = 0,
     val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
+    val appIconVariant: AppIconVariant = AppIconVariant.SYSTEM,
 )

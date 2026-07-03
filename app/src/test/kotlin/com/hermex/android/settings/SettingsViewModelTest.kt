@@ -4,8 +4,12 @@ import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.auth.AuthState
+import com.hermex.android.core.appicon.AppIconAliasWriter
+import com.hermex.android.core.appicon.AppIconSwitcher
+import com.hermex.android.core.appicon.ConcreteAppIcon
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
+import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.CustomHttpHeader
 import com.hermex.android.core.storage.FakeAppearancePreferencesStore
@@ -246,5 +250,76 @@ class SettingsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertEquals(HeaderLogoColor.PURPLE, store.loadHeaderLogoColor())
+    }
+
+    @Test
+    fun `load reads the persisted app icon variant`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(
+            repo,
+            FakeChatPreferencesStore(),
+            FakeCustomHeadersStore(),
+            appearancePreferencesStore = FakeAppearancePreferencesStore(initialAppIconVariant = AppIconVariant.DISCO),
+        )
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(AppIconVariant.DISCO, loaded.appIconVariant)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `appIconVariant defaults to SYSTEM when nothing is saved`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(AppIconVariant.SYSTEM, loaded.appIconVariant)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `setAppIconVariant updates state immediately, persists, and applies the switcher`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+        val store = FakeAppearancePreferencesStore()
+        val writer = FakeAppIconAliasWriter()
+        val switcher = AppIconSwitcher(writer, isDarkModeProvider = { false })
+        val viewModel = SettingsViewModel(
+            repo,
+            FakeChatPreferencesStore(),
+            FakeCustomHeadersStore(),
+            appearancePreferencesStore = store,
+            appIconSwitcher = switcher,
+        )
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.uiState.test {
+            viewModel.setAppIconVariant(AppIconVariant.DARK)
+            val afterChange = awaitUntil { it.appIconVariant == AppIconVariant.DARK }
+            assertEquals(AppIconVariant.DARK, afterChange.appIconVariant)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(AppIconVariant.DARK, store.loadAppIconVariant())
+        assertEquals(true, writer.enabledState[ConcreteAppIcon.DARK])
+        assertEquals(false, writer.enabledState[ConcreteAppIcon.LIGHT] ?: false)
+    }
+}
+
+private class FakeAppIconAliasWriter : AppIconAliasWriter {
+    val enabledState = mutableMapOf<ConcreteAppIcon, Boolean>()
+
+    override fun setEnabled(alias: ConcreteAppIcon, enabled: Boolean) {
+        enabledState[alias] = enabled
     }
 }

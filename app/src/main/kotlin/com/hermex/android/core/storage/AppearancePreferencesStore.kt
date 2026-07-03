@@ -6,11 +6,15 @@ package com.hermex.android.core.storage
 interface AppearancePreferencesStore {
     suspend fun loadHeaderLogoColor(): HeaderLogoColor
     suspend fun setHeaderLogoColor(color: HeaderLogoColor)
+    suspend fun loadAppIconVariant(): AppIconVariant
+    suspend fun setAppIconVariant(variant: AppIconVariant)
 }
 
 /** Default used wherever no real store is wired in -- mirrors [NoOpCustomHeadersStore]. Always
- * [HeaderLogoColor.DEFAULT]; every write is a no-op. */
+ * the default value for each preference; every write is a no-op. */
 object NoOpAppearancePreferencesStore : AppearancePreferencesStore {
     override suspend fun loadHeaderLogoColor(): HeaderLogoColor = HeaderLogoColor.DEFAULT
     override suspend fun setHeaderLogoColor(color: HeaderLogoColor) = Unit
+    override suspend fun loadAppIconVariant(): AppIconVariant = AppIconVariant.SYSTEM
+    override suspend fun setAppIconVariant(variant: AppIconVariant) = Unit
 }

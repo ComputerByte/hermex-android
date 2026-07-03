@@ -1,7 +1,9 @@
 package com.hermex.android.settings
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,9 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.BuildConfig
+import com.hermex.android.R
+import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
 import com.hermex.android.ui.theme.toComposeColor
 
@@ -60,6 +65,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
+    var showAppIconPicker by remember { mutableStateOf(false) }
 
     if (showColorPicker) {
         HeaderLogoColorDialog(
@@ -69,6 +75,17 @@ fun SettingsScreen(
                 showColorPicker = false
             },
             onDismiss = { showColorPicker = false },
+        )
+    }
+
+    if (showAppIconPicker) {
+        AppIconVariantDialog(
+            selected = uiState.appIconVariant,
+            onSelect = {
+                viewModel.setAppIconVariant(it)
+                showAppIconPicker = false
+            },
+            onDismiss = { showAppIconPicker = false },
         )
     }
 
@@ -161,6 +178,11 @@ fun SettingsScreen(
                         "Header Logo Color",
                         uiState.headerLogoColor.displayName,
                         onClick = { showColorPicker = true },
+                    )
+                    SettingsRow(
+                        "App Icon",
+                        uiState.appIconVariant.displayName,
+                        onClick = { showAppIconPicker = true },
                         showDivider = false,
                     )
                 }
@@ -286,6 +308,54 @@ private fun HeaderLogoColorDialog(
             TextButton(onClick = onDismiss) { Text("Close") }
         },
     )
+}
+
+@Composable
+private fun AppIconVariantDialog(
+    selected: AppIconVariant,
+    onSelect: (AppIconVariant) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isDarkTheme = isSystemInDarkTheme()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("App Icon") },
+        text = {
+            Column {
+                AppIconVariant.entries.forEach { variant ->
+                    ListItem(
+                        modifier = Modifier.clickable { onSelect(variant) },
+                        leadingContent = {
+                            Image(
+                                painter = painterResource(variant.previewMipmapRes(isDarkTheme)),
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                            )
+                        },
+                        headlineContent = { Text(variant.displayName) },
+                        supportingContent = { Text(variant.description) },
+                        trailingContent = {
+                            if (variant == selected) {
+                                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+/** SYSTEM has no launcher icon of its own (see [AppIconVariant]) -- shown here as whichever of
+ * Light/Dark it currently resolves to, matching [com.hermex.android.core.appicon.AppIconResolver]. */
+private fun AppIconVariant.previewMipmapRes(isDarkTheme: Boolean): Int = when (this) {
+    AppIconVariant.SYSTEM -> if (isDarkTheme) R.mipmap.ic_launcher_dark else R.mipmap.ic_launcher_light
+    AppIconVariant.LIGHT -> R.mipmap.ic_launcher_light
+    AppIconVariant.DARK -> R.mipmap.ic_launcher_dark
+    AppIconVariant.DISCO -> R.mipmap.ic_launcher_disco
 }
 
 @Composable

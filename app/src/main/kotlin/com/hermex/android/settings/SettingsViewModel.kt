@@ -3,8 +3,11 @@ package com.hermex.android.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
+import com.hermex.android.core.appicon.AppIconSwitcher
+import com.hermex.android.core.appicon.NoOpAppIconAliasWriter
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.safeApiCall
+import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.AppearancePreferencesStore
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.CustomHeadersStore
@@ -24,6 +27,7 @@ class SettingsViewModel(
     private val customHeadersStore: CustomHeadersStore,
     private val serverStore: ServerStore = NoOpServerStore,
     private val appearancePreferencesStore: AppearancePreferencesStore = NoOpAppearancePreferencesStore,
+    private val appIconSwitcher: AppIconSwitcher = AppIconSwitcher(NoOpAppIconAliasWriter) { false },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -44,6 +48,7 @@ class SettingsViewModel(
             // rest of this call succeeds.
             _uiState.update { it.copy(expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()) }
             _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
+            _uiState.update { it.copy(appIconVariant = appearancePreferencesStore.loadAppIconVariant()) }
             val customHeaders = customHeadersStore.load()
             _uiState.update { it.copy(customHeaderCount = customHeaders.size) }
             val api = authRepository.apiForActiveServer()
@@ -76,6 +81,17 @@ class SettingsViewModel(
     fun setHeaderLogoColor(color: HeaderLogoColor) {
         _uiState.update { it.copy(headerLogoColor = color) }
         viewModelScope.launch { appearancePreferencesStore.setHeaderLogoColor(color) }
+    }
+
+    /** Applies the launcher-icon change immediately (not just on next app start) -- see
+     * [AppIconSwitcher]. Some launchers may take a moment to refresh the visible icon, or briefly
+     * remove and re-add it, after this call. */
+    fun setAppIconVariant(variant: AppIconVariant) {
+        _uiState.update { it.copy(appIconVariant = variant) }
+        viewModelScope.launch {
+            appearancePreferencesStore.setAppIconVariant(variant)
+            appIconSwitcher.applyVariant(variant)
+        }
     }
 
     /** Doesn't need to navigate or flip [SettingsUiState.isSigningOut] back -- once

@@ -16,5 +16,6 @@ class HermexApplication : Application() {
         super.onCreate()
         appContainer = AppContainer(this)
         applicationScope.launch { appContainer.authRepository.restoreSavedServer() }
+        applicationScope.launch { appContainer.reconcileAppIcon() }
     }
 }

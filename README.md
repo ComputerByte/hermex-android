@@ -16,7 +16,7 @@ this app targets.
 
 - Native Android / Jetpack Compose UI
 - Real server authentication and session loading
-- Chat with SSE token streaming
+- Chat with SSE token streaming, a stop control for in-progress runs, and copy message
 - Session list with search
 - Tasks, Skills, Memory, Profiles, Projects, and Insights screens
 - Chat-scoped model switching (updates a session in place, matching iOS)

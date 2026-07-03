@@ -3,6 +3,8 @@ package com.hermex.android.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
+import com.hermex.android.core.cache.NoOpOfflineCacheRepository
+import com.hermex.android.core.cache.OfflineCacheRepository
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.HermexApi
 import com.hermex.android.core.network.SseEvent
@@ -27,6 +29,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val OFFLINE_CACHE_MESSAGE = "Unable to reach server -- showing cached conversation"
+
 /**
  * Drives one chat session: loads recent history, sends a message, opens the SSE stream for the
  * reply, and folds each [SseEvent] into [ChatUiState] as it arrives. Mirrors iOS's
@@ -38,6 +42,7 @@ class ChatViewModel(
     private val authRepository: AuthRepository,
     private val sseClient: SseStreamSource,
     private val chatPreferencesStore: ChatPreferencesStore,
+    private val offlineCacheRepository: OfflineCacheRepository = NoOpOfflineCacheRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -72,9 +77,31 @@ class ChatViewModel(
         }
     }
 
+    /** Shows the offline cache immediately (if there is one) while the network fetch is still in
+     * flight -- reopening a session you've read before doesn't start from a blank transcript --
+     * then a successful fetch replaces it with fresh data (and refreshes the cache for next
+     * time), while a failed fetch just leaves the cached messages on screen with
+     * [ChatUiState.cacheStatusMessage] explaining why. If there's no cache at all, a failed fetch
+     * falls through to the existing plain error state. */
     fun loadSession() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val serverId = authRepository.activeServerId()
+            if (serverId != null) {
+                val cached = offlineCacheRepository.cachedSessionDetail(serverId, sessionId)
+                if (cached != null) {
+                    _uiState.update {
+                        it.copy(
+                            messages = cached.messages.orEmpty(),
+                            currentWorkspace = cached.workspace,
+                            currentModel = cached.model,
+                            currentModelProvider = cached.modelProvider,
+                            isShowingCachedData = true,
+                            cacheStatusMessage = OFFLINE_CACHE_MESSAGE,
+                        )
+                    }
+                }
+            }
             val api = authRepository.apiForActiveServer()
             if (api == null) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = "Not signed in.") }
@@ -90,10 +117,23 @@ class ChatViewModel(
                         currentWorkspace = session?.workspace,
                         currentModel = session?.model,
                         currentModelProvider = session?.modelProvider,
+                        isShowingCachedData = false,
+                        cacheStatusMessage = null,
+                        errorMessage = null,
                     )
                 }
+                if (serverId != null && session != null) {
+                    viewModelScope.launch { offlineCacheRepository.cacheSessionDetail(serverId, sessionId, session) }
+                }
             } catch (e: ApiError) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Could not load session.") }
+                val hasCache = _uiState.value.isShowingCachedData
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = if (hasCache) null else (e.message ?: "Could not load session."),
+                        cacheStatusMessage = if (hasCache) OFFLINE_CACHE_MESSAGE else null,
+                    )
+                }
             }
             loadProfiles(api)
         }
@@ -284,6 +324,11 @@ class ChatViewModel(
                         ),
                     )
                 }
+            } catch (e: ApiError.Network) {
+                // A connectivity/IO failure specifically (see ApiError.Network) -- never queued,
+                // never shown as if it sent; the composer keeps the unsent text so nothing is lost.
+                _uiState.update { it.copy(isSending = false, errorMessage = "You're offline. Reconnect to send messages.") }
+                return@launch
             } catch (e: ApiError) {
                 _uiState.update { it.copy(isSending = false, errorMessage = e.message ?: "Could not send message.") }
                 return@launch
@@ -413,6 +458,22 @@ class ChatViewModel(
                 isStreaming = false,
                 errorMessage = errorMessage ?: state.errorMessage,
             )
+        }
+        refreshCacheInBackground()
+    }
+
+    /** Re-fetches this session's detail from the network and caches *that* -- deliberately never
+     * writes the locally-finalized [ChatUiState] (streamed text, the optimistic user message)
+     * directly into the offline cache, so a partial/synthetic reply can never end up stored as if
+     * it were final. Silent: the turn has already finished from the user's point of view, so a
+     * failed background refresh here isn't worth surfacing as an error. */
+    private fun refreshCacheInBackground() {
+        val serverId = authRepository.activeServerId() ?: return
+        val api = authRepository.apiForActiveServer() ?: return
+        viewModelScope.launch {
+            val session = runCatching { safeApiCall { api.session(sessionId = sessionId, messages = 1, msgLimit = 50) } }
+                .getOrNull()?.session ?: return@launch
+            offlineCacheRepository.cacheSessionDetail(serverId, sessionId, session)
         }
     }
 

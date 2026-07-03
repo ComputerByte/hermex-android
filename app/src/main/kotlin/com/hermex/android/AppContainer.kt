@@ -10,6 +10,7 @@ import com.hermex.android.chat.ChatViewModel
 import com.hermex.android.core.appicon.AppIconSwitcher
 import com.hermex.android.core.appicon.PackageManagerAppIconAliasWriter
 import com.hermex.android.core.cache.HermexDatabase
+import com.hermex.android.core.cache.MIGRATION_1_2
 import com.hermex.android.core.cache.OfflineCacheRepository
 import com.hermex.android.core.cache.RoomOfflineCacheRepository
 import com.hermex.android.core.network.NetworkModule
@@ -53,11 +54,12 @@ class AppContainer(context: Context) {
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
     private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
 
-    // Structured, queryable offline cache (session lists today; message history is a deferred
-    // follow-up) -- distinct from the DataStore-backed stores above, which are for small
-    // preference values, not this kind of payload. Never holds cookies/custom headers/secrets.
+    // Structured, queryable offline cache (session lists + chat/message history) -- distinct
+    // from the DataStore-backed stores above, which are for small preference values, not this
+    // kind of payload. Never holds cookies/custom headers/secrets.
     private val database: HermexDatabase = Room
         .databaseBuilder(context.applicationContext, HermexDatabase::class.java, "hermex_cache.db")
+        .addMigrations(MIGRATION_1_2)
         .build()
     private val offlineCacheRepository: OfflineCacheRepository = RoomOfflineCacheRepository(database.cachedSessionDao())
 
@@ -97,7 +99,7 @@ class AppContainer(context: Context) {
     }
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {
-        initializer { ChatViewModel(sessionId, authRepository, sseClient, chatPreferencesStore) }
+        initializer { ChatViewModel(sessionId, authRepository, sseClient, chatPreferencesStore, offlineCacheRepository) }
     }
 
     fun skillsViewModelFactory() = viewModelFactory {

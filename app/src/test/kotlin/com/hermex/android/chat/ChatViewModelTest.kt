@@ -3,12 +3,15 @@ package com.hermex.android.chat
 import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import com.hermex.android.auth.AuthRepository
+import com.hermex.android.core.cache.FakeOfflineCacheRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseEvent
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.network.ToolEventPayload
+import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ModelCatalogOption
+import com.hermex.android.core.network.dto.SessionDetail
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +20,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -52,6 +56,31 @@ private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean):
     var item = awaitItem()
     while (!predicate(item)) item = awaitItem()
     return item
+}
+
+/** [ChatViewModel.refreshCacheInBackground] writes to the cache from its own untracked
+ * `viewModelScope.launch`, with no corresponding [ChatUiState] emission to synchronize on via
+ * Turbine -- so unlike every other wait in this file, this has to poll for real (the completion
+ * genuinely depends on a second real network round trip finishing on a background thread, which
+ * `runTest`'s virtual clock has no visibility into).
+ *
+ * [until] must check for the *specific* expected end state, not just non-null: [loadSession]
+ * itself opportunistically caches the detail from its own initial fetch, so a plain "is there
+ * anything cached yet" check can trivially match that earlier write before the later
+ * turn-completion refresh this function is actually meant to wait for ever lands. */
+private fun waitUntilCached(
+    cache: FakeOfflineCacheRepository,
+    serverId: String,
+    sessionId: String,
+    until: (SessionDetail) -> Boolean = { true },
+): SessionDetail {
+    val deadlineMillis = System.currentTimeMillis() + 2_000
+    while (System.currentTimeMillis() < deadlineMillis) {
+        val result = runBlocking { cache.cachedSessionDetail(serverId, sessionId) }
+        if (result != null && until(result)) return result
+        Thread.sleep(10)
+    }
+    error("cache was never populated with the expected content within the timeout")
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -161,9 +190,13 @@ class ChatViewModelTest {
         server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
 
         // Two chat/start calls (one per turn), each opening its own scripted SSE flow via a
-        // request-counting FakeSseClient below.
+        // request-counting FakeSseClient below. Each turn's completion also fires an untracked
+        // background cache-refresh GET /api/session/{id} (see ChatViewModel.refreshCacheInBackground),
+        // so one extra response has to be queued between the two turns for it to consume.
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}""")) // background cache refresh after turn 1
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-2","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}""")) // background cache refresh after turn 2
 
         val turnOneEvents = listOf(
             SseEvent.ToolStarted(ToolEventPayload(null, "tool_a", null, null, null, null, "call-a")),
@@ -672,6 +705,12 @@ class ChatViewModelTest {
         viewModel.cancelStream()
         server.takeRequest() // chat/cancel
 
+        // cancelStream() also finalizes the (empty) stream locally, which fires an untracked
+        // background cache refresh (see ChatViewModel.refreshCacheInBackground) -- drain that
+        // request with its own response now, before it can steal the "second send" response below.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.takeRequest() // background cache refresh
+
         // Second send: no pick pending anymore, so the field is omitted entirely.
         server.enqueue(MockResponse().setBody("""{"stream_id":"stream-2","session_id":"s1"}"""))
         viewModel.uiState.test {
@@ -682,5 +721,290 @@ class ChatViewModelTest {
         }
         val secondChatStart = server.takeRequest().body.readUtf8()
         assertTrue(!secondChatStart.contains("explicit_model_pick"))
+    }
+
+    // -- Offline chat cache (Phase 2) --
+
+    @Test
+    fun `loadSession shows cached messages immediately, then replaces them with fresh data and refreshes the cache`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        cache.cacheSessionDetail(
+            serverId,
+            "s1",
+            SessionDetail(sessionId = "s1", messages = listOf(ChatMessage(role = "user", content = "cached msg"))),
+        )
+        server.enqueue(
+            MockResponse().setBody("""{"session":{"session_id":"s1","messages":[{"role":"user","content":"fresh msg"}]}}"""),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        viewModel.uiState.test {
+            val cachedFirst = awaitUntil { it.isShowingCachedData }
+            assertEquals("cached msg", cachedFirst.messages.single().content)
+            assertTrue(cachedFirst.cacheStatusMessage != null)
+
+            val fresh = awaitUntil { !it.isLoading }
+            assertEquals("fresh msg", fresh.messages.single().content)
+            assertTrue(!fresh.isShowingCachedData)
+            assertNull(fresh.cacheStatusMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertEquals("fresh msg", cache.cachedSessionDetail(serverId, "s1")?.messages?.single()?.content)
+    }
+
+    @Test
+    fun `loadSession falls back to the cached conversation when the network call fails`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        cache.cacheSessionDetail(
+            serverId,
+            "s1",
+            SessionDetail(sessionId = "s1", messages = listOf(ChatMessage(role = "user", content = "cached msg"))),
+        )
+        server.enqueue(MockResponse().setResponseCode(500))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertEquals("cached msg", settled.messages.single().content)
+            assertTrue(settled.isShowingCachedData)
+            assertNull("a cache fallback is not an error state", settled.errorMessage)
+            assertTrue(settled.cacheStatusMessage != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadSession with no cache and a network failure shows the normal error state, not fake data`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setResponseCode(500))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+            FakeOfflineCacheRepository(),
+        )
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertTrue(settled.messages.isEmpty())
+            assertTrue(!settled.isShowingCachedData)
+            assertNull(settled.cacheStatusMessage)
+            assertTrue(settled.errorMessage != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `retrying loadSession after a cache fallback clears the banner once the network recovers`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        cache.cacheSessionDetail(
+            serverId,
+            "s1",
+            SessionDetail(sessionId = "s1", messages = listOf(ChatMessage(role = "user", content = "cached msg"))),
+        )
+        server.enqueue(MockResponse().setResponseCode(500))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertTrue(settled.isShowingCachedData)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.enqueue(
+            MockResponse().setBody("""{"session":{"session_id":"s1","messages":[{"role":"user","content":"recovered msg"}]}}"""),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        viewModel.uiState.test {
+            viewModel.loadSession()
+            awaitUntil { it.isLoading }
+            val recovered = awaitUntil { !it.isLoading }
+            assertEquals("recovered msg", recovered.messages.single().content)
+            assertTrue(!recovered.isShowingCachedData)
+            assertNull(recovered.cacheStatusMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `each server only ever sees its own cached chat messages`() = runTest {
+        val cache = FakeOfflineCacheRepository()
+
+        // Two distinct "servers" (distinct ids from FakeServerStore) both happen to point at the
+        // same mock server here -- only the cache's serverId-scoping is under test, not real host
+        // isolation (mirrors SessionListViewModelTest's equivalent multi-server test).
+        val storeA = FakeServerStore(server.url("/").toString())
+        val idA = storeA.activeServerSnapshot()!!.id
+        cache.cacheSessionDetail(
+            idA,
+            "s1",
+            SessionDetail(sessionId = "s1", messages = listOf(ChatMessage(role = "user", content = "Server A message"))),
+        )
+
+        val storeB = FakeServerStore(server.url("/").toString())
+        val idB = storeB.activeServerSnapshot()!!.id
+        cache.cacheSessionDetail(
+            idB,
+            "s1",
+            SessionDetail(sessionId = "s1", messages = listOf(ChatMessage(role = "user", content = "Server B message"))),
+        )
+
+        lateinit var repoB: AuthRepository
+        val networkModuleB = NetworkModule(FakeCookieStore()) { repoB.handleUnauthorized() }
+        repoB = AuthRepository(networkModuleB, storeB)
+        repoB.restoreSavedServer()
+        server.enqueue(MockResponse().setResponseCode(500)) // force a cache fallback for server B
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            repoB,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertEquals("Server B message", settled.messages.single().content)
+            assertTrue(settled.messages.none { it.content == "Server A message" })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `sending while offline is blocked with a clear error and never queued as a fake sent message`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        server.shutdown() // simulate loss of connectivity: the next request fails with an IOException
+
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("hello")
+            viewModel.sendMessage()
+            val afterAttempt = awaitUntil { it.errorMessage != null }
+            assertEquals("You're offline. Reconnect to send messages.", afterAttempt.errorMessage)
+            assertTrue(afterAttempt.messages.isEmpty()) // no optimistic/fake-sent message was added
+            assertTrue(!afterAttempt.isSending)
+            assertTrue(!afterAttempt.isStreaming)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a completed turn refreshes the cache from a fresh network fetch, not the locally-finalized state`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        // What refreshCacheInBackground() fetches after the turn finishes -- deliberately
+        // different content than the streamed reply below, so the assertion can tell the two
+        // apart: only this network response should ever land in the cache.
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"server-confirmed reply"}]}}""",
+            ),
+        )
+
+        val scriptedEvents = listOf(SseEvent.Token("streamed reply"), SseEvent.Done(null, null))
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { scriptedEvents.asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            awaitUntil { !it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // The background cache refresh runs in its own untracked viewModelScope.launch after
+        // finalizeStream, completing only once the second network round trip lands -- wait for it
+        // rather than asserting immediately. (loadSession's own initial fetch also opportunistically
+        // caches its 0-message snapshot first, so the wait must target the 2-message end state
+        // specifically, not just "something is cached".)
+        val cached = waitUntilCached(cache, serverId, "s1") { it.messages.orEmpty().size == 2 }
+        assertEquals("server-confirmed reply", cached.messages.orEmpty().last().content)
+    }
+
+    @Test
+    fun `a stream error still only caches the network's confirmed state, never the partial streamed text`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        // The turn errors out mid-stream with only a partial reply locally, but the background
+        // refresh's network fetch reports the session still has no assistant reply at all --
+        // proving the cache reflects the network's view, not the partial local one.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[{"role":"user","content":"hi"}]}}"""))
+
+        val scriptedEvents = listOf(SseEvent.Token("partial reply"), SseEvent.Error("connection reset"))
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { scriptedEvents.asFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            val finalState = awaitUntil { !it.isStreaming }
+            assertEquals("partial reply", finalState.messages.last().content) // preserved on screen
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        val cached = waitUntilCached(cache, serverId, "s1") { it.messages.orEmpty().size == 1 }
+        assertTrue(cached.messages.orEmpty().none { it.content == "partial reply" })
     }
 }

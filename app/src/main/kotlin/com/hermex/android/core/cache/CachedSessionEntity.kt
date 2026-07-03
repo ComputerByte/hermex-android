@@ -2,6 +2,8 @@ package com.hermex.android.core.cache
 
 import androidx.room.Entity
 import androidx.room.Index
+import com.hermex.android.core.network.dto.ChatMessage
+import com.hermex.android.core.network.dto.SessionDetail
 import com.hermex.android.core.network.dto.SessionSummary
 
 /**
@@ -84,4 +86,58 @@ fun CachedSessionEntity.toSessionSummary(): SessionSummary = SessionSummary(
     inputTokens = inputTokens,
     outputTokens = outputTokens,
     estimatedCost = estimatedCost,
+)
+
+/** Takes [sessionId] explicitly rather than trusting [SessionDetail.sessionId] to be present --
+ * the caller (see [OfflineCacheRepository.cacheSessionDetail]) always already knows which session
+ * it asked the server for, so caching should never fail just because the response happened to
+ * omit its own echo of that id. Deliberately drops [SessionDetail.messages] (cached separately as
+ * [CachedMessageEntity] rows) and the same live/ephemeral fields [SessionSummary.toCachedEntity]
+ * already excludes, plus `pendingUserMessage`/`contextLength`/`thresholdTokens`/`lastPromptTokens`,
+ * which describe in-progress server-side state rather than anything meaningful to show from a
+ * cache. */
+fun SessionDetail.toCachedEntity(serverId: String, sessionId: String, cachedAtEpochMillis: Long): CachedSessionEntity {
+    return CachedSessionEntity(
+        serverId = serverId,
+        sessionId = sessionId,
+        title = title,
+        workspace = workspace,
+        model = model,
+        modelProvider = modelProvider,
+        messageCount = messageCount,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        lastMessageAt = lastMessageAt,
+        pinned = pinned,
+        archived = archived,
+        projectId = projectId,
+        profile = profile,
+        inputTokens = inputTokens,
+        outputTokens = outputTokens,
+        estimatedCost = estimatedCost,
+        cachedAtEpochMillis = cachedAtEpochMillis,
+    )
+}
+
+/** Reconstructs a [SessionDetail] from a cached session row plus its separately-cached messages
+ * (see [CachedMessageEntity]) -- lets [ChatViewModel][com.hermex.android.chat.ChatViewModel] treat
+ * a cached detail and a fresh network one identically, since both flow through the same DTO type. */
+fun CachedSessionEntity.toSessionDetail(messages: List<ChatMessage>): SessionDetail = SessionDetail(
+    sessionId = sessionId,
+    title = title,
+    workspace = workspace,
+    model = model,
+    modelProvider = modelProvider,
+    messageCount = messageCount,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    lastMessageAt = lastMessageAt,
+    pinned = pinned,
+    archived = archived,
+    projectId = projectId,
+    profile = profile,
+    inputTokens = inputTokens,
+    outputTokens = outputTokens,
+    estimatedCost = estimatedCost,
+    messages = messages,
 )

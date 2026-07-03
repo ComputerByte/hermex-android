@@ -42,6 +42,13 @@ data class ChatUiState(
      * on the *next* `/api/chat/start` only, then cleared -- tells the server this model change
      * was deliberate rather than an implicit default, matching iOS exactly. */
     val pendingExplicitModelPick: Boolean = false,
+    /** True when [messages] came from the offline cache rather than a successful network fetch --
+     * either shown immediately on screen load (before the network result lands) or kept on screen
+     * because the network call then failed. */
+    val isShowingCachedData: Boolean = false,
+    /** User-facing explanation for [isShowingCachedData]. Null whenever [isShowingCachedData] is
+     * false. */
+    val cacheStatusMessage: String? = null,
 )
 
 data class ToolCallUi(

@@ -41,6 +41,19 @@ A preview APK is available under [GitHub Releases](../../releases).
 This is a manual-install APK, not distributed through the Play Store. Android will warn that it's
 from an unknown source — that's expected for a debug preview build.
 
+## Screenshots
+
+| Sessions | Multi-server |
+|---|---|
+| ![Sessions](release-artifacts/screenshots/session-list.png) | ![Multi-server](release-artifacts/screenshots/multi-server.png) |
+
+| Insights | App Icons |
+|---|---|
+| ![Insights](release-artifacts/screenshots/insights.png) | ![App Icons](release-artifacts/screenshots/app-icon-picker.png) |
+
+More screenshots (connection headers, header logo color, chat model picker, offline cache
+banner, projects) are in [`release-artifacts/screenshots/`](release-artifacts/screenshots).
+
 ## Requirements
 
 - JDK 17+ (developed against Temurin/OpenJDK 21)

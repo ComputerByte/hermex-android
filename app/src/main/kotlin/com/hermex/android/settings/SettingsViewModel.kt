@@ -5,8 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.safeApiCall
+import com.hermex.android.core.storage.AppearancePreferencesStore
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.CustomHeadersStore
+import com.hermex.android.core.storage.HeaderLogoColor
+import com.hermex.android.core.storage.NoOpAppearancePreferencesStore
 import com.hermex.android.core.storage.NoOpServerStore
 import com.hermex.android.core.storage.ServerStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +23,7 @@ class SettingsViewModel(
     private val chatPreferencesStore: ChatPreferencesStore,
     private val customHeadersStore: CustomHeadersStore,
     private val serverStore: ServerStore = NoOpServerStore,
+    private val appearancePreferencesStore: AppearancePreferencesStore = NoOpAppearancePreferencesStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -39,6 +43,7 @@ class SettingsViewModel(
             // Local-only, independent of server connectivity -- loaded regardless of whether the
             // rest of this call succeeds.
             _uiState.update { it.copy(expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()) }
+            _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
             val customHeaders = customHeadersStore.load()
             _uiState.update { it.copy(customHeaderCount = customHeaders.size) }
             val api = authRepository.apiForActiveServer()
@@ -66,6 +71,11 @@ class SettingsViewModel(
     fun setExpandThinkingByDefault(value: Boolean) {
         _uiState.update { it.copy(expandThinkingByDefault = value) }
         viewModelScope.launch { chatPreferencesStore.setExpandThinkingByDefault(value) }
+    }
+
+    fun setHeaderLogoColor(color: HeaderLogoColor) {
+        _uiState.update { it.copy(headerLogoColor = color) }
+        viewModelScope.launch { appearancePreferencesStore.setHeaderLogoColor(color) }
     }
 
     /** Doesn't need to navigate or flip [SettingsUiState.isSigningOut] back -- once

@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -24,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -41,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.BuildConfig
+import com.hermex.android.core.storage.HeaderLogoColor
+import com.hermex.android.ui.theme.toComposeColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +59,18 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showSignOutConfirm by remember { mutableStateOf(false) }
+    var showColorPicker by remember { mutableStateOf(false) }
+
+    if (showColorPicker) {
+        HeaderLogoColorDialog(
+            selected = uiState.headerLogoColor,
+            onSelect = {
+                viewModel.setHeaderLogoColor(it)
+                showColorPicker = false
+            },
+            onDismiss = { showColorPicker = false },
+        )
+    }
 
     if (showSignOutConfirm) {
         AlertDialog(
@@ -133,6 +150,17 @@ fun SettingsScreen(
                         description = "Thinking blocks start expanded instead of collapsed. Tapping a block still toggles it.",
                         checked = uiState.expandThinkingByDefault,
                         onCheckedChange = viewModel::setExpandThinkingByDefault,
+                        showDivider = false,
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+                SectionLabel("Appearance")
+                Card {
+                    SettingsRow(
+                        "Header Logo Color",
+                        uiState.headerLogoColor.displayName,
+                        onClick = { showColorPicker = true },
                         showDivider = false,
                     )
                 }
@@ -221,6 +249,43 @@ private fun SettingsRow(label: String, value: String, showDivider: Boolean = tru
             HorizontalDivider()
         }
     }
+}
+
+@Composable
+private fun HeaderLogoColorDialog(
+    selected: HeaderLogoColor,
+    onSelect: (HeaderLogoColor) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Header Logo Color") },
+        text = {
+            Column {
+                HeaderLogoColor.entries.forEach { color ->
+                    ListItem(
+                        modifier = Modifier.clickable { onSelect(color) },
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .background(color.toComposeColor(), CircleShape),
+                            )
+                        },
+                        headlineContent = { Text(color.displayName) },
+                        trailingContent = {
+                            if (color == selected) {
+                                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
 }
 
 @Composable

@@ -8,6 +8,7 @@ import com.hermex.android.chat.ChatViewModel
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
+import com.hermex.android.core.storage.DataStoreAppearancePreferencesStore
 import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
 import com.hermex.android.core.storage.DataStoreCustomHeadersStore
@@ -43,6 +44,7 @@ import com.hermex.android.tasks.TasksViewModel
 class AppContainer(context: Context) {
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
+    private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
 
     private lateinit var authRepositoryRef: AuthRepository
 
@@ -66,7 +68,7 @@ class AppContainer(context: Context) {
     }
 
     fun sessionListViewModelFactory() = viewModelFactory {
-        initializer { SessionListViewModel(authRepository) }
+        initializer { SessionListViewModel(authRepository, appearancePreferencesStore) }
     }
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {
@@ -112,6 +114,7 @@ class AppContainer(context: Context) {
                 chatPreferencesStore,
                 authRepository.customHeadersStoreForActiveServer() ?: NoOpCustomHeadersStore,
                 serverStore,
+                appearancePreferencesStore,
             )
         }
     }

@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.ui.theme.toComposeColor
 
 /**
  * The nav destinations that live above the session list (Skills, and -- as each phase lands --
@@ -100,7 +101,7 @@ fun SessionListScreen(
                             ),
                         )
                     } else {
-                        Text("Hermex")
+                        Text("Hermex", color = uiState.headerLogoColor.toComposeColor())
                     }
                 },
                 actions = {

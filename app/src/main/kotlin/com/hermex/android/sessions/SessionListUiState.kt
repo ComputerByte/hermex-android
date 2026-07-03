@@ -1,6 +1,7 @@
 package com.hermex.android.sessions
 
 import com.hermex.android.core.network.dto.SessionSummary
+import com.hermex.android.core.storage.HeaderLogoColor
 
 data class SessionListUiState(
     val isLoading: Boolean = true,
@@ -9,6 +10,7 @@ data class SessionListUiState(
     val isCreatingSession: Boolean = false,
     val errorMessage: String? = null,
     val searchQuery: String = "",
+    val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
 ) {
     /** Filters by title only -- [SessionSummary] carries no message content client-side to
      * search against. */

@@ -8,7 +8,9 @@ import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.CustomHttpHeader
+import com.hermex.android.core.storage.FakeAppearancePreferencesStore
 import com.hermex.android.core.storage.FakeServerStore
+import com.hermex.android.core.storage.HeaderLogoColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -186,5 +188,63 @@ class SettingsViewModelTest {
             assertEquals(0, loaded.customHeaderCount)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `load reads the persisted header logo color`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(
+            repo,
+            FakeChatPreferencesStore(),
+            FakeCustomHeadersStore(),
+            appearancePreferencesStore = FakeAppearancePreferencesStore(HeaderLogoColor.BLUE),
+        )
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(HeaderLogoColor.BLUE, loaded.headerLogoColor)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `headerLogoColor defaults to DEFAULT when nothing is saved`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(HeaderLogoColor.DEFAULT, loaded.headerLogoColor)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `setHeaderLogoColor updates state immediately and persists to the store`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+        val store = FakeAppearancePreferencesStore()
+        val viewModel = SettingsViewModel(
+            repo,
+            FakeChatPreferencesStore(),
+            FakeCustomHeadersStore(),
+            appearancePreferencesStore = store,
+        )
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.uiState.test {
+            viewModel.setHeaderLogoColor(HeaderLogoColor.PURPLE)
+            val afterChange = awaitUntil { it.headerLogoColor == HeaderLogoColor.PURPLE }
+            assertEquals(HeaderLogoColor.PURPLE, afterChange.headerLogoColor)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(HeaderLogoColor.PURPLE, store.loadHeaderLogoColor())
     }
 }

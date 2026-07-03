@@ -6,7 +6,9 @@ import com.hermex.android.auth.AuthRepository
 import com.hermex.android.auth.AuthState
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
+import com.hermex.android.core.storage.FakeAppearancePreferencesStore
 import com.hermex.android.core.storage.FakeServerStore
+import com.hermex.android.core.storage.HeaderLogoColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -224,5 +226,51 @@ class SessionListViewModelTest {
             assertTrue(filtered.filteredSessions.isEmpty())
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `loads the saved header logo color at init`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+
+        val viewModel = SessionListViewModel(authRepository, FakeAppearancePreferencesStore(HeaderLogoColor.GREEN))
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { it.headerLogoColor == HeaderLogoColor.GREEN }
+            assertEquals(HeaderLogoColor.GREEN, loaded.headerLogoColor)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `headerLogoColor defaults to DEFAULT when nothing is saved`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            assertEquals(HeaderLogoColor.DEFAULT, viewModel.uiState.value.headerLogoColor)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadHeaderLogoColor re-reads the preference without re-fetching sessions`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+        val store = FakeAppearancePreferencesStore()
+        val viewModel = SessionListViewModel(authRepository, store)
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        store.stored = HeaderLogoColor.PINK
+        viewModel.uiState.test {
+            viewModel.loadHeaderLogoColor()
+            val updated = awaitUntil { it.headerLogoColor == HeaderLogoColor.PINK }
+            assertEquals(HeaderLogoColor.PINK, updated.headerLogoColor)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(1, server.requestCount) // only the one /api/sessions call from init's load()
     }
 }

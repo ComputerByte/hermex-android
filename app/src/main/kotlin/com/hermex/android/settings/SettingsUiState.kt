@@ -1,5 +1,7 @@
 package com.hermex.android.settings
 
+import com.hermex.android.core.storage.HeaderLogoColor
+
 data class SettingsUiState(
     val isLoading: Boolean = true,
     val serverUrl: String? = null,
@@ -15,4 +17,5 @@ data class SettingsUiState(
     /** Count of saved custom headers (after blank-name rows are dropped) -- drives the
      * "None" / "N configured" subtitle on the Connection Headers row. */
     val customHeaderCount: Int = 0,
+    val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
 )

@@ -119,8 +119,21 @@ fun HermexNavGraph(appContainer: AppContainer) {
             val viewModel: OnboardingViewModel = viewModel(factory = appContainer.onboardingViewModelFactory())
             OnboardingScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
         }
-        composable(Routes.SESSION_LIST) {
+        composable(Routes.SESSION_LIST) { backStackEntry ->
             val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+            // SessionListViewModel's instance persists across a push-to-Settings-and-back trip,
+            // since this back stack entry never leaves the graph -- so a header color change made
+            // there won't otherwise be reflected here without an explicit signal. Only reloads the
+            // color preference (fast, local), not a full session refetch.
+            val shouldRefreshHeaderColor by backStackEntry.savedStateHandle
+                .getStateFlow("refreshHeaderLogoColor", false)
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(shouldRefreshHeaderColor) {
+                if (shouldRefreshHeaderColor) {
+                    viewModel.loadHeaderLogoColor()
+                    backStackEntry.savedStateHandle["refreshHeaderLogoColor"] = false
+                }
+            }
             SessionListScreen(
                 viewModel = viewModel,
                 onOpenSession = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
@@ -150,7 +163,10 @@ fun HermexNavGraph(appContainer: AppContainer) {
             }
             SettingsScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshHeaderLogoColor", true)
+                    navController.popBackStack()
+                },
                 onOpenDefaultModel = { navController.navigate(Routes.DEFAULT_MODEL) },
                 onOpenCustomHeaders = { navController.navigate(Routes.CUSTOM_HEADERS) },
                 onOpenServers = { navController.navigate(Routes.SERVERS) },

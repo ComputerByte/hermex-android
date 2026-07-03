@@ -7,6 +7,8 @@ import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.dto.NewSessionRequest
 import com.hermex.android.core.network.dto.SessionSummary
 import com.hermex.android.core.network.safeApiCall
+import com.hermex.android.core.storage.AppearancePreferencesStore
+import com.hermex.android.core.storage.NoOpAppearancePreferencesStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,12 +23,23 @@ import kotlinx.coroutines.launch
  */
 class SessionListViewModel(
     private val authRepository: AuthRepository,
+    private val appearancePreferencesStore: AppearancePreferencesStore = NoOpAppearancePreferencesStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SessionListUiState())
     val uiState: StateFlow<SessionListUiState> = _uiState.asStateFlow()
 
     init {
         load()
+        loadHeaderLogoColor()
+    }
+
+    /** Re-reads just the header color preference (fast, local, no network) -- used to reflect a
+     * change made on the Settings screen without re-fetching sessions, see
+     * [com.hermex.android.navigation.HermexNavGraph]. */
+    fun loadHeaderLogoColor() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
+        }
     }
 
     fun load() {

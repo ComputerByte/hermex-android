@@ -3,6 +3,24 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      Runtime app icon switching (per-variant launcher icon) is intentionally not implemented yet.
+      This app has no bundled launcher icon assets at all right now (no android:icon here, no
+      files under res/mipmap-*), so there is nothing for an icon variant to point at. Implementing
+      it would require, at minimum:
+        - Real icon image assets (adaptive icon foreground/background or legacy PNGs) per variant,
+          under res/mipmap-*.
+        - One activity-alias element per variant, each with android:targetActivity=".MainActivity"
+          and its own android:icon/android:roundIcon, declared here at build time (aliases can't
+          be added dynamically).
+        - Exactly one alias enabled (the others start disabled), toggled at runtime via
+          PackageManager.setComponentEnabledSetting(..., DONT_KILL_APP) and persisted so the
+          right one is (re)enabled on next app start.
+        - Awareness that some launchers don't refresh the icon immediately, or briefly remove and
+          re-add it, after a component's enabled state changes.
+      Do this once real icon assets are provided; see the Header Logo Color preference (Settings
+      screen) for the theming feature that is implemented in this pass.
+    -->
     <application
         android:name=".HermexApplication"
         android:allowBackup="false"

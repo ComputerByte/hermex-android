@@ -19,15 +19,27 @@ data class ChatComposerState(
     /** Matches the pre-existing `OutlinedTextField(enabled = !isSending && !isStreaming)` check. */
     val isTextFieldEnabled: Boolean get() = !isSending && !isStreaming
 
-    /** Matches the pre-existing trailing-slot `when` branch order exactly: Stop wins whenever
-     * streaming, the sending spinner only shows in the remaining case where a send is in flight
-     * but hasn't started streaming yet, and Send is only ever the fallback "else" case. */
-    val showStopButton: Boolean get() = isStreaming
-    val showSendingSpinner: Boolean get() = !isStreaming && isSending
+    /** Single source of truth for which control occupies the composer's trailing slot -- Stop
+     * wins whenever streaming, the sending spinner only shows in the remaining case where a send
+     * is in flight but hasn't started streaming yet, and Send is only ever the fallback case.
+     * [showStopButton], [showSendingSpinner], and [canSend] all derive from this one `when` so a
+     * future state (attachments, slash commands) only has to extend the priority order once,
+     * rather than risk it diverging across three independently-written conditions. */
+    val trailingAction: TrailingAction
+        get() = when {
+            isStreaming -> TrailingAction.STOP
+            isSending -> TrailingAction.SENDING
+            else -> TrailingAction.SEND
+        }
+
+    enum class TrailingAction { STOP, SENDING, SEND }
+
+    val showStopButton: Boolean get() = trailingAction == TrailingAction.STOP
+    val showSendingSpinner: Boolean get() = trailingAction == TrailingAction.SENDING
 
     /** Matches the pre-existing `IconButton(onClick = onSend, enabled = text.isNotBlank())`,
-     * which only ever rendered in that same "else" case above. */
-    val canSend: Boolean get() = !isStreaming && !isSending && text.isNotBlank()
+     * which only ever rendered in that same fallback case above. */
+    val canSend: Boolean get() = trailingAction == TrailingAction.SEND && text.isNotBlank()
 
     val isProfileSelectorLoading: Boolean get() = isSwitchingProfile
     val isModelSelectorLoading: Boolean get() = isUpdatingComposerConfiguration

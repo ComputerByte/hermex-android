@@ -66,6 +66,44 @@ class ChatComposerStateTest {
     }
 
     @Test
+    fun `trailingAction reflects streaming-over-sending-over-idle priority`() {
+        assertEquals(ChatComposerState.TrailingAction.SEND, idle().trailingAction)
+        assertEquals(ChatComposerState.TrailingAction.SENDING, idle().copy(isSending = true).trailingAction)
+        assertEquals(ChatComposerState.TrailingAction.STOP, idle().copy(isStreaming = true).trailingAction)
+        // Streaming still wins even if isSending is somehow also true.
+        assertEquals(
+            ChatComposerState.TrailingAction.STOP,
+            idle().copy(isStreaming = true, isSending = true).trailingAction,
+        )
+    }
+
+    @Test
+    fun `exactly one trailing-slot control is active for every isSending-isStreaming combination`() {
+        for (sending in listOf(false, true)) {
+            for (streaming in listOf(false, true)) {
+                val state = idle(text = "hello").copy(isSending = sending, isStreaming = streaming)
+                val activeSlots = listOf(
+                    state.showStopButton,
+                    state.showSendingSpinner,
+                    state.trailingAction == ChatComposerState.TrailingAction.SEND,
+                ).count { it }
+                assertEquals(
+                    "sending=$sending streaming=$streaming should activate exactly one trailing slot",
+                    1,
+                    activeSlots,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `canSend is false whenever trailingAction is not SEND, regardless of text`() {
+        assertFalse(idle(text = "hello").copy(isSending = true).canSend)
+        assertFalse(idle(text = "hello").copy(isStreaming = true).canSend)
+        assertFalse(idle(text = "hello").copy(isSending = true, isStreaming = true).canSend)
+    }
+
+    @Test
     fun `from maps every relevant ChatUiState field verbatim`() {
         val uiState = ChatUiState(
             composerText = "draft",

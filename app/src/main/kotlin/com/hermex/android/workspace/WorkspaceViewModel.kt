@@ -7,6 +7,7 @@ import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.dto.CreateDirRequest
 import com.hermex.android.core.network.dto.CreateFileRequest
 import com.hermex.android.core.network.dto.FileSaveRequest
+import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.safeApiCall
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -390,6 +391,66 @@ class WorkspaceViewModel(
                 _uiState.update { it.copy(createDialog = d.copy(isCreating = false, errorMessage = e.message ?: "Could not create.")) }
             } catch (_: Exception) {
                 _uiState.update { it.copy(createDialog = d.copy(isCreating = false, errorMessage = "Could not create.")) }
+            }
+        }
+    }
+
+    // ── Rename ──
+
+    fun showRenameDialog(entry: WorkspaceEntry) {
+        val path = entry.path ?: return
+        val name = entry.name ?: path.substringAfterLast('/')
+        _uiState.update {
+            it.copy(renameDialog = RenameDialogState(targetPath = path, originalName = name, name = name))
+        }
+    }
+
+    fun dismissRenameDialog() {
+        _uiState.update { it.copy(renameDialog = null) }
+    }
+
+    fun updateRenameName(name: String) {
+        val d = _uiState.value.renameDialog ?: return
+        _uiState.update { it.copy(renameDialog = d.copy(name = name, errorMessage = null)) }
+    }
+
+    fun confirmRename() {
+        val d = _uiState.value.renameDialog ?: return
+        val newName = d.name.trim()
+        if (!d.isValid) {
+            _uiState.update { it.copy(renameDialog = d.copy(errorMessage = d.getValidationError())) }
+            return
+        }
+        val currentPath = _uiState.value.currentPath
+        val oldPath = d.targetPath
+        val newPath = if (currentPath == WORKSPACE_ROOT_PATH) newName else "$currentPath/$newName"
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(renameDialog = d.copy(errorMessage = "Not signed in.")) }
+            return
+        }
+        _uiState.update { it.copy(renameDialog = d.copy(isRenaming = true, errorMessage = null)) }
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall {
+                    api.renameFile(RenameFileRequest(session_id = sessionId, path = oldPath, new_path = newPath))
+                }
+                if (response.error != null) {
+                    _uiState.update { it.copy(renameDialog = d.copy(isRenaming = false, errorMessage = response.error)) }
+                    return@launch
+                }
+                // Success
+                _uiState.update { it.copy(renameDialog = null) }
+                loadDirectory(currentPath, preserveSearch = true)
+                // If the renamed item was the currently open file, close it
+                val openFile = _uiState.value.selectedFile
+                if (openFile?.path == oldPath) {
+                    _uiState.update { it.copy(selectedFile = null) }
+                }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(renameDialog = d.copy(isRenaming = false, errorMessage = e.message ?: "Could not rename.")) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(renameDialog = d.copy(isRenaming = false, errorMessage = "Could not rename.")) }
             }
         }
     }

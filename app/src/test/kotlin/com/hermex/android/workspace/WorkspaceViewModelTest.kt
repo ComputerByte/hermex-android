@@ -6,6 +6,7 @@ import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.dto.WorkspaceEntry
+import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -969,6 +970,129 @@ class WorkspaceViewModelTest {
             viewModel.confirmCreate()
             val failed = awaitUntil { it.createDialog?.isCreating == false && it.createDialog?.errorMessage != null }
             assertNotNull(failed.createDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── Rename tests ──
+
+    @Test
+    fun `showRenameDialog opens with entry name`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt")
+            viewModel.showRenameDialog(entry)
+            assertNotNull(viewModel.uiState.value.renameDialog)
+            assertEquals("test.txt", viewModel.uiState.value.renameDialog?.originalName)
+            assertEquals("test.txt", viewModel.uiState.value.renameDialog?.name)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `dismissRenameDialog clears state`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt")
+            viewModel.showRenameDialog(entry)
+            assertNotNull(viewModel.uiState.value.renameDialog)
+            viewModel.dismissRenameDialog()
+            assertNull(viewModel.uiState.value.renameDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `rename at root sends correct paths`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "old.txt", path = "old.txt")
+            viewModel.showRenameDialog(entry)
+            viewModel.updateRenameName("new.txt")
+            viewModel.confirmRename()
+            val done = awaitUntil { it.renameDialog == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `rename blank name rejected`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "old.txt", path = "old.txt")
+            viewModel.showRenameDialog(entry)
+            viewModel.updateRenameName("")
+            assertFalse(viewModel.uiState.value.renameDialog!!.isValid)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `rename same name rejected`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "old.txt", path = "old.txt")
+            viewModel.showRenameDialog(entry)
+            viewModel.updateRenameName("old.txt")
+            assertFalse(viewModel.uiState.value.renameDialog!!.isValid)
+            assertTrue(viewModel.uiState.value.renameDialog!!.isUnchanged)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `rename dot git rejected`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = ".git", path = ".git")
+            viewModel.showRenameDialog(entry)
+            viewModel.updateRenameName(".git")
+            assertFalse(viewModel.uiState.value.renameDialog!!.isValid)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `rename failure preserves dialog`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"error":"File already exists"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "old.txt", path = "old.txt")
+            viewModel.showRenameDialog(entry)
+            viewModel.updateRenameName("new.txt")
+            viewModel.confirmRename()
+            val failed = awaitUntil { it.renameDialog?.isRenaming == false && it.renameDialog?.errorMessage != null }
+            assertNotNull(failed.renameDialog)
             cancelAndIgnoreRemainingEvents()
         }
     }

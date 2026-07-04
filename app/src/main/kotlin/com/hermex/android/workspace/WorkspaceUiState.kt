@@ -27,6 +27,8 @@ data class WorkspaceUiState(
     val gitState: GitState? = null,
     /** Non-null when a create-file or create-folder dialog is active. */
     val createDialog: CreateDialogState? = null,
+    /** Non-null when a rename dialog is active. */
+    val renameDialog: RenameDialogState? = null,
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }
@@ -53,6 +55,31 @@ data class CreateDialogState(
 }
 
 enum class CreateMode { FILE, FOLDER }
+
+/** Dialog state for renaming a file or folder inside the workspace. */
+data class RenameDialogState(
+    val targetPath: String,
+    val originalName: String,
+    val name: String = originalName,
+    val isRenaming: Boolean = false,
+    val errorMessage: String? = null,
+) {
+    val isUnchanged: Boolean get() = name.trim() == originalName
+
+    val isValid: Boolean
+        get() = getValidationError() == null
+
+    fun getValidationError(): String? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return "Name cannot be empty."
+        if (trimmed.contains("/") || trimmed.contains("\\")) return "Name cannot contain '/' or '\\'."
+        if (trimmed == "." || trimmed == "..") return "Name cannot be '.' or '..'."
+        if (trimmed.startsWith("..")) return "Name cannot start with '..'."
+        if (trimmed == ".git") return "Name '.git' is reserved."
+        if (trimmed == originalName && isUnchanged) return "Name is unchanged."
+        return null
+    }
+}
 
 data class GitState(
     val isGit: Boolean = false,

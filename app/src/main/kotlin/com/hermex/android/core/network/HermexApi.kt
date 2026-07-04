@@ -16,6 +16,7 @@ import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.FileSaveRequest
 import com.hermex.android.core.network.dto.FileSaveResponse
 import com.hermex.android.core.network.dto.FileResponse
+import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.network.dto.GitBranchesResponse
 import com.hermex.android.core.network.dto.GitBranchesWrapper
 import com.hermex.android.core.network.dto.GitDiffResponse
@@ -212,6 +213,9 @@ interface HermexApi {
 
     @POST("/api/file/create-dir")
     suspend fun createDir(@Body body: CreateDirRequest): FileSaveResponse
+
+    @POST("/api/file/rename")
+    suspend fun renameFile(@Body body: RenameFileRequest): FileSaveResponse
 
     // Git endpoints (read-only -- no commit/pull/discard/checkout in v0.7.3).
     @GET("/api/git/status")

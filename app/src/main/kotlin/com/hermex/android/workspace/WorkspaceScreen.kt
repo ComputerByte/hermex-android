@@ -186,6 +186,7 @@ fun WorkspaceScreen(
                         onCopyPath = { entry ->
                             copyToClipboard(context, entry.name ?: entry.path ?: "entry", entry.path ?: "")
                         },
+                        onRename = viewModel::showRenameDialog,
                     )
                 }
             }
@@ -201,6 +202,65 @@ fun WorkspaceScreen(
             onConfirm = viewModel::confirmCreate,
         )
     }
+
+    // Rename dialog
+    uiState.renameDialog?.let { dialog ->
+        RenameDialog(
+            dialog = dialog,
+            onDismiss = viewModel::dismissRenameDialog,
+            onNameChange = viewModel::updateRenameName,
+            onConfirm = viewModel::confirmRename,
+        )
+    }
+}
+
+@Composable
+private fun RenameDialog(
+    dialog: RenameDialogState,
+    onDismiss: () -> Unit,
+    onNameChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename") },
+        text = {
+            Column {
+                Text(
+                    text = "Rename \"${dialog.originalName}\" to:",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                OutlinedTextField(
+                    value = dialog.name,
+                    onValueChange = onNameChange,
+                    label = { Text("New name") },
+                    singleLine = true,
+                    enabled = !dialog.isRenaming,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = dialog.errorMessage != null,
+                    supportingText = if (dialog.errorMessage != null) {
+                        { Text(dialog.errorMessage ?: "", color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = dialog.isValid && !dialog.isUnchanged && !dialog.isRenaming,
+            ) {
+                if (dialog.isRenaming) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !dialog.isRenaming) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -295,6 +355,7 @@ private fun DirectoryContent(
     onEntryClick: (WorkspaceEntry) -> Unit,
     onRetry: () -> Unit,
     onCopyPath: (WorkspaceEntry) -> Unit,
+    onRename: (WorkspaceEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Client-side search filter: narrow entries by name without modifying the original list.
@@ -346,7 +407,7 @@ private fun DirectoryContent(
 
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(filteredEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) })
+                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) }, onRename = { onRename(entry) })
                 }
             }
         }
@@ -371,6 +432,7 @@ private fun WorkspaceEntryRow(
     entry: WorkspaceEntry,
     onClick: () -> Unit,
     onCopyPath: () -> Unit,
+    onRename: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -406,6 +468,13 @@ private fun WorkspaceEntryRow(
                             onClick = {
                                 showMenu = false
                                 onCopyPath()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            onClick = {
+                                showMenu = false
+                                onRename()
                             },
                         )
                     }

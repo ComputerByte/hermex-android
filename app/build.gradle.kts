@@ -99,5 +99,9 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:5.4.0")
     testImplementation("app.cash.turbine:turbine:1.2.1")
 
+    // Instrumented tests
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

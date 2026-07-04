@@ -36,10 +36,17 @@ import com.hermex.android.core.network.dto.SessionsResponse
 import com.hermex.android.core.network.dto.SkillDetailResponse
 import com.hermex.android.core.network.dto.SkillsResponse
 import com.hermex.android.core.network.dto.UpdateSessionRequest
+import com.hermex.android.core.network.dto.UploadResponse
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * All REST endpoints for the MVP. The chat *stream* itself (`GET /api/chat/stream`) is
@@ -163,4 +170,27 @@ interface HermexApi {
 
     @POST("/api/default-model")
     suspend fun setDefaultModel(@Body body: DefaultModelRequest): DefaultModelResponse
+
+    /** Multipart fields verified against `hermes-webui`'s `handle_upload` (V5 Phase 5 recon):
+     * `session_id` (text) and `file` (binary, filename required). Not yet called from any send
+     * flow -- see [MessageAttachment]. */
+    @Multipart
+    @POST("/api/upload")
+    suspend fun uploadAttachment(
+        @Part("session_id") sessionId: RequestBody,
+        @Part file: MultipartBody.Part,
+    ): UploadResponse
+
+    /** Raw bytes for a workspace file or a session's uploaded attachment (the server tries the
+     * workspace path first, then falls back to the session's attachment inbox -- V5 Phase 5
+     * recon). `@Streaming` avoids buffering the whole body into memory before Retrofit returns.
+     * Not yet called from any preview UI. */
+    @Streaming
+    @GET("/api/file/raw")
+    suspend fun fileRaw(
+        @Query("session_id") sessionId: String,
+        @Query("path") path: String,
+        @Query("download") download: Int? = null,
+        @Query("inline") inline: Int? = null,
+    ): ResponseBody
 }

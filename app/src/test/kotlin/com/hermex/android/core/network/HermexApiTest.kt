@@ -2,6 +2,8 @@ package com.hermex.android.core.network
 
 import com.hermex.android.core.network.dto.LoginRequest
 import kotlinx.coroutines.test.runTest
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -98,5 +100,50 @@ class HermexApiTest {
         val error = runCatching { safeApiCall { api.health() } }.exceptionOrNull()
 
         assertTrue(error is ApiError.Decoding)
+    }
+
+    @Test
+    fun `uploadAttachment sends session_id and file as multipart fields, no Origin or Referer`() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"filename":"photo.png","path":"/state/attachments/sess-1/photo.png","size":3,"mime":"image/png","is_image":true}""",
+            ).setResponseCode(200),
+        )
+        val api = newModule().createApi(server.url("/").toString())
+
+        val sessionIdPart = "sess-1".toRequestBody(null)
+        val filePart = MultipartBody.Part.createFormData(
+            "file",
+            "photo.png",
+            byteArrayOf(1, 2, 3).toRequestBody(null),
+        )
+        val response = safeApiCall { api.uploadAttachment(sessionIdPart, filePart) }
+
+        assertEquals("photo.png", response.filename)
+        assertEquals(true, response.isImage)
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/api/upload", recorded.path)
+        val body = recorded.body.readUtf8()
+        assertTrue(body.contains("name=\"session_id\""))
+        assertTrue(body.contains("sess-1"))
+        assertTrue(body.contains("name=\"file\""))
+        assertTrue(body.contains("filename=\"photo.png\""))
+        assertTrue(recorded.getHeader("Origin") == null)
+        assertTrue(recorded.getHeader("Referer") == null)
+    }
+
+    @Test
+    fun `fileRaw sends session_id and path as query parameters`() = runTest {
+        server.enqueue(MockResponse().setBody("raw-bytes").setResponseCode(200))
+        val api = newModule().createApi(server.url("/").toString())
+
+        val response = safeApiCall { api.fileRaw(sessionId = "sess-1", path = "notes.txt") }
+
+        assertEquals("raw-bytes", response.string())
+        val recorded = server.takeRequest()
+        assertEquals("GET", recorded.method)
+        assertEquals("/api/file/raw?session_id=sess-1&path=notes.txt", recorded.path)
     }
 }

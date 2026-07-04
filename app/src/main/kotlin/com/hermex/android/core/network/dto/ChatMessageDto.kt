@@ -26,8 +26,9 @@ data class ChatMessage(
     val name: String? = null,
     val toolCallId: String? = null,
     val reasoning: String? = null,
-    // attachments intentionally NOT modeled in this MVP; ignoreUnknownKeys means their
-    // presence on the wire never breaks decoding.
+    /** See [MessageAttachment]'s doc for the two wire shapes this must decode (full object vs.
+     * bare string) -- confirmed against the `hermes-webui` source in V5 Phase 5 recon. */
+    val attachments: List<MessageAttachment>? = null,
 ) {
     /** The server prefers `_ts` over `timestamp` when both are present. */
     val effectiveTimestamp: Double? get() = ts ?: timestamp

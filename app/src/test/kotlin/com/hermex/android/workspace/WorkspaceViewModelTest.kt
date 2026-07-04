@@ -8,6 +8,7 @@ import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.network.dto.DeleteFileRequest
+import com.hermex.android.core.network.dto.MoveFileRequest
 import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1290,6 +1291,62 @@ class WorkspaceViewModelTest {
             viewModel.updateDeleteConfirmationText("mydir")
             viewModel.confirmDeleteFile()
             val done = awaitUntil { it.deleteDialog == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── Move tests ──
+
+    @Test
+    fun `showMoveDialog opens for entry`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showMoveDialog(entry)
+            assertNotNull(viewModel.uiState.value.moveDialog)
+            assertEquals("test.txt", viewModel.uiState.value.moveDialog?.targetName)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `dismissMoveDialog clears state`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showMoveDialog(entry)
+            assertNotNull(viewModel.uiState.value.moveDialog)
+            viewModel.dismissMoveDialog()
+            assertNull(viewModel.uiState.value.moveDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `showMoveDialog opens and can be dismissed`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showMoveDialog(entry)
+            val opened = awaitUntil { it.moveDialog != null }
+            assertEquals("test.txt", opened.moveDialog?.targetName)
+            viewModel.dismissMoveDialog()
+            val closed = awaitUntil { it.moveDialog == null }
             cancelAndIgnoreRemainingEvents()
         }
     }

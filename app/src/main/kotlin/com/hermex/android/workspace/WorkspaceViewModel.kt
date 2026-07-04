@@ -8,6 +8,7 @@ import com.hermex.android.core.network.dto.CreateDirRequest
 import com.hermex.android.core.network.dto.CreateFileRequest
 import com.hermex.android.core.network.dto.DeleteFileRequest
 import com.hermex.android.core.network.dto.FileSaveRequest
+import com.hermex.android.core.network.dto.MoveFileRequest
 import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.safeApiCall
@@ -540,6 +541,140 @@ class WorkspaceViewModel(
                 _uiState.update { it.copy(deleteDialog = d.copy(isDeleting = false, errorMessage = "Could not delete.")) }
             }
         }
+    }
+
+    // ── Move ──
+
+    fun showMoveDialog(entry: WorkspaceEntry) {
+        val path = entry.path ?: return
+        val name = entry.name ?: path.substringAfterLast('/')
+        if (name == ".git" || name == ".github") return
+        _uiState.update {
+            it.copy(moveDialog = MoveDialogState(
+                targetPath = path,
+                targetName = name,
+                targetIsDirectory = entry.isBrowsableDirectory,
+            ))
+        }
+        // Load root destination listing
+        loadMoveDestination(WORKSPACE_ROOT_PATH)
+    }
+
+    fun dismissMoveDialog() {
+        _uiState.update { it.copy(moveDialog = null) }
+    }
+
+    fun loadMoveDestination(path: String) {
+        val d = _uiState.value.moveDialog ?: return
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(moveDialog = d.copy(destinationError = "Not signed in.")) }
+            return
+        }
+        _uiState.update { it.copy(moveDialog = d.copy(destinationPath = path, isDestinationLoading = true, destinationError = null)) }
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall { api.directoryList(sessionId, path) }
+                val entries = response.entries.orEmpty().filter { it.isBrowsableDirectory && it.path != null }
+                _uiState.update { it.copy(moveDialog = d.copy(
+                    destinationPath = path,
+                    destinationEntries = entries,
+                    isDestinationLoading = false,
+                    destinationError = response.error,
+                ))}
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(moveDialog = d.copy(isDestinationLoading = false, destinationError = e.message ?: "Could not load folder.")) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(moveDialog = d.copy(isDestinationLoading = false, destinationError = "Could not load folder.")) }
+            }
+        }
+    }
+
+    fun navigateMoveDestinationUp() {
+        val d = _uiState.value.moveDialog ?: return
+        val current = d.destinationPath
+        if (current == WORKSPACE_ROOT_PATH) return
+        val parent = parentPathOf(current)
+        loadMoveDestination(parent)
+    }
+
+    fun navigateMoveDestinationInto(entry: WorkspaceEntry) {
+        val path = entry.path ?: return
+        if (!entry.isBrowsableDirectory) return
+        loadMoveDestination(path)
+    }
+
+    fun confirmMove() {
+        val d = _uiState.value.moveDialog ?: return
+        if (!validateMove(d)) return
+        val path = d.targetPath
+        val newPath = d.resultingPath()
+        if (path == newPath) {
+            _uiState.update { it.copy(moveDialog = d.copy(moveError = "Source and destination are the same.")) }
+            return
+        }
+        // Check unsaved edits
+        val openFile = _uiState.value.selectedFile
+        if (openFile != null && (openFile.path == path || openFile.path.startsWith("$path/")) && openFile.hasUnsavedChanges) {
+            _uiState.update { it.copy(moveDialog = d.copy(moveError = "Save or discard unsaved changes first.")) }
+            return
+        }
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(moveDialog = d.copy(moveError = "Not signed in.")) }
+            return
+        }
+        _uiState.update { it.copy(moveDialog = d.copy(isMoving = true, moveError = null)) }
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall {
+                    api.moveFile(MoveFileRequest(session_id = sessionId, path = path, new_path = newPath))
+                }
+                if (response.error != null) {
+                    _uiState.update { it.copy(moveDialog = d.copy(isMoving = false, moveError = response.error)) }
+                    return@launch
+                }
+                // Success
+                _uiState.update { it.copy(moveDialog = null) }
+                loadDirectory(_uiState.value.currentPath, preserveSearch = true)
+                // Close viewer if open file was moved or inside moved folder
+                val current = _uiState.value.selectedFile
+                if (current != null && (current.path == path || current.path.startsWith("$path/"))) {
+                    _uiState.update { it.copy(selectedFile = null) }
+                }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(moveDialog = d.copy(isMoving = false, moveError = e.message ?: "Could not move.")) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(moveDialog = d.copy(isMoving = false, moveError = "Could not move.")) }
+            }
+        }
+    }
+
+    private fun validateMove(d: MoveDialogState): Boolean {
+        val name = d.targetName
+        if (name == ".git" || name == ".github") {
+            _uiState.update { it.copy(moveDialog = d.copy(moveError = "This item cannot be moved.")) }
+            return false
+        }
+        if (name.isEmpty() || name == "." || name == ".." || name.startsWith("..")) {
+            _uiState.update { it.copy(moveDialog = d.copy(moveError = "Invalid item.")) }
+            return false
+        }
+        if (d.targetIsDirectory) {
+            // Prevent moving folder into itself
+            val dest = d.destinationPath
+            val resulting = d.resultingPath()
+            if (resulting.startsWith("${d.targetPath}/") || resulting == d.targetPath) {
+                _uiState.update { it.copy(moveDialog = d.copy(moveError = "Cannot move a folder into itself or its descendant.")) }
+                return false
+            }
+            // Prevent moving folder into a path that contains itself as ancestor
+            if (dest.startsWith("${d.targetPath}/") || dest == d.targetPath) {
+                _uiState.update { it.copy(moveDialog = d.copy(moveError = "Cannot move a folder into itself or its descendant.")) }
+                return false
+            }
+        }
+        return true
     }
 }
 

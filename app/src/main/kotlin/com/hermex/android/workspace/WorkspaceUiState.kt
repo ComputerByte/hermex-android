@@ -31,6 +31,8 @@ data class WorkspaceUiState(
     val renameDialog: RenameDialogState? = null,
     /** Non-null when a delete confirmation dialog is active. */
     val deleteDialog: DeleteDialogState? = null,
+    /** Non-null when a move dialog is active. */
+    val moveDialog: MoveDialogState? = null,
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }
@@ -96,6 +98,26 @@ data class DeleteDialogState(
 ) {
     val confirmationTypedCorrectly: Boolean
         get() = if (isDirectory) confirmationText.trim() == targetName else true
+}
+
+/** Dialog state for moving a file or folder to another destination folder. */
+data class MoveDialogState(
+    val targetPath: String,
+    val targetName: String,
+    val targetIsDirectory: Boolean = false,
+    val destinationPath: String = WORKSPACE_ROOT_PATH,
+    val destinationEntries: List<WorkspaceEntry> = emptyList(),
+    val isDestinationLoading: Boolean = false,
+    val destinationError: String? = null,
+    val isMoving: Boolean = false,
+    val moveError: String? = null,
+) {
+    val destinationLabel: String
+        get() = if (destinationPath == WORKSPACE_ROOT_PATH) "Root" else destinationPath
+
+    /** Returns the resulting path if the target is moved to the current destination. */
+    fun resultingPath(): String =
+        if (destinationPath == WORKSPACE_ROOT_PATH) targetName else "$destinationPath/$targetName"
 }
 
 data class GitState(

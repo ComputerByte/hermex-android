@@ -187,6 +187,7 @@ fun WorkspaceScreen(
                             copyToClipboard(context, entry.name ?: entry.path ?: "entry", entry.path ?: "")
                         },
                         onRename = viewModel::showRenameDialog,
+                        onMove = viewModel::showMoveDialog,
                         onDelete = { entry ->
                             if (entry.isFolder) viewModel.showDeleteFolderDialog(entry)
                             else viewModel.showDeleteFileDialog(entry)
@@ -224,6 +225,17 @@ fun WorkspaceScreen(
             onDismiss = viewModel::dismissDeleteDialog,
             onConfirm = viewModel::confirmDeleteFile,
             onConfirmationTextChange = viewModel::updateDeleteConfirmationText,
+        )
+    }
+
+    // Move dialog
+    uiState.moveDialog?.let { dialog ->
+        MoveDialog(
+            dialog = dialog,
+            onDismiss = viewModel::dismissMoveDialog,
+            onNavigateUp = viewModel::navigateMoveDestinationUp,
+            onNavigateInto = viewModel::navigateMoveDestinationInto,
+            onConfirm = viewModel::confirmMove,
         )
     }
 }
@@ -445,6 +457,7 @@ private fun DirectoryContent(
     onRetry: () -> Unit,
     onCopyPath: (WorkspaceEntry) -> Unit,
     onRename: (WorkspaceEntry) -> Unit,
+    onMove: (WorkspaceEntry) -> Unit,
     onDelete: (WorkspaceEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -497,7 +510,7 @@ private fun DirectoryContent(
 
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(filteredEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) }, onRename = { onRename(entry) }, onDelete = { onDelete(entry) })
+                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) }, onRename = { onRename(entry) }, onMove = { onMove(entry) }, onDelete = { onDelete(entry) })
                 }
             }
         }
@@ -523,6 +536,7 @@ private fun WorkspaceEntryRow(
     onClick: () -> Unit,
     onCopyPath: () -> Unit,
     onRename: () -> Unit,
+    onMove: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -566,6 +580,13 @@ private fun WorkspaceEntryRow(
                             onClick = {
                                 showMenu = false
                                 onRename()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Move") },
+                            onClick = {
+                                showMenu = false
+                                onMove()
                             },
                         )
                         DropdownMenuItem(
@@ -771,6 +792,78 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
     else -> "${bytes / (1024 * 1024)} MB"
+}
+
+@Composable
+private fun MoveDialog(
+    dialog: MoveDialogState,
+    onDismiss: () -> Unit,
+    onNavigateUp: () -> Unit,
+    onNavigateInto: (WorkspaceEntry) -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move ${dialog.targetName}") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Destination: ${dialog.destinationLabel}",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (dialog.destinationPath != WORKSPACE_ROOT_PATH) {
+                        TextButton(onClick = onNavigateUp, modifier = Modifier.height(28.dp)) {
+                            Text("Up", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                if (dialog.isDestinationLoading) {
+                    Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    }
+                } else if (dialog.destinationError != null) {
+                    Text(dialog.destinationError ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                } else if (dialog.destinationEntries.isEmpty()) {
+                    Text("No subfolders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                        items(dialog.destinationEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
+                            Text(
+                                text = "📁  ${entry.name ?: entry.path ?: "?"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigateInto(entry) }
+                                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                            )
+                        }
+                    }
+                }
+                if (dialog.moveError != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(dialog.moveError ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !dialog.isMoving && dialog.destinationPath.isNotEmpty(),
+            ) {
+                if (dialog.isMoving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Move here")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !dialog.isMoving) { Text("Cancel") }
+        },
+    )
 }
 
 // ── Git (read-only) ──

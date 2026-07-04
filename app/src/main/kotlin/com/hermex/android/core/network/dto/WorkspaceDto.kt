@@ -46,6 +46,14 @@ data class DeleteFileRequest(
     val path: String,
 )
 
+/** `POST /api/file/move` request body. */
+@Serializable
+data class MoveFileRequest(
+    val session_id: String,
+    val path: String,
+    val new_path: String,
+)
+
 /**
  * `GET /api/list?session_id=...&path=...` -- directory listing, scoped to a session's workspace
  * (there is no session-independent directory browse). Read-only: no create/rename/delete/upload

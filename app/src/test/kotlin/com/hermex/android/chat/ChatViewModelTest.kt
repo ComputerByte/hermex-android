@@ -12,6 +12,7 @@ import com.hermex.android.core.network.ToolEventPayload
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.SessionDetail
+import com.hermex.android.core.network.dto.UploadResponse
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
@@ -1258,5 +1259,224 @@ class ChatViewModelTest {
 
         val cached = waitUntilCached(cache, serverId, "s1") { it.messages.orEmpty().size == 1 }
         assertTrue(cached.messages.orEmpty().none { it.content == "partial reply" })
+    }
+
+    @Test
+    fun `pending attachments start empty`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertTrue(loaded.pendingAttachments.isEmpty())
+            assertEquals(false, loaded.isUploadingAttachment)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `addUploadedAttachment appends to the pending list`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        viewModel.addUploadedAttachment(
+            UploadResponse(filename = "photo.png", path = "/state/attachments/s1/photo.png", size = 4096, mime = "image/png", isImage = true),
+        )
+
+        val pending = viewModel.uiState.value.pendingAttachments
+        assertEquals(1, pending.size)
+        assertEquals("photo.png", pending.first().name)
+        assertEquals("/state/attachments/s1/photo.png", pending.first().path)
+        assertEquals("image/png", pending.first().mime)
+        assertEquals(4096L, pending.first().size)
+        assertEquals(true, pending.first().isImage)
+    }
+
+    @Test
+    fun `addUploadedAttachment with an error response surfaces the error instead of staging anything`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        viewModel.addUploadedAttachment(UploadResponse(error = "File too large (max 20MB)"))
+
+        val state = viewModel.uiState.value
+        assertTrue(state.pendingAttachments.isEmpty())
+        assertEquals("File too large (max 20MB)", state.errorMessage)
+    }
+
+    @Test
+    fun `removePendingAttachment removes only the matching entry`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        viewModel.addUploadedAttachment(UploadResponse(filename = "one.png", path = "/x/one.png"))
+        viewModel.addUploadedAttachment(UploadResponse(filename = "two.png", path = "/x/two.png"))
+        val (first, second) = viewModel.uiState.value.pendingAttachments
+
+        viewModel.removePendingAttachment(first.id)
+
+        val remaining = viewModel.uiState.value.pendingAttachments
+        assertEquals(1, remaining.size)
+        assertEquals(second.id, remaining.first().id)
+    }
+
+    @Test
+    fun `removePendingAttachment with an unknown id is a no-op`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        viewModel.addUploadedAttachment(UploadResponse(filename = "one.png", path = "/x/one.png"))
+
+        viewModel.removePendingAttachment("no-such-id")
+
+        assertEquals(1, viewModel.uiState.value.pendingAttachments.size)
+    }
+
+    @Test
+    fun `send without attachments omits the attachments field and appends no marker`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hello")
+            viewModel.sendMessage()
+            val afterSend = awaitUntil { it.isStreaming }
+            assertEquals("hello", afterSend.messages.last().content)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val chatStartBody = server.takeRequest().body.readUtf8()
+        assertTrue(chatStartBody.contains("\"message\":\"hello\""))
+        assertTrue(!chatStartBody.contains("attachments"))
+    }
+
+    @Test
+    fun `send with attachments appends the marker and includes structured attachments`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+        viewModel.addUploadedAttachment(UploadResponse(filename = "one.png", path = "/x/one.png", mime = "image/png", isImage = true))
+        viewModel.addUploadedAttachment(UploadResponse(filename = "two.pdf", path = "/x/two.pdf", mime = "application/pdf", isImage = false))
+
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("check these out")
+            viewModel.sendMessage()
+            val afterSend = awaitUntil { it.isStreaming }
+            assertEquals(
+                "check these out\n\n[Attached files: /x/one.png, /x/two.pdf]",
+                afterSend.messages.last().content,
+            )
+            assertTrue(afterSend.pendingAttachments.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val chatStartBody = server.takeRequest().body.readUtf8()
+        assertTrue(chatStartBody.contains("\\n\\n[Attached files: /x/one.png, /x/two.pdf]"))
+        assertTrue(chatStartBody.contains("\"attachments\":[{"))
+        assertTrue(chatStartBody.contains("\"path\":\"/x/one.png\""))
+        assertTrue(chatStartBody.contains("\"is_image\":true"))
+        assertTrue(chatStartBody.contains("\"path\":\"/x/two.pdf\""))
+        assertTrue(chatStartBody.contains("\"is_image\":false"))
+    }
+
+    @Test
+    fun `send caps outgoing attachments at 20, matching the server's own cap`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+        repeat(25) { index ->
+            viewModel.addUploadedAttachment(UploadResponse(filename = "file-$index.txt", path = "/x/file-$index.txt"))
+        }
+        assertEquals(25, viewModel.uiState.value.pendingAttachments.size)
+
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("many files")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val chatStartBody = server.takeRequest().body.readUtf8()
+        assertTrue(chatStartBody.contains("file-19.txt")) // the 20th (index 19) is the last one included
+        assertTrue(!chatStartBody.contains("file-20.txt")) // the 21st is dropped, both from the marker and the array
+    }
+
+    @Test
+    fun `a failed send preserves pending attachments and composer text`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setResponseCode(500)) // /api/chat/start fails
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+        viewModel.addUploadedAttachment(UploadResponse(filename = "one.png", path = "/x/one.png"))
+
+        viewModel.uiState.test {
+            viewModel.onComposerTextChanged("check this out")
+            viewModel.sendMessage()
+            val afterFailure = awaitUntil { it.errorMessage != null }
+            assertEquals(1, afterFailure.pendingAttachments.size)
+            assertEquals("check this out", afterFailure.composerText)
+            assertEquals(false, afterFailure.isSending)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

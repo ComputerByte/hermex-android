@@ -52,6 +52,28 @@ data class ChatUiState(
     /** User-facing explanation for [isShowingCachedData]. Null whenever [isShowingCachedData] is
      * false. */
     val cacheStatusMessage: String? = null,
+    /** Attachments staged for the next [ChatViewModel.sendMessage] call. Dormant in this phase --
+     * nothing appends to this list yet, since no file/photo picker exists. Populated via
+     * [ChatViewModel.addUploadedAttachment] once one does. */
+    val pendingAttachments: List<PendingAttachmentUi> = emptyList(),
+    /** True while a future picker's upload call is in flight. Dormant in this phase -- nothing
+     * sets this true yet, since [ChatViewModel] never calls `HermexApi.uploadAttachment` itself;
+     * exists now so the composer's eventual "uploading" indicator has a single flag to watch. */
+    val isUploadingAttachment: Boolean = false,
+)
+
+/** A file already uploaded via `HermexApi.uploadAttachment` and staged to go out with the next
+ * sent message -- the local, UI-facing mirror of a [com.hermex.android.core.network.dto.MessageAttachment].
+ * [id] is a synthetic local key (not server-provided) purely for list operations like
+ * [ChatViewModel.removePendingAttachment], since the server shape itself has nothing stable to
+ * key on before a message is actually sent. */
+data class PendingAttachmentUi(
+    val id: String,
+    val name: String? = null,
+    val path: String? = null,
+    val mime: String? = null,
+    val size: Long? = null,
+    val isImage: Boolean? = null,
 )
 
 data class ToolCallUi(

@@ -14,15 +14,20 @@ import com.hermex.android.core.network.ToolEventPayload
 import com.hermex.android.core.network.chatStreamUrl
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ChatStartRequest
+import com.hermex.android.core.network.dto.MessageAttachment
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ModelCatalogParser
 import com.hermex.android.core.network.dto.NewSessionRequest
 import com.hermex.android.core.network.dto.ProfileSwitchRequest
 import com.hermex.android.core.network.dto.UpdateSessionRequest
+import com.hermex.android.core.network.dto.UploadResponse
+import com.hermex.android.core.network.dto.buildAttachedFilesMarker
+import com.hermex.android.core.network.dto.capAtChatStartLimit
 import com.hermex.android.core.network.dto.mergingLiveModels
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.util.HermexLog
+import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -240,6 +245,33 @@ class ChatViewModel(
         _uiState.update { it.copy(composerText = value) }
     }
 
+    /** The entry point a future file/photo picker will call after a real, successful
+     * `HermexApi.uploadAttachment()` -- not called from any UI yet in this phase, so it's
+     * `internal` rather than `private` purely to let tests stage pending attachments without a
+     * real upload/network call. A [response] carrying [UploadResponse.error] surfaces that error
+     * the same way other composer failures do, without ever entering the pending list. */
+    internal fun addUploadedAttachment(response: UploadResponse) {
+        if (response.error != null) {
+            _uiState.update { it.copy(errorMessage = response.error) }
+            return
+        }
+        val attachment = PendingAttachmentUi(
+            id = UUID.randomUUID().toString(),
+            name = response.filename,
+            path = response.path,
+            mime = response.mime,
+            size = response.size,
+            isImage = response.isImage,
+        )
+        _uiState.update { it.copy(pendingAttachments = it.pendingAttachments + attachment) }
+    }
+
+    /** No-op if [id] doesn't match anything currently pending (e.g. a stale UI callback after the
+     * list already changed) -- safe to call unconditionally. */
+    fun removePendingAttachment(id: String) {
+        _uiState.update { it.copy(pendingAttachments = it.pendingAttachments.filterNot { attachment -> attachment.id == id }) }
+    }
+
     /** Picking a profile from the composer selector. An empty transcript just switches the
      * server's active profile in place; once messages exist, switching profiles instead offers
      * to start a fresh session on that profile (see [pendingProfileSwitch] and
@@ -333,6 +365,13 @@ class ChatViewModel(
             // actual current model to attribute the pick to, matching iOS's
             // `explicitModelPickForChatStart`.
             val explicitModelPick = state.pendingExplicitModelPick && !state.currentModel.isNullOrBlank()
+            // Capped the same way the server itself caps them (`_normalize_chat_attachments(...)[:20]`,
+            // V5 Phase 5 recon) -- deriving the marker from this same capped list, not the
+            // uncapped one, keeps the marker and the structured `attachments` field in agreement
+            // about which files actually went out.
+            val cappedAttachments = state.pendingAttachments.map { it.toMessageAttachment() }.capAtChatStartLimit()
+            val attachmentReferences = cappedAttachments.mapNotNull { it.chatReference() }
+            val messageForApi = text + buildAttachedFilesMarker(attachmentReferences)
             _uiState.update { it.copy(isSending = true, errorMessage = null) }
 
             val startResponse = try {
@@ -340,12 +379,13 @@ class ChatViewModel(
                     api.chatStart(
                         ChatStartRequest(
                             sessionId = sessionId,
-                            message = text,
+                            message = messageForApi,
                             workspace = state.currentWorkspace,
                             model = state.currentModel,
                             modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
                             profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
                             explicitModelPick = if (explicitModelPick) true else null,
+                            attachments = cappedAttachments.ifEmpty { null },
                         ),
                     )
                 }
@@ -370,9 +410,13 @@ class ChatViewModel(
             HermexLog.d("Chat", "chat/start ok, streamId=$streamId -- opening SSE")
 
             // Append the user's own message immediately (optimistic) and clear the composer.
+            // Uses messageForApi (marker included, same as what the server will persist and
+            // eventually echo back on reload) rather than the bare typed text, so this optimistic
+            // bubble already matches what a reload would show -- display-layer marker stripping
+            // is a separate, not-yet-built concern (see MessageAttachment's iOS equivalent).
             val userMessage = ChatMessage(
                 role = "user",
-                content = text,
+                content = messageForApi,
                 timestamp = nowEpochSeconds(),
             )
             _uiState.update {
@@ -388,6 +432,10 @@ class ChatViewModel(
                     // past turns' tool cards must persist across a new send to stay visible in
                     // their correct position in the transcript.
                     pendingExplicitModelPick = if (explicitModelPick) false else it.pendingExplicitModelPick,
+                    // Only cleared on this success path -- a failed send (any return@launch above)
+                    // leaves pendingAttachments untouched, matching the composer text's own
+                    // failure behavior.
+                    pendingAttachments = emptyList(),
                 )
             }
 
@@ -540,4 +588,17 @@ class ChatViewModel(
     }
 
     private fun nowEpochSeconds(): Double = System.currentTimeMillis() / 1000.0
+
+    private fun PendingAttachmentUi.toMessageAttachment(): MessageAttachment = MessageAttachment(
+        name = name,
+        path = path,
+        mime = mime,
+        size = size,
+        isImage = isImage,
+    )
+
+    /** Matches iOS's `PendingAttachment.chatReference`: prefer the server-assigned upload path,
+     * falling back to the display name only when there's no path at all. */
+    private fun MessageAttachment.chatReference(): String? =
+        path?.takeIf { it.isNotBlank() } ?: name?.takeIf { it.isNotBlank() }
 }

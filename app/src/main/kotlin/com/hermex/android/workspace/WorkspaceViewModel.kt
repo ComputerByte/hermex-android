@@ -69,30 +69,28 @@ class WorkspaceViewModel(
 
     // ── Git (read-only) ──
 
-    fun loadGitStatus() {
+    fun loadGitStatus(path: String? = null) {
         val api = authRepository.apiForActiveServer()
         if (api == null) return
         viewModelScope.launch {
             try {
-                val response = safeApiCall { api.gitStatus(sessionId) }
-                if (response.error != null) {
-                    _uiState.update { it.copy(gitState = null) }
-                } else {
-                    _uiState.update {
-                        it.copy(gitState = GitState(
-                            isGit = response.is_git == true,
-                            branch = response.branch,
-                            commit = response.commit,
-                            changedFileCount = response.totals?.changed ?: 0,
-                            additions = response.totals?.additions ?: 0,
-                            deletions = response.totals?.deletions ?: 0,
-                            files = response.files.orEmpty(),
-                            isLoading = false,
-                        ))
-                    }
+                val response = safeApiCall { api.gitStatus(sessionId, path) }
+                val status = response.git ?: return@launch
+                _uiState.update {
+                    it.copy(gitState = GitState(
+                        isGit = status.is_git == true,
+                        branch = status.branch,
+                        commit = status.commit,
+                        changedFileCount = status.totals?.changed ?: 0,
+                        additions = status.totals?.additions ?: 0,
+                        deletions = status.totals?.deletions ?: 0,
+                        files = status.files.orEmpty(),
+                        isLoading = false,
+                        errorMessage = response.error ?: status.error,
+                    ))
                 }
             } catch (_: Exception) {
-                _uiState.update { it.copy(gitState = null) }
+                // Git status is optional; silently return without state change.
             }
         }
     }
@@ -109,14 +107,14 @@ class WorkspaceViewModel(
         }
         viewModelScope.launch {
             try {
-                val response = safeApiCall { api.gitDiff(sessionId, path) }
+                val wrapped = safeApiCall { api.gitDiff(sessionId, path) }
+                val response = wrapped.diff
                 _uiState.update { state ->
-                    if (response.error != null) {
-                        state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, errorMessage = response.error, isLoading = false)))
-                    } else if (response.binary == true) {
-                        state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, diff = "", binary = true, isLoading = false)))
-                    } else {
-                        state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, diff = response.diff ?: "", isLoading = false)))
+                    when {
+                        response?.error != null -> state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, errorMessage = response.error, isLoading = false)))
+                        wrapped.error != null -> state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, errorMessage = wrapped.error, isLoading = false)))
+                        response?.binary == true -> state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, diff = "", binary = true, isLoading = false)))
+                        else -> state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, diff = response?.diff ?: "", isLoading = false)))
                     }
                 }
             } catch (e: ApiError) {

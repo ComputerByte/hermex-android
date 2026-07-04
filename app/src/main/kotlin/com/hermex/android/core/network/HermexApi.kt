@@ -13,8 +13,11 @@ import com.hermex.android.core.network.dto.DirectoryListResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.FileResponse
 import com.hermex.android.core.network.dto.GitBranchesResponse
+import com.hermex.android.core.network.dto.GitBranchesWrapper
 import com.hermex.android.core.network.dto.GitDiffResponse
+import com.hermex.android.core.network.dto.GitDiffWrapper
 import com.hermex.android.core.network.dto.GitStatusResponse
+import com.hermex.android.core.network.dto.GitStatusWrapper
 import com.hermex.android.core.network.dto.HealthResponse
 import com.hermex.android.core.network.dto.InsightsResponse
 import com.hermex.android.core.network.dto.LoginRequest
@@ -201,17 +204,18 @@ interface HermexApi {
     @GET("/api/git/status")
     suspend fun gitStatus(
         @Query("session_id") sessionId: String,
-    ): GitStatusResponse
+        @Query("path") path: String? = null,
+    ): GitStatusWrapper
 
     @GET("/api/git/diff")
     suspend fun gitDiff(
         @Query("session_id") sessionId: String,
         @Query("path") path: String,
         @Query("kind") kind: String = "unstaged",
-    ): GitDiffResponse
+    ): GitDiffWrapper
 
     @GET("/api/git/branches")
     suspend fun gitBranches(
         @Query("session_id") sessionId: String,
-    ): GitBranchesResponse
+    ): GitBranchesWrapper
 }

@@ -9,10 +9,20 @@ import kotlinx.serialization.Serializable
 data class GitStatusResponse(
     val is_git: Boolean? = null,
     val branch: String? = null,
-    /** Short SHA of HEAD commit. */
     val commit: String? = null,
     val totals: GitTotals? = null,
     val files: List<GitFileStatus>? = null,
+    val error: String? = null,
+)
+
+/**
+ * Backend wraps `git_status()` result under a `"git"` key:
+ * `{"git": {is_git: true, branch: "main", ...}}`.
+ * Errors come as `{"error": "..."}` at the top level.
+ */
+@Serializable
+data class GitStatusWrapper(
+    val git: GitStatusResponse? = null,
     val error: String? = null,
 )
 
@@ -26,14 +36,14 @@ data class GitTotals(
 @Serializable
 data class GitFileStatus(
     val path: String? = null,
-    /** Single-letter Git status code: M, A, D, R, ?, etc. */
     val status: String? = null,
     val additions: Int? = null,
     val deletions: Int? = null,
 )
 
 /**
- * `GET /api/git/diff?session_id=...&path=...&kind=...` -- Git diff for a file.
+ * `GET /api/git/diff?session_id=...&path=...&kind=...`
+ * Backend wraps under `"diff"` key: `{"diff": {diff: "...", binary: false, ...}}`.
  */
 @Serializable
 data class GitDiffResponse(
@@ -43,13 +53,26 @@ data class GitDiffResponse(
     val error: String? = null,
 )
 
+@Serializable
+data class GitDiffWrapper(
+    val diff: GitDiffResponse? = null,
+    val error: String? = null,
+)
+
 /**
- * `GET /api/git/branches?session_id=...` -- Git branch list.
+ * `GET /api/git/branches?session_id=...`
+ * Backend wraps under `"branches"` key.
  */
 @Serializable
 data class GitBranchesResponse(
     val current: String? = null,
     val branches: List<GitBranch>? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class GitBranchesWrapper(
+    val branches: GitBranchesResponse? = null,
     val error: String? = null,
 )
 

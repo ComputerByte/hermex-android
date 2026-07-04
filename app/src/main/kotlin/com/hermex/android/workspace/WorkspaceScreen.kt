@@ -48,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +82,11 @@ fun WorkspaceScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val openFile = uiState.selectedFile
     val context = LocalContext.current
+
+    // Load git status when the directory path changes (root → subfolder → parent).
+    LaunchedEffect(uiState.currentPath) {
+        viewModel.loadGitStatus(uiState.currentPath)
+    }
 
     Scaffold(
         modifier = modifier,
@@ -135,23 +141,20 @@ fun WorkspaceScreen(
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Search field
+                    // Git status card — always visible when loaded, even for non-git repos
+                    uiState.gitState?.let { git ->
+                        GitStatusCard(
+                            gitState = git,
+                            onOpenDiff = { file -> viewModel.openGitDiff(file) },
+                            onCloseDiff = viewModel::closeGitDiff,
+                            onRetry = { viewModel.loadGitStatus(viewModel.uiState.value.currentPath) },
+                        )
+                    }
+                    // Always show search bar and directory content
                     SearchBar(
                         query = uiState.searchQuery,
                         onQueryChange = viewModel::updateSearchQuery,
                     )
-                    // Git status card (collapsed when not a git repo, always shown when loading)
-                    uiState.gitState?.let { git ->
-                        if (!git.isLoading && !git.isGit) {
-                            // Show nothing for non-git repos (no error, no card)
-                        } else {
-                            GitStatusCard(
-                                gitState = git,
-                                onOpenDiff = { file -> viewModel.openGitDiff(file) },
-                                onCloseDiff = viewModel::closeGitDiff,
-                                onRetry = viewModel::loadGitStatus,
-                            )
-                        }
-                    }
                     DirectoryContent(
                         uiState = uiState,
                         onEntryClick = { entry ->
@@ -455,7 +458,7 @@ private fun GitStatusCard(
                 }
 
                 else -> {
-                    // Branch and commit
+                    // Not a git repo or repo with no changes
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Git",
@@ -463,45 +466,55 @@ private fun GitStatusCard(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = gitState.branch ?: "(detached)",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                        gitState.commit?.let { commit ->
-                            Spacer(Modifier.width(6.dp))
+                        if (gitState.isGit) {
                             Text(
-                                text = commit,
+                                text = gitState.branch ?: "(detached)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                            gitState.commit?.let { commit ->
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = commit,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Not a git repository at this path",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontFamily = FontFamily.Monospace,
                             )
                         }
                     }
 
-                    if (gitState.changedFileCount > 0) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "${gitState.changedFileCount} changed file(s): +${gitState.additions}/-${gitState.deletions}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        gitState.files.forEach { file ->
+                    if (gitState.isGit) {
+                        if (gitState.changedFileCount > 0) {
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "[${file.status ?: "?"}] ${file.path ?: "(unknown)"}",
+                                text = "${gitState.changedFileCount} changed file(s): +${gitState.additions}/-${gitState.deletions}",
                                 style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onOpenDiff(file) }
-                                    .padding(vertical = 2.dp, horizontal = 4.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Spacer(Modifier.height(4.dp))
+                            gitState.files.forEach { file ->
+                                Text(
+                                    text = "[${file.status ?: "?"}] ${file.path ?: "(unknown)"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenDiff(file) }
+                                        .padding(vertical = 2.dp, horizontal = 4.dp),
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Clean working tree.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    } else {
-                        Spacer(Modifier.height(4.dp))
-                        Text("Clean working tree.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

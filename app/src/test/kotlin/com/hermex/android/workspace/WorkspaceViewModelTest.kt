@@ -583,16 +583,19 @@ class WorkspaceViewModelTest {
     @Test
     fun `loadGitStatus success for a git repo`() = runTest {
         val repo = loggedInRepository()
+        // queue order: dir list response, git status response
         server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
         server.enqueue(
             MockResponse().setBody(
-                """{"is_git":true,"branch":"main","commit":"abc123","totals":{"changed":2,"additions":5,"deletions":3},"files":[{"path":"README.md","status":"M","additions":3,"deletions":2},{"path":"src/main.py","status":"M","additions":2,"deletions":1}]}""",
+                """{"git":{"is_git":true,"branch":"main","commit":"abc123","totals":{"changed":2,"additions":5,"deletions":3},"files":[{"path":"README.md","status":"M","additions":3,"deletions":2},{"path":"src/main.py","status":"M","additions":2,"deletions":1}]}}""",
             ),
         )
 
         val viewModel = WorkspaceViewModel("s1", repo)
         viewModel.uiState.test {
+            // Load root directory
             awaitUntil { !it.isLoading }
+            // Load git status explicitly
             viewModel.loadGitStatus()
             val state = awaitUntil { it.gitState != null }
             val git = state.gitState!!
@@ -612,7 +615,7 @@ class WorkspaceViewModelTest {
     fun `loadGitStatus for a non-git workspace`() = runTest {
         val repo = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-        server.enqueue(MockResponse().setBody("""{"is_git":false}"""))
+        server.enqueue(MockResponse().setBody("""{"git":{"is_git":false}}"""))
 
         val viewModel = WorkspaceViewModel("s1", repo)
         viewModel.uiState.test {
@@ -626,16 +629,16 @@ class WorkspaceViewModelTest {
     }
 
     @Test
-    fun `loadGitStatus error silently clears git state`() = runTest {
+    fun `loadGitStatus missing endpoint does not crash or change state`() = runTest {
         val repo = loggedInRepository()
+        // Only enqueue directory response; git request will 404 silently
         server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-        server.enqueue(MockResponse().setResponseCode(500))
 
         val viewModel = WorkspaceViewModel("s1", repo)
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             viewModel.loadGitStatus()
-            // Git errors should silently clear gitState to null (no crash)
+            // Should silently return without setting gitState
             assertNull(viewModel.uiState.value.gitState)
             cancelAndIgnoreRemainingEvents()
         }
@@ -645,7 +648,6 @@ class WorkspaceViewModelTest {
     fun `loadGitStatus no api silently returns without error`() = runTest {
         val networkModule = NetworkModule(FakeCookieStore()) {}
         val repo = AuthRepository(networkModule, FakeServerStore())
-        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
 
         val viewModel = WorkspaceViewModel("s1", repo)
 
@@ -658,8 +660,8 @@ class WorkspaceViewModelTest {
     fun `openGitDiff loads diff for a changed file`() = runTest {
         val repo = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-        server.enqueue(MockResponse().setBody("""{"is_git":true,"branch":"main","files":[{"path":"README.md","status":"M"}]}"""))
-        server.enqueue(MockResponse().setBody("""{"diff":"@@ -1,3 +1,4 @@\\n hello\\n+new line","path":"README.md","size":32}"""))
+        server.enqueue(MockResponse().setBody("""{"git":{"is_git":true,"branch":"main","files":[{"path":"README.md","status":"M"}]}}"""))
+        server.enqueue(MockResponse().setBody("""{"diff":{"diff":"@@ -1,3 +1,4 @@\n hello\n+new line","size":32}}"""))
 
         val viewModel = WorkspaceViewModel("s1", repo)
         viewModel.uiState.test {
@@ -679,7 +681,7 @@ class WorkspaceViewModelTest {
     fun `closeGitDiff clears the selected diff`() = runTest {
         val repo = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-        server.enqueue(MockResponse().setBody("""{"is_git":true,"branch":"main","files":[{"path":"README.md","status":"M"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"git":{"is_git":true,"branch":"main","files":[{"path":"README.md","status":"M"}]}}"""))
 
         val viewModel = WorkspaceViewModel("s1", repo)
         viewModel.uiState.test {

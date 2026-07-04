@@ -61,7 +61,19 @@ data class FileViewState(
      * just a "won't show this as text" decision. [WorkspaceViewModel.retryOpenFile] uses this
      * distinction to know whether retrying even makes sense. */
     val errorMessage: String? = null,
-)
+    /** True when the user is editing the file content. */
+    val isEditing: Boolean = false,
+    /** Current edited content while [isEditing] is true. Is sourced from the original text
+     * when editing starts and updated as the user types. */
+    val editedContent: String = "",
+    /** True while a save request is in flight. */
+    val isSaving: Boolean = false,
+    /** Non-null when the most recent save attempt failed. */
+    val saveError: String? = null,
+) {
+    val hasUnsavedChanges: Boolean
+        get() = isEditing && content is WorkspaceFileContent.Text && editedContent != content.text
+}
 
 sealed interface WorkspaceFileContent {
     data class Text(val text: String, val truncated: Boolean = false) : WorkspaceFileContent

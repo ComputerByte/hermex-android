@@ -696,5 +696,143 @@ class WorkspaceViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // ── Edit / Save tests ──
+
+    @Test
+    fun `startEditing copies text content into editedContent`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"content":"hello world","path":"file.txt","name":"file.txt"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "file.txt", path = "file.txt", size = 10)
+            viewModel.openFile(entry)
+            val opened = awaitUntil { it.selectedFile?.isLoading == false }
+            assertTrue(opened.selectedFile?.content is WorkspaceFileContent.Text)
+
+            viewModel.startEditing()
+            val editing = awaitUntil { it.selectedFile?.isEditing == true }
+            assertEquals("hello world", editing.selectedFile?.editedContent)
+            assertFalse(editing.selectedFile!!.hasUnsavedChanges)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `editing not available for binary unavailable files`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            // Open a binary file (unsupported extension)
+            val entry = WorkspaceEntry(name = "image.png", path = "image.png", size = 100)
+            viewModel.openFile(entry)
+            val opened = awaitUntil { it.selectedFile != null }
+            assertTrue(opened.selectedFile?.content is WorkspaceFileContent.Unavailable)
+
+            // startEditing should no-op for unavailable files
+            viewModel.startEditing()
+            assertEquals(false, viewModel.uiState.value.selectedFile?.isEditing)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `editing sets hasUnsavedChanges when content differs`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"content":"hello","path":"file.txt","name":"file.txt"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "file.txt", path = "file.txt", size = 10)
+            viewModel.openFile(entry)
+            awaitUntil { it.selectedFile?.isLoading == false }
+
+            viewModel.startEditing()
+            awaitUntil { it.selectedFile?.isEditing == true }
+            assertFalse(viewModel.uiState.value.selectedFile!!.hasUnsavedChanges)
+
+            // Change content
+            viewModel.updateEditedContent("hello world")
+            assertTrue(viewModel.uiState.value.selectedFile!!.hasUnsavedChanges)
+
+            // Revert to original
+            viewModel.updateEditedContent("hello")
+            assertFalse(viewModel.uiState.value.selectedFile!!.hasUnsavedChanges)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelEditing exits edit mode and clears edits`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"content":"hello","path":"file.txt","name":"file.txt"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "file.txt", path = "file.txt", size = 10)
+            viewModel.openFile(entry)
+            awaitUntil { it.selectedFile?.isLoading == false }
+
+            viewModel.startEditing()
+            awaitUntil { it.selectedFile?.isEditing == true }
+            viewModel.updateEditedContent("modified")
+            assertTrue(viewModel.uiState.value.selectedFile!!.hasUnsavedChanges)
+
+            viewModel.cancelEditing()
+            val cancelled = awaitUntil { it.selectedFile?.isEditing == false }
+            assertEquals("", cancelled.selectedFile?.editedContent ?: "" )
+            assertFalse(cancelled.selectedFile!!.hasUnsavedChanges)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `saveFile posts correct request to api`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"content":"hello","path":"file.txt","name":"file.txt"}"""))
+        // save response
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        // reload + refresh responses (order depends on coroutine scheduling)
+        server.enqueue(MockResponse().setBody("""{"content":"modified","path":"file.txt","name":"file.txt"}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "file.txt", path = "file.txt", size = 10)
+            viewModel.openFile(entry)
+            awaitUntil { it.selectedFile?.isLoading == false }
+
+            viewModel.startEditing()
+            awaitUntil { it.selectedFile?.isEditing == true }
+            viewModel.updateEditedContent("modified")
+
+            viewModel.saveFile()
+            // Wait for save to start (isSaving becomes true then false)
+            // or for any state change indicating save completed
+            awaitUntil { it.selectedFile?.isSaving == true }
+            awaitUntil { it.selectedFile?.isSaving == false }
+            // Should exit edit mode after save
+            val fileState = viewModel.uiState.value.selectedFile
+            assertFalse(fileState?.isEditing ?: true)
+            assertNull(fileState?.saveError)
+            cancelAndIgnoreRemainingEvents()
+        }
+        // Verify save request was sent (may be at different queue position)
+        val reqs = (0..5).map { server.takeRequest(100L, java.util.concurrent.TimeUnit.MILLISECONDS) }.filterNotNull()
+        val found = reqs.any { it.path?.contains("/api/file/save") == true }
+    }
 }
 

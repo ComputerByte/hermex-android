@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.ApiError
+import com.hermex.android.core.network.dto.FileSaveRequest
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.safeApiCall
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -188,6 +189,90 @@ class WorkspaceViewModel(
     /** Back from the file viewer to the directory listing underneath -- no reload needed. */
     fun closeFile() {
         _uiState.update { it.copy(selectedFile = null) }
+    }
+
+    // ── Edit / Save (text files only) ──
+
+    /** Enters edit mode for the currently open file. No-ops if the file isn't text content. */
+    fun startEditing() {
+        val file = _uiState.value.selectedFile ?: return
+        val text = (file.content as? WorkspaceFileContent.Text)?.text ?: return
+        _uiState.update {
+            it.copy(selectedFile = file.copy(isEditing = true, editedContent = text, saveError = null))
+        }
+    }
+
+    /** Updates the edited content as the user types. */
+    fun updateEditedContent(content: String) {
+        val file = _uiState.value.selectedFile ?: return
+        if (!file.isEditing) return
+        _uiState.update {
+            it.copy(selectedFile = file.copy(editedContent = content, saveError = null))
+        }
+    }
+
+    /** Discards unsaved changes and exits edit mode without saving. */
+    fun cancelEditing() {
+        val file = _uiState.value.selectedFile ?: return
+        if (!file.isEditing) return
+        _uiState.update {
+            it.copy(selectedFile = file.copy(isEditing = false, editedContent = "", isSaving = false, saveError = null))
+        }
+    }
+
+    /** Saves the current edited content via [HermexApi.saveFile]. On success, reloads the file
+     * content. On failure, remains in edit mode with the edited text preserved. */
+    fun saveFile() {
+        val file = _uiState.value.selectedFile ?: return
+        if (!file.isEditing || file.isSaving) return
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(selectedFile = file.copy(saveError = "Not signed in.")) }
+            return
+        }
+        val path = file.path
+        val content = file.editedContent
+        _uiState.update { it.copy(selectedFile = file.copy(isSaving = true, saveError = null)) }
+        viewModelScope.launch {
+            try {
+                val request = FileSaveRequest(session_id = sessionId, path = path, content = content)
+                val response = safeApiCall { api.saveFile(request) }
+                if (response.error != null) {
+                    _uiState.update { state ->
+                        val current = state.selectedFile
+                        if (current?.path != path) return@update state
+                        state.copy(selectedFile = current.copy(isSaving = false, saveError = response.error))
+                    }
+                    return@launch
+                }
+                // Save succeeded: exit edit mode and reload the file content
+                val currentPath = _uiState.value.currentPath
+                _uiState.update { state ->
+                    val current = state.selectedFile
+                    if (current?.path != path) return@update state
+                    state.copy(
+                        selectedFile = current.copy(
+                            isEditing = false, editedContent = "", isSaving = false, saveError = null,
+                            isLoading = true, content = null,
+                        ),
+                    )
+                }
+                fetchFile(path, file.name)
+                loadDirectory(currentPath, preserveSearch = true)
+            } catch (e: ApiError) {
+                _uiState.update { state ->
+                    val current = state.selectedFile
+                    if (current?.path != path) return@update state
+                    state.copy(selectedFile = current.copy(isSaving = false, saveError = e.message ?: "Could not save file."))
+                }
+            } catch (_: Exception) {
+                _uiState.update { state ->
+                    val current = state.selectedFile
+                    if (current?.path != path) return@update state
+                    state.copy(selectedFile = current.copy(isSaving = false, saveError = "Could not save file."))
+                }
+            }
+        }
     }
 
     private fun showUnavailable(path: String, name: String, reason: FileUnavailableReason, message: String) {

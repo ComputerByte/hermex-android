@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,7 +30,12 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
 // Icons used without explicit import: ArrowBack, KeyboardArrowUp via Icons.AutoMirrored.Filled / Icons.Filled
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -137,7 +143,15 @@ fun WorkspaceScreen(
                 .padding(innerPadding),
         ) {
             if (openFile != null) {
-                FileViewerContent(file = openFile, onRetry = viewModel::retryOpenFile)
+                FileViewerContent(
+                    file = openFile,
+                    onRetry = viewModel::retryOpenFile,
+                    onStartEdit = viewModel::startEditing,
+                    onUpdateEditedContent = viewModel::updateEditedContent,
+                    onSave = viewModel::saveFile,
+                    onCancelEdit = viewModel::cancelEditing,
+                    onClose = viewModel::closeFile,
+                )
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Search field
@@ -335,62 +349,171 @@ private fun WorkspaceEntryRow(
 private fun FileViewerContent(
     file: FileViewState,
     onRetry: () -> Unit,
+    onStartEdit: () -> Unit,
+    onUpdateEditedContent: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancelEdit: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        when {
-            file.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-            file.errorMessage != null -> Box(
-                Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center,
+    // Handle back/close with unsaved changes
+    fun handleClose() {
+        if (file.hasUnsavedChanges) {
+            showDiscardDialog = true
+        } else {
+            if (file.isEditing) onCancelEdit()
+            onClose()
+        }
+    }
+
+    // Discard confirmation dialog
+    if (showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Discard changes?") },
+            text = { Text("You have unsaved changes to ${file.name}.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardDialog = false
+                    onCancelEdit()
+                    onClose()
+                }) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardDialog = false }) { Text("Keep editing") }
+            },
+        )
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // Edit/Save buttons at top
+        if (file.content is WorkspaceFileContent.Text && !file.content.truncated) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (file.isEditing) {
+                    Button(
+                        onClick = { handleClose() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        modifier = Modifier.height(32.dp).padding(end = 8.dp),
+                    ) { Text("Cancel", style = MaterialTheme.typography.labelSmall) }
+                    Button(
+                        onClick = onSave,
+                        enabled = file.hasUnsavedChanges && !file.isSaving,
+                        modifier = Modifier.height(32.dp),
+                    ) { Text("Save", style = MaterialTheme.typography.labelSmall) }
+                } else {
+                    TextButton(onClick = onStartEdit, modifier = Modifier.height(32.dp)) {
+                        Text("Edit", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+
+        // Main content area (adjusted for button space at top)
+        Column(
+            modifier = Modifier.fillMaxSize().padding(top = 40.dp)
+        ) {
+            when {
+                file.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+
+                file.errorMessage != null -> Box(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = file.errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        TextButton(onClick = onRetry) { Text("Retry") }
+                    }
+                }
+
+                file.content is WorkspaceFileContent.Unavailable -> Box(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        text = file.errorMessage,
-                        color = MaterialTheme.colorScheme.error,
+                        text = file.content.message,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = onRetry) { Text("Retry") }
                 }
-            }
 
-            file.content is WorkspaceFileContent.Unavailable -> Box(
-                Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = file.content.message,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            file.content is WorkspaceFileContent.Text -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-            ) {
-                if (file.content.truncated) {
-                    Text(
-                        text = "Showing partial content -- this file is too large to display in full.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    )
+                file.content is WorkspaceFileContent.Text -> {
+                    if (file.isEditing) {
+                        // Editable text field
+                        OutlinedTextField(
+                            value = file.editedContent,
+                            onValueChange = onUpdateEditedContent,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp),
+                        ) {
+                            if (file.content.truncated) {
+                                Text(
+                                    text = "Showing partial content -- this file is too large to display in full.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                                )
+                            }
+                            Text(text = file.content.text, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    // Save error
+                    if (file.saveError != null) {
+                        Text(
+                            text = file.saveError,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                    }
+                    // Saving indicator
+                    if (file.isSaving) {
+                        Box(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Saving...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                 }
-                Text(text = file.content.text, style = MaterialTheme.typography.bodyMedium)
-            }
 
-            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No content to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No content to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
+
+    // Unsaved changes dialog on back (file close)
+    // Use handleClose for the back action
 }
 
 /** Copies a workspace path to the system clipboard and shows a brief toast. */

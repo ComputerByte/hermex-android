@@ -11,6 +11,8 @@ import com.hermex.android.core.network.dto.CronOutputResponse
 import com.hermex.android.core.network.dto.CronStatusResponse
 import com.hermex.android.core.network.dto.DirectoryListResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
+import com.hermex.android.core.network.dto.FileSaveRequest
+import com.hermex.android.core.network.dto.FileSaveResponse
 import com.hermex.android.core.network.dto.FileResponse
 import com.hermex.android.core.network.dto.GitBranchesResponse
 import com.hermex.android.core.network.dto.GitBranchesWrapper
@@ -199,6 +201,9 @@ interface HermexApi {
         @Query("download") download: Int? = null,
         @Query("inline") inline: Int? = null,
     ): ResponseBody
+
+    @POST("/api/file/save")
+    suspend fun saveFile(@Body body: FileSaveRequest): FileSaveResponse
 
     // Git endpoints (read-only -- no commit/pull/discard/checkout in v0.7.3).
     @GET("/api/git/status")

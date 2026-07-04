@@ -2,6 +2,21 @@ package com.hermex.android.core.network.dto
 
 import kotlinx.serialization.Serializable
 
+/** `POST /api/file/save` request body. */
+@Serializable
+data class FileSaveRequest(
+    val session_id: String,
+    val path: String,
+    val content: String,
+)
+
+/** `POST /api/file/save` response. */
+@Serializable
+data class FileSaveResponse(
+    val ok: Boolean? = null,
+    val error: String? = null,
+)
+
 /**
  * `GET /api/list?session_id=...&path=...` -- directory listing, scoped to a session's workspace
  * (there is no session-independent directory browse). Read-only: no create/rename/delete/upload

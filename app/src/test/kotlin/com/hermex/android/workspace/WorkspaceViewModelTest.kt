@@ -1074,8 +1074,8 @@ class WorkspaceViewModelTest {
             awaitUntil { !it.isLoading }
             val entry = WorkspaceEntry(name = ".git", path = ".git")
             viewModel.showRenameDialog(entry)
-            viewModel.updateRenameName(".git")
-            assertFalse(viewModel.uiState.value.renameDialog!!.isValid)
+            assertNull(viewModel.uiState.value.renameDialog)
+            assertNotNull(viewModel.uiState.value.errorMessage)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -1308,41 +1308,6 @@ class WorkspaceViewModelTest {
             awaitUntil { !it.isLoading }
             val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
             viewModel.showMoveDialog(entry)
-            assertNotNull(viewModel.uiState.value.moveDialog)
-            assertEquals("test.txt", viewModel.uiState.value.moveDialog?.targetName)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `dismissMoveDialog clears state`() = runTest {
-        val repo = loggedInRepository()
-        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-
-        val viewModel = WorkspaceViewModel("s1", repo)
-        viewModel.uiState.test {
-            awaitUntil { !it.isLoading }
-            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
-            viewModel.showMoveDialog(entry)
-            assertNotNull(viewModel.uiState.value.moveDialog)
-            viewModel.dismissMoveDialog()
-            assertNull(viewModel.uiState.value.moveDialog)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `showMoveDialog opens and can be dismissed`() = runTest {
-        val repo = loggedInRepository()
-        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
-
-        val viewModel = WorkspaceViewModel("s1", repo)
-        viewModel.uiState.test {
-            awaitUntil { !it.isLoading }
-            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
-            viewModel.showMoveDialog(entry)
             val opened = awaitUntil { it.moveDialog != null }
             assertEquals("test.txt", opened.moveDialog?.targetName)
             viewModel.dismissMoveDialog()
@@ -1366,7 +1331,7 @@ class WorkspaceViewModelTest {
             viewModel.uploadFile("test.txt", "hello".toByteArray())
             val uploading = awaitUntil { it.isUploading == true }
             val done = awaitUntil { it.isUploading == false }
-            assertNull(done.uploadMessage?.let { if (it.startsWith("Uploaded")) null else it })
+            assertTrue(done.uploadMessage?.startsWith("Uploaded") == true)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -1381,6 +1346,98 @@ class WorkspaceViewModelTest {
             awaitUntil { !it.isLoading }
             viewModel.uploadFile(".git", "data".toByteArray())
             assertNotNull(viewModel.uiState.value.uploadMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── Protected name tests ──
+
+    @Test
+    fun `move dotgit shows errorMessage`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = ".git", path = ".git", type = "dir", size = 0)
+            viewModel.showMoveDialog(entry)
+            assertNull(viewModel.uiState.value.moveDialog)
+            assertNotNull(viewModel.uiState.value.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `delete dotgit shows errorMessage`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = ".git", path = ".git", type = "dir", isDirectory = true)
+            viewModel.showDeleteFolderDialog(entry)
+            assertNull(viewModel.uiState.value.deleteDialog)
+            assertNotNull(viewModel.uiState.value.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── Git branches tests ──
+
+    @Test
+    fun `loadGitBranches success`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"git":{"is_git":true,"branch":"master"}}"""))
+        server.enqueue(MockResponse().setBody("""{"branches":{"branches":[{"name":"master","current":true,"ahead":1,"behind":0},{"name":"dev","current":false}]}}"""))
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus("test")
+            awaitUntil { it.gitState?.isLoading == false }
+            viewModel.loadGitBranches("test")
+            awaitUntil { it.gitState?.isBranchesLoading == false }
+            val branches = viewModel.uiState.value.gitState?.branches
+            assertNotNull(branches)
+            assertTrue(branches!!.any { it.name == "master" && it.isCurrent })
+            assertTrue(branches.any { it.name == "dev" && !it.isCurrent })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadGitBranches empty`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"git":{"is_git":true,"branch":"master"}}"""))
+        server.enqueue(MockResponse().setBody("""{"branches":{"branches":[]}}"""))
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus("test")
+            awaitUntil { it.gitState?.isLoading == false }
+            viewModel.loadGitBranches("test")
+            awaitUntil { it.gitState?.isBranchesLoading == false }
+            assertTrue(viewModel.uiState.value.gitState?.branches?.isEmpty() == true)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadGitBranches error`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"git":{"is_git":true,"branch":"master"}}"""))
+        server.enqueue(MockResponse().setBody("").setResponseCode(500))
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus("test")
+            awaitUntil { it.gitState?.isLoading == false }
+            viewModel.loadGitBranches("test")
+            awaitUntil { it.gitState?.isBranchesLoading == false }
+            // Error should not cause a crash; branches remain empty
+            assertTrue(viewModel.uiState.value.gitState?.branches?.isEmpty() == true)
             cancelAndIgnoreRemainingEvents()
         }
     }

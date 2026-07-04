@@ -442,6 +442,10 @@ class WorkspaceViewModel(
     fun showRenameDialog(entry: WorkspaceEntry) {
         val path = entry.path ?: return
         val name = entry.name ?: path.substringAfterLast('/')
+        if (name == ".git" || name == ".github") {
+            _uiState.update { it.copy(errorMessage = "Protected workspace folder cannot be renamed.") }
+            return
+        }
         _uiState.update {
             it.copy(renameDialog = RenameDialogState(targetPath = path, originalName = name, name = name))
         }
@@ -515,7 +519,10 @@ class WorkspaceViewModel(
         val path = entry.path ?: return
         val name = entry.name ?: path.substringAfterLast('/')
         // Block protected names
-        if (name == ".git" || name == ".github") return
+        if (name == ".git" || name == ".github") {
+            _uiState.update { it.copy(errorMessage = "Protected workspace folder cannot be deleted.") }
+            return
+        }
         _uiState.update {
             it.copy(deleteDialog = DeleteDialogState(targetPath = path, targetName = name, isDirectory = true))
         }
@@ -588,7 +595,10 @@ class WorkspaceViewModel(
     fun showMoveDialog(entry: WorkspaceEntry) {
         val path = entry.path ?: return
         val name = entry.name ?: path.substringAfterLast('/')
-        if (name == ".git" || name == ".github") return
+        if (name == ".git" || name == ".github") {
+            _uiState.update { it.copy(errorMessage = "Protected workspace folder cannot be moved.") }
+            return
+        }
         _uiState.update {
             it.copy(moveDialog = MoveDialogState(
                 targetPath = path,

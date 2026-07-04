@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.provider.OpenableColumns
 import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -62,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +75,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.WorkspaceEntry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Read-only workspace file browser for one chat session. Directory listing and the open-file
@@ -92,23 +98,24 @@ fun WorkspaceScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val openFile = uiState.selectedFile
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // File picker launcher for workspace upload
     val uploadLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
-        try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
-            val bytes = inputStream.readBytes()
-            inputStream.close()
-            val displayName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else uri.lastPathSegment ?: "upload"
-            } ?: uri.lastPathSegment ?: "upload"
-            viewModel.uploadFile(displayName, bytes)
-        } catch (_: Exception) {
-            Toast.makeText(context, "Could not read file.", Toast.LENGTH_SHORT).show()
+        scope.launch {
+            val result = readWorkspaceUploadFile(context, uri)
+            if (result == null) {
+                Toast.makeText(context, "Could not read file.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (result.bytes.size.toLong() > MAX_WORKSPACE_UPLOAD_BYTES) {
+                Toast.makeText(context, "File is too large to upload. Maximum size is 20 MB.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            viewModel.uploadFile(result.name, result.bytes)
         }
     }
 
@@ -1156,3 +1163,37 @@ private fun GitDiffViewer(
         }
     }
 }
+
+/** Max workspace upload size: 20 MB (matches chat attachment limit, server default). */
+private const val MAX_WORKSPACE_UPLOAD_BYTES = 20L * 1024 * 1024
+
+/** Result of reading a workspace upload file off the main thread. */
+private data class WorkspaceUploadResult(val name: String, val bytes: ByteArray)
+
+/** Reads the display name and bytes of a workspace upload file off the main thread. Returns null
+ * on any failure (stream error, security exception, or file over the size limit). */
+private suspend fun readWorkspaceUploadFile(context: Context, uri: Uri): WorkspaceUploadResult? =
+    withContext(Dispatchers.IO) {
+        try {
+            val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst()) cursor.getString(nameIndex) else null
+                } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "upload"
+
+            val knownSize = context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+                ?.use { cursor ->
+                    val sizeIndex = cursor.getColumnIndexOrThrow(OpenableColumns.SIZE)
+                    if (cursor.moveToFirst() && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else null
+                }
+            if (knownSize != null && knownSize > MAX_WORKSPACE_UPLOAD_BYTES) return@withContext null
+
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            val bytes = inputStream.use { it.readBytes() }
+            if (bytes.size.toLong() > MAX_WORKSPACE_UPLOAD_BYTES) return@withContext null
+
+            WorkspaceUploadResult(name, bytes)
+        } catch (_: Exception) {
+            null
+        }
+    }

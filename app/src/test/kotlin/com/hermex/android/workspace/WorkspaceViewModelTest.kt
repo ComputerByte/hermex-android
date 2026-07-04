@@ -1199,5 +1199,99 @@ class WorkspaceViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // ── Folder delete tests ──
+
+    @Test
+    fun `showDeleteFolderDialog opens for folder`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "mydir", path = "mydir", type = "dir")
+            viewModel.showDeleteFolderDialog(entry)
+            assertNotNull(viewModel.uiState.value.deleteDialog)
+            assertTrue(viewModel.uiState.value.deleteDialog!!.isDirectory)
+            assertEquals("mydir", viewModel.uiState.value.deleteDialog?.targetName)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `showDeleteFolderDialog rejects file`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showDeleteFolderDialog(entry)
+            assertNull(viewModel.uiState.value.deleteDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `folder delete requires exact confirmation`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "mydir", path = "mydir", type = "dir")
+            viewModel.showDeleteFolderDialog(entry)
+            assertNotNull(viewModel.uiState.value.deleteDialog)
+            // Wrong confirmation should prevent confirm
+            viewModel.updateDeleteConfirmationText("wrong")
+            assertFalse(viewModel.uiState.value.deleteDialog!!.confirmationTypedCorrectly)
+            viewModel.confirmDeleteFile()
+            // Should show error message, not close dialog
+            assertNotNull(viewModel.uiState.value.deleteDialog?.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `folder delete correct confirmation succeeds`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":"mydir","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "mydir", path = "mydir", type = "dir")
+            viewModel.showDeleteFolderDialog(entry)
+            viewModel.updateDeleteConfirmationText("mydir")
+            assertTrue(viewModel.uiState.value.deleteDialog!!.confirmationTypedCorrectly)
+            viewModel.confirmDeleteFile()
+            val done = awaitUntil { it.deleteDialog == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `delete folder inside current directory refreshes`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "mydir", path = "mydir", type = "dir")
+            viewModel.showDeleteFolderDialog(entry)
+            viewModel.updateDeleteConfirmationText("mydir")
+            viewModel.confirmDeleteFile()
+            val done = awaitUntil { it.deleteDialog == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
 

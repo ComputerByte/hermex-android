@@ -83,13 +83,20 @@ data class RenameDialogState(
     }
 }
 
-/** Dialog state for deleting a file (two-step confirmation). */
+/** Dialog state for deleting a file or folder (two-step confirmation). For folders,
+ * [confirmationText] must match [targetName] to enable the final delete. */
 data class DeleteDialogState(
     val targetPath: String,
     val targetName: String,
+    val isDirectory: Boolean = false,
     val isDeleting: Boolean = false,
     val errorMessage: String? = null,
-)
+    /** For folders, the user must type the exact folder name to confirm. */
+    val confirmationText: String = "",
+) {
+    val confirmationTypedCorrectly: Boolean
+        get() = if (isDirectory) confirmationText.trim() == targetName else true
+}
 
 data class GitState(
     val isGit: Boolean = false,

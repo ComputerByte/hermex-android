@@ -465,8 +465,24 @@ class WorkspaceViewModel(
         // Block protected names
         if (name == ".git" || name == ".github") return
         _uiState.update {
-            it.copy(deleteDialog = DeleteDialogState(targetPath = path, targetName = name))
+            it.copy(deleteDialog = DeleteDialogState(targetPath = path, targetName = name, isDirectory = false))
         }
+    }
+
+    fun showDeleteFolderDialog(entry: WorkspaceEntry) {
+        if (!entry.isBrowsableDirectory) return
+        val path = entry.path ?: return
+        val name = entry.name ?: path.substringAfterLast('/')
+        // Block protected names
+        if (name == ".git" || name == ".github") return
+        _uiState.update {
+            it.copy(deleteDialog = DeleteDialogState(targetPath = path, targetName = name, isDirectory = true))
+        }
+    }
+
+    fun updateDeleteConfirmationText(text: String) {
+        val d = _uiState.value.deleteDialog ?: return
+        _uiState.update { it.copy(deleteDialog = d.copy(confirmationText = text, errorMessage = null)) }
     }
 
     fun dismissDeleteDialog() {
@@ -475,7 +491,19 @@ class WorkspaceViewModel(
 
     fun confirmDeleteFile() {
         val d = _uiState.value.deleteDialog ?: return
+        if (!d.confirmationTypedCorrectly) {
+            _uiState.update { it.copy(deleteDialog = d.copy(errorMessage = "Type the exact name to confirm.")) }
+            return
+        }
         val path = d.targetPath
+        // Check for unsaved changes inside folder (for folder delete)
+        if (d.isDirectory) {
+            val openFile = _uiState.value.selectedFile
+            if (openFile?.path?.startsWith("$path/") == true && openFile.hasUnsavedChanges) {
+                _uiState.update { it.copy(deleteDialog = d.copy(errorMessage = "A file inside this folder has unsaved changes. Save or discard first.")) }
+                return
+            }
+        }
         val api = authRepository.apiForActiveServer()
         if (api == null) {
             _uiState.update { it.copy(deleteDialog = d.copy(errorMessage = "Not signed in.")) }
@@ -491,12 +519,19 @@ class WorkspaceViewModel(
                     _uiState.update { it.copy(deleteDialog = d.copy(isDeleting = false, errorMessage = response.error)) }
                     return@launch
                 }
-                // Success
+                // Success -- compute safe navigation path
+                val currentPath = _uiState.value.currentPath
+                val target = d.targetPath
+                val safePath = when {
+                    // If we're inside or at the deleted folder, navigate to parent
+                    currentPath == target || currentPath.startsWith("$target/") -> parentPathOf(currentPath)
+                    else -> currentPath
+                }
                 _uiState.update { it.copy(deleteDialog = null) }
-                loadDirectory(_uiState.value.currentPath, preserveSearch = true)
-                // If the deleted file was the currently open file, close viewer
+                loadDirectory(safePath, preserveSearch = true)
+                // If the deleted target was the currently open file or inside the deleted folder, close viewer
                 val openFile = _uiState.value.selectedFile
-                if (openFile?.path == path) {
+                if (openFile != null && (openFile.path == target || openFile.path.startsWith("$target/"))) {
                     _uiState.update { it.copy(selectedFile = null) }
                 }
             } catch (e: ApiError) {

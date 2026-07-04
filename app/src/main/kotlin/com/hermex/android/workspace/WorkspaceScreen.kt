@@ -187,7 +187,10 @@ fun WorkspaceScreen(
                             copyToClipboard(context, entry.name ?: entry.path ?: "entry", entry.path ?: "")
                         },
                         onRename = viewModel::showRenameDialog,
-                        onDelete = viewModel::showDeleteFileDialog,
+                        onDelete = { entry ->
+                            if (entry.isFolder) viewModel.showDeleteFolderDialog(entry)
+                            else viewModel.showDeleteFileDialog(entry)
+                        },
                     )
                 }
             }
@@ -220,6 +223,7 @@ fun WorkspaceScreen(
             dialog = dialog,
             onDismiss = viewModel::dismissDeleteDialog,
             onConfirm = viewModel::confirmDeleteFile,
+            onConfirmationTextChange = viewModel::updateDeleteConfirmationText,
         )
     }
 }
@@ -229,14 +233,20 @@ private fun DeleteFileDialog(
     dialog: DeleteDialogState,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    onConfirmationTextChange: ((String) -> Unit)? = null,
 ) {
+    val isFolder = dialog.isDirectory
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete ${dialog.targetName}?") },
+        title = { Text(if (isFolder) "Delete folder ${dialog.targetName}?" else "Delete ${dialog.targetName}?") },
         text = {
             Column {
                 Text(
-                    text = "Are you sure you want to delete \"${dialog.targetName}\"?",
+                    text = if (isFolder) {
+                        "This may delete everything inside \"${dialog.targetName}\" and cannot be undone."
+                    } else {
+                        "Are you sure you want to delete \"${dialog.targetName}\"?"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -245,6 +255,22 @@ private fun DeleteFileDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+                if (isFolder) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "Type \"${dialog.targetName}\" to confirm:",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = dialog.confirmationText,
+                        onValueChange = { onConfirmationTextChange?.invoke(it) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !dialog.isDeleting,
+                        placeholder = { Text(dialog.targetName) },
+                    )
+                }
                 if (dialog.errorMessage != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -258,7 +284,7 @@ private fun DeleteFileDialog(
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                enabled = !dialog.isDeleting,
+                enabled = dialog.confirmationTypedCorrectly && !dialog.isDeleting,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError,
@@ -542,15 +568,13 @@ private fun WorkspaceEntryRow(
                                 onRename()
                             },
                         )
-                        if (!entry.isFolder) {
-                            DropdownMenuItem(
-                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    showMenu = false
-                                    onDelete()
-                                },
-                            )
-                        }
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            },
+                        )
                     }
                 }
             }

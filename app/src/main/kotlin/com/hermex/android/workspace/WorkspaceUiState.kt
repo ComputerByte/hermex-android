@@ -136,6 +136,18 @@ data class GitState(
     val errorMessage: String? = null,
     /** A file currently being viewed as a diff. Non-null means the diff viewer is open. */
     val selectedDiff: DiffViewState? = null,
+    /** All branches for the current repo, read-only. Empty for non-git or if not yet loaded. */
+    val branches: List<GitBranchUi> = emptyList(),
+    /** True while the branches list is loading. */
+    val isBranchesLoading: Boolean = false,
+)
+
+/** Read-only branch display model. */
+data class GitBranchUi(
+    val name: String,
+    val isCurrent: Boolean = false,
+    val ahead: Int = 0,
+    val behind: Int = 0,
 )
 
 data class DiffViewState(

@@ -117,6 +117,13 @@ fun WorkspaceScreen(
         viewModel.loadGitStatus(uiState.currentPath)
     }
 
+    // Load branches when git is confirmed
+    LaunchedEffect(uiState.gitState?.isGit, uiState.currentPath) {
+        if (uiState.gitState?.isGit == true) {
+            viewModel.loadGitBranches(uiState.currentPath)
+        }
+    }
+
     // Show upload messages as Toast and clear
     LaunchedEffect(uiState.uploadMessage) {
         val msg = uiState.uploadMessage ?: return@LaunchedEffect
@@ -949,7 +956,7 @@ private fun GitStatusCard(
                 }
 
                 else -> {
-                    // Not a git repo or repo with no changes
+                    // Not a git repo or repo with changes
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Git",
@@ -982,6 +989,47 @@ private fun GitStatusCard(
                     }
 
                     if (gitState.isGit) {
+                        // Branches (read-only)
+                        if (gitState.branches.isNotEmpty()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text("Branches", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            gitState.branches.forEach { branch ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                                ) {
+                                    Text(
+                                        text = if (branch.isCurrent) "●" else "○",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (branch.isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = branch.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = if (branch.isCurrent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (branch.ahead > 0 || branch.behind > 0) {
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "+${branch.ahead}/-${branch.behind}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (gitState.isBranchesLoading) {
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Loading branches...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
                         if (gitState.changedFileCount > 0) {
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -991,6 +1039,14 @@ private fun GitStatusCard(
                             )
                             Spacer(Modifier.height(4.dp))
                             gitState.files.forEach { file ->
+                                val statusLabel = when (file.status) {
+                                    "M" -> "modified"
+                                    "A" -> "added"
+                                    "D" -> "deleted"
+                                    "?" -> "untracked"
+                                    "R" -> "renamed"
+                                    else -> file.status ?: "?"
+                                }
                                 val statusColor = when (file.status) {
                                     "M" -> MaterialTheme.colorScheme.primary
                                     "A" -> MaterialTheme.colorScheme.tertiary
@@ -1006,8 +1062,8 @@ private fun GitStatusCard(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = "[${file.status ?: "?"}]",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        text = statusLabel,
+                                        style = MaterialTheme.typography.labelSmall,
                                         fontFamily = FontFamily.Monospace,
                                         color = statusColor,
                                     )

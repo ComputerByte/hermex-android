@@ -97,6 +97,8 @@ class WorkspaceViewModel(
                         files = status.files.orEmpty(),
                         isLoading = false,
                         errorMessage = response.error ?: status.error,
+                        branches = it.gitState?.branches ?: emptyList(),
+                        isBranchesLoading = it.gitState?.isBranchesLoading ?: false,
                     ))
                 }
             } catch (_: Exception) {
@@ -135,6 +137,41 @@ class WorkspaceViewModel(
 
     fun closeGitDiff() {
         _uiState.update { state -> state.copy(gitState = state.gitState?.copy(selectedDiff = null)) }
+    }
+
+    fun loadGitBranches(path: String? = null) {
+        val api = authRepository.apiForActiveServer()
+        if (api == null) return
+        _uiState.update { state ->
+            state.copy(gitState = state.gitState?.copy(isBranchesLoading = true))
+        }
+        viewModelScope.launch {
+            try {
+                val wrapped = safeApiCall { api.gitBranches(sessionId, path) }
+                val response = wrapped.branches
+                if (response?.branches != null) {
+                    val branches = response.branches.map { b ->
+                        GitBranchUi(
+                            name = b.name ?: "",
+                            isCurrent = b.current == true,
+                            ahead = b.ahead ?: 0,
+                            behind = b.behind ?: 0,
+                        )
+                    }
+                    _uiState.update { state ->
+                        state.copy(gitState = state.gitState?.copy(branches = branches, isBranchesLoading = false))
+                    }
+                } else {
+                    _uiState.update { state ->
+                        state.copy(gitState = state.gitState?.copy(isBranchesLoading = false))
+                    }
+                }
+            } catch (_: Exception) {
+                _uiState.update { state ->
+                    state.copy(gitState = state.gitState?.copy(isBranchesLoading = false))
+                }
+            }
+        }
     }
 
     private fun loadDirectory(path: String, preserveSearch: Boolean = false) {

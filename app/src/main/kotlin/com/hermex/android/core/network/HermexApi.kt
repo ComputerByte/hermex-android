@@ -250,5 +250,6 @@ interface HermexApi {
     @GET("/api/git/branches")
     suspend fun gitBranches(
         @Query("session_id") sessionId: String,
+        @Query("path") path: String? = null,
     ): GitBranchesWrapper
 }

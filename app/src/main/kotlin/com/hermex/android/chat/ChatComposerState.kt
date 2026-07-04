@@ -15,6 +15,7 @@ data class ChatComposerState(
     val isStreaming: Boolean,
     val isSwitchingProfile: Boolean,
     val isUpdatingComposerConfiguration: Boolean,
+    val isUploadingAttachment: Boolean,
 ) {
     /** Matches the pre-existing `OutlinedTextField(enabled = !isSending && !isStreaming)` check. */
     val isTextFieldEnabled: Boolean get() = !isSending && !isStreaming
@@ -44,11 +45,16 @@ data class ChatComposerState(
     val isProfileSelectorLoading: Boolean get() = isSwitchingProfile
     val isModelSelectorLoading: Boolean get() = isUpdatingComposerConfiguration
 
-    /** True while any single composer-affecting operation is in flight. Not consumed by any UI
-     * yet in this phase -- exposed for later phases (attachments, slash commands) to gate against
-     * without re-deriving this list of flags themselves. */
+    /** True while any single composer-affecting operation is in flight, including uploading an
+     * attachment. Not consumed by any UI yet in this phase -- exposed for later phases (slash
+     * commands) to gate against without re-deriving this list of flags themselves. */
     val isComposerBusy: Boolean
-        get() = isSending || isStreaming || isSwitchingProfile || isUpdatingComposerConfiguration
+        get() = isSending || isStreaming || isSwitchingProfile || isUpdatingComposerConfiguration || isUploadingAttachment
+
+    /** Gates the composer's attach button specifically -- disabled while sending, streaming, or
+     * already uploading another attachment. Deliberately narrower than [isComposerBusy]: a
+     * profile/model switch in progress doesn't need to block attaching a file. */
+    val isAttachButtonEnabled: Boolean get() = !isSending && !isStreaming && !isUploadingAttachment
 
     companion object {
         fun from(uiState: ChatUiState): ChatComposerState = ChatComposerState(
@@ -57,6 +63,7 @@ data class ChatComposerState(
             isStreaming = uiState.isStreaming,
             isSwitchingProfile = uiState.isSwitchingProfile,
             isUpdatingComposerConfiguration = uiState.isUpdatingComposerConfiguration,
+            isUploadingAttachment = uiState.isUploadingAttachment,
         )
     }
 }

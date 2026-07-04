@@ -12,6 +12,7 @@ class ChatComposerStateTest {
         isStreaming = false,
         isSwitchingProfile = false,
         isUpdatingComposerConfiguration = false,
+        isUploadingAttachment = false,
     )
 
     @Test
@@ -63,6 +64,18 @@ class ChatComposerStateTest {
         assertTrue(idle().copy(isStreaming = true).isComposerBusy)
         assertTrue(idle().copy(isSwitchingProfile = true).isComposerBusy)
         assertTrue(idle().copy(isUpdatingComposerConfiguration = true).isComposerBusy)
+        assertTrue(idle().copy(isUploadingAttachment = true).isComposerBusy)
+    }
+
+    @Test
+    fun `isAttachButtonEnabled is disabled by sending, streaming, or uploading, but not by profile or model switches`() {
+        assertTrue(idle().isAttachButtonEnabled)
+        assertFalse(idle().copy(isSending = true).isAttachButtonEnabled)
+        assertFalse(idle().copy(isStreaming = true).isAttachButtonEnabled)
+        assertFalse(idle().copy(isUploadingAttachment = true).isAttachButtonEnabled)
+        // Deliberately still enabled -- narrower than isComposerBusy.
+        assertTrue(idle().copy(isSwitchingProfile = true).isAttachButtonEnabled)
+        assertTrue(idle().copy(isUpdatingComposerConfiguration = true).isAttachButtonEnabled)
     }
 
     @Test
@@ -111,6 +124,7 @@ class ChatComposerStateTest {
             isStreaming = false,
             isSwitchingProfile = true,
             isUpdatingComposerConfiguration = false,
+            isUploadingAttachment = true,
         )
 
         val composerState = ChatComposerState.from(uiState)
@@ -120,5 +134,6 @@ class ChatComposerStateTest {
         assertFalse(composerState.isStreaming)
         assertTrue(composerState.isSwitchingProfile)
         assertFalse(composerState.isUpdatingComposerConfiguration)
+        assertTrue(composerState.isUploadingAttachment)
     }
 }

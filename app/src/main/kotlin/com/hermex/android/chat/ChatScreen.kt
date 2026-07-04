@@ -90,6 +90,7 @@ fun ChatScreen(
                 composerState = ChatComposerState.from(uiState),
                 profileSelectorState = ChatComposerProfileSelectorState.from(uiState),
                 modelSelectorState = ChatComposerModelSelectorState.from(uiState),
+                attachmentState = ChatComposerAttachmentState.from(uiState),
                 actions = ChatComposerActions(
                     onTextChanged = viewModel::onComposerTextChanged,
                     onSend = viewModel::sendMessage,
@@ -97,6 +98,8 @@ fun ChatScreen(
                     onSelectProfile = viewModel::selectProfile,
                     onOpenModelPicker = viewModel::refreshModelCatalogForPickerOpen,
                     onSelectModel = viewModel::selectComposerModel,
+                    onAttachFile = viewModel::uploadAttachment,
+                    onRemoveAttachment = viewModel::removePendingAttachment,
                 ),
             )
         },

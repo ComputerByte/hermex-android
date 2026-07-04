@@ -1,5 +1,6 @@
 package com.hermex.android.chat
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
@@ -34,6 +35,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val OFFLINE_CACHE_MESSAGE = "Unable to reach server -- showing cached conversation"
 
@@ -41,7 +45,7 @@ private const val OFFLINE_CACHE_MESSAGE = "Unable to reach server -- showing cac
  * Drives one chat session: loads recent history, sends a message, opens the SSE stream for the
  * reply, and folds each [SseEvent] into [ChatUiState] as it arrives. Mirrors iOS's
  * `ChatViewModel` streaming state machine, minus reconnect-with-replay (explicitly deferred --
- * see API_CONTRACT.md) and the attachment features out of MVP scope.
+ * see API_CONTRACT.md).
  *
  * TODO(v0.3.0 audit): steer-while-running and approval/clarification are NOT implemented. Neither
  * has a documented endpoint or SSE event shape in API_CONTRACT.md, and [SseEventParser] doesn't
@@ -55,6 +59,10 @@ class ChatViewModel(
     private val sseClient: SseStreamSource,
     private val chatPreferencesStore: ChatPreferencesStore,
     private val offlineCacheRepository: OfflineCacheRepository = NoOpOfflineCacheRepository,
+    /** Defaults to an always-fails stub so every existing test/call site that doesn't care about
+     * attachments keeps compiling unchanged -- see [AttachmentFileReader]'s doc for why real Uri
+     * construction isn't available in this project's plain JVM unit tests anyway. */
+    private val attachmentFileReader: AttachmentFileReader = AttachmentFileReader { AttachmentReadResult.Unreadable },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -270,6 +278,74 @@ class ChatViewModel(
      * list already changed) -- safe to call unconditionally. */
     fun removePendingAttachment(id: String) {
         _uiState.update { it.copy(pendingAttachments = it.pendingAttachments.filterNot { attachment -> attachment.id == id }) }
+    }
+
+    /** The composer's real attach-button entry point: reads [uri] via [attachmentFileReader], then
+     * uploads it through [performAttachmentUpload]. One upload at a time is enough for this MVP --
+     * a second tap while one is already in flight is a no-op rather than queued. No-ops with a
+     * "reconnect" error instead of calling the server at all when showing cached data offline,
+     * matching [cancelStream]'s and [selectComposerModel]'s existing pattern. */
+    fun uploadAttachment(uri: Uri) {
+        val state = _uiState.value
+        if (state.isUploadingAttachment) return
+        if (state.isShowingCachedData) {
+            _uiState.update { it.copy(errorMessage = "Reconnect to the server to upload attachments.") }
+            return
+        }
+        if (authRepository.apiForActiveServer() == null) {
+            _uiState.update { it.copy(errorMessage = "Not signed in.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploadingAttachment = true, errorMessage = null) }
+            when (val result = attachmentFileReader.read(uri)) {
+                is AttachmentReadResult.TooLarge -> _uiState.update {
+                    it.copy(
+                        isUploadingAttachment = false,
+                        errorMessage = "${result.name} is too large. Attachments must be 20 MB or smaller.",
+                    )
+                }
+                AttachmentReadResult.Unreadable -> _uiState.update {
+                    it.copy(isUploadingAttachment = false, errorMessage = "Could not read the selected file.")
+                }
+                is AttachmentReadResult.Success -> performAttachmentUpload(result.file)
+            }
+        }
+    }
+
+    /** The actual `/api/upload` call and the state fold-in -- split out from [uploadAttachment] so
+     * tests can exercise this network/state logic directly with a plain [AttachmentFile], without
+     * ever needing a real `android.net.Uri` (see [AttachmentFileReader]'s doc). `internal` rather
+     * than `private` for exactly that reason. Sets [ChatUiState.isUploadingAttachment] itself
+     * (redundantly true if [uploadAttachment] already set it while reading the file) so it's
+     * fully self-contained for a test calling it directly. */
+    internal suspend fun performAttachmentUpload(file: AttachmentFile) {
+        _uiState.update { it.copy(isUploadingAttachment = true, errorMessage = null) }
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(isUploadingAttachment = false, errorMessage = "Not signed in.") }
+            return
+        }
+        try {
+            val response = safeApiCall {
+                api.uploadAttachment(
+                    sessionId = sessionId.toRequestBody(),
+                    file = MultipartBody.Part.createFormData(
+                        "file",
+                        file.name,
+                        file.bytes.toRequestBody((file.mime ?: "application/octet-stream").toMediaTypeOrNull()),
+                    ),
+                )
+            }
+            // Fold the response into pendingAttachments/errorMessage *before* clearing the busy
+            // flag -- these are two separate _uiState.update calls, and a collector watching for
+            // "upload settled" (isUploadingAttachment turning false) must never observe that
+            // ahead of the attachment it was actually waiting on actually showing up.
+            addUploadedAttachment(response)
+            _uiState.update { it.copy(isUploadingAttachment = false) }
+        } catch (e: ApiError) {
+            _uiState.update { it.copy(isUploadingAttachment = false, errorMessage = e.message ?: "Could not upload the attachment.") }
+        }
     }
 
     /** Picking a profile from the composer selector. An empty transcript just switches the

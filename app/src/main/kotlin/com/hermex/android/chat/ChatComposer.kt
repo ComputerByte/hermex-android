@@ -1,13 +1,22 @@
 package com.hermex.android.chat
 
+import android.net.Uri
+import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
@@ -28,13 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ProfileSummary
 
-/** [ChatComposer]'s callbacks, grouped so adding a future action (attachments, slash commands)
- * doesn't widen [ChatComposer]'s own parameter list. */
+/** [ChatComposer]'s callbacks, grouped so adding a future action (slash commands) doesn't widen
+ * [ChatComposer]'s own parameter list. */
 data class ChatComposerActions(
     val onTextChanged: (String) -> Unit,
     val onSend: () -> Unit,
@@ -42,6 +53,8 @@ data class ChatComposerActions(
     val onSelectProfile: (String) -> Unit,
     val onOpenModelPicker: () -> Unit,
     val onSelectModel: (ModelCatalogOption) -> Unit,
+    val onAttachFile: (Uri) -> Unit,
+    val onRemoveAttachment: (String) -> Unit,
 )
 
 /** The profile dropdown's own list/selection data -- separate from [ChatComposerState] because
@@ -76,11 +89,24 @@ data class ChatComposerModelSelectorState(
     }
 }
 
+/** The pending-attachment strip's own list data -- separate from [ChatComposerState] for the same
+ * reason as [ChatComposerProfileSelectorState]: it's plain display data, not busy/disabled state. */
+data class ChatComposerAttachmentState(
+    val pendingAttachments: List<PendingAttachmentUi>,
+) {
+    companion object {
+        fun from(uiState: ChatUiState): ChatComposerAttachmentState = ChatComposerAttachmentState(
+            pendingAttachments = uiState.pendingAttachments,
+        )
+    }
+}
+
 @Composable
 fun ChatComposer(
     composerState: ChatComposerState,
     profileSelectorState: ChatComposerProfileSelectorState,
     modelSelectorState: ChatComposerModelSelectorState,
+    attachmentState: ChatComposerAttachmentState,
     actions: ChatComposerActions,
     modifier: Modifier = Modifier,
 ) {
@@ -95,42 +121,125 @@ fun ChatComposer(
         modifier = modifier.navigationBarsPadding(),
         tonalElevation = 2.dp,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ProfileSelectorButton(
-                profileOptions = profileSelectorState.profileOptions,
-                selectedProfileName = profileSelectorState.selectedProfileName,
-                isSwitchingProfile = composerState.isProfileSelectorLoading,
-                onSelectProfile = actions.onSelectProfile,
-            )
-            ModelSelectorButton(
-                modelCatalogGroups = modelSelectorState.modelCatalogGroups,
-                currentModel = modelSelectorState.currentModel,
-                currentModelProvider = modelSelectorState.currentModelProvider,
-                isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
-                isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
-                onOpenModelPicker = actions.onOpenModelPicker,
-                onSelectModel = actions.onSelectModel,
-            )
-            OutlinedTextField(
-                value = composerState.text,
-                onValueChange = actions.onTextChanged,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Message") },
-                enabled = composerState.isTextFieldEnabled,
-                maxLines = 5,
-            )
-            when {
-                composerState.showStopButton -> IconButton(onClick = actions.onStop) {
-                    Icon(Icons.Filled.Close, contentDescription = "Stop")
+        Column {
+            if (attachmentState.pendingAttachments.isNotEmpty()) {
+                PendingAttachmentStrip(
+                    attachments = attachmentState.pendingAttachments,
+                    onRemove = actions.onRemoveAttachment,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AttachFileButton(
+                    enabled = composerState.isAttachButtonEnabled,
+                    isUploading = composerState.isUploadingAttachment,
+                    onAttachFile = actions.onAttachFile,
+                )
+                ProfileSelectorButton(
+                    profileOptions = profileSelectorState.profileOptions,
+                    selectedProfileName = profileSelectorState.selectedProfileName,
+                    isSwitchingProfile = composerState.isProfileSelectorLoading,
+                    onSelectProfile = actions.onSelectProfile,
+                )
+                ModelSelectorButton(
+                    modelCatalogGroups = modelSelectorState.modelCatalogGroups,
+                    currentModel = modelSelectorState.currentModel,
+                    currentModelProvider = modelSelectorState.currentModelProvider,
+                    isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
+                    isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
+                    onOpenModelPicker = actions.onOpenModelPicker,
+                    onSelectModel = actions.onSelectModel,
+                )
+                OutlinedTextField(
+                    value = composerState.text,
+                    onValueChange = actions.onTextChanged,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Message") },
+                    enabled = composerState.isTextFieldEnabled,
+                    maxLines = 5,
+                )
+                when {
+                    composerState.showStopButton -> IconButton(onClick = actions.onStop) {
+                        Icon(Icons.Filled.Close, contentDescription = "Stop")
+                    }
+                    composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    else -> IconButton(onClick = actions.onSend, enabled = composerState.canSend) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    }
                 }
-                composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                else -> IconButton(onClick = actions.onSend, enabled = composerState.canSend) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+            }
+        }
+    }
+}
+
+/** No paperclip icon ships in `material-icons-core` (only `material-icons-extended` has one, and
+ * adding that dependency purely for one icon isn't worth it) -- `Add` is the closest already-
+ * available icon and is what the MVP spec explicitly allows as a fallback. Opens the system
+ * document picker (Storage Access Framework), so no storage permission is needed: the picker
+ * itself grants this app read access to whatever the user selects. */
+@Composable
+private fun AttachFileButton(
+    enabled: Boolean,
+    isUploading: Boolean,
+    onAttachFile: (Uri) -> Unit,
+) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(onAttachFile)
+    }
+
+    if (isUploading) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        return
+    }
+
+    IconButton(onClick = { launcher.launch(arrayOf("*/*")) }, enabled = enabled) {
+        Icon(Icons.Filled.Add, contentDescription = "Attach file")
+    }
+}
+
+@Composable
+private fun PendingAttachmentStrip(
+    attachments: List<PendingAttachmentUi>,
+    onRemove: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(attachments, key = { it.id }) { attachment ->
+            Surface(
+                tonalElevation = 4.dp,
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            text = attachment.name ?: "attachment",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        attachment.size?.let { size ->
+                            Text(
+                                text = Formatter.formatShortFileSize(context, size),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    IconButton(onClick = { onRemove(attachment.id) }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove ${attachment.name ?: "attachment"}", modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }

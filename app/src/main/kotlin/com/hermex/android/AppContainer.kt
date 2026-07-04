@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.chat.ChatViewModel
+import com.hermex.android.chat.ContentResolverAttachmentReader
 import com.hermex.android.core.appicon.AppIconSwitcher
 import com.hermex.android.core.appicon.PackageManagerAppIconAliasWriter
 import com.hermex.android.core.cache.HermexDatabase
@@ -54,6 +55,10 @@ class AppContainer(context: Context) {
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
     private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
+    // Stored (rather than referencing the constructor's `context` param directly) so it's usable
+    // from a regular member function like chatViewModelFactory -- an unstored constructor
+    // parameter is only visible inside property initializers/init blocks, not later methods.
+    private val contentResolver = context.contentResolver
 
     // Structured, queryable offline cache (session lists + chat/message history) -- distinct
     // from the DataStore-backed stores above, which are for small preference values, not this
@@ -100,7 +105,16 @@ class AppContainer(context: Context) {
     }
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {
-        initializer { ChatViewModel(sessionId, authRepository, sseClient, chatPreferencesStore, offlineCacheRepository) }
+        initializer {
+            ChatViewModel(
+                sessionId,
+                authRepository,
+                sseClient,
+                chatPreferencesStore,
+                offlineCacheRepository,
+                ContentResolverAttachmentReader(contentResolver),
+            )
+        }
     }
 
     fun skillsViewModelFactory() = viewModelFactory {

@@ -23,6 +23,7 @@ import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
 import com.hermex.android.core.storage.DataStoreCustomHeadersStore
 import com.hermex.android.core.storage.DataStoreServerStore
+import com.hermex.android.core.storage.EncryptedCookieStore
 import com.hermex.android.core.storage.InMemoryCookieStore
 import com.hermex.android.core.storage.NoOpCustomHeadersStore
 import com.hermex.android.insights.InsightsViewModel
@@ -126,7 +127,7 @@ class AppContainer(context: Context) {
     val authRepository: AuthRepository = AuthRepository(
         networkModule = networkModule,
         serverStore = serverStore,
-        cookieStoreFactory = { serverId -> DataStoreCookieStore(context, serverId) },
+        cookieStoreFactory = { serverId -> EncryptedCookieStore(context, serverId, DataStoreCookieStore(context, serverId)) },
         customHeadersStoreFactory = { serverId -> DataStoreCustomHeadersStore(context, serverId) },
         onServerForgotten = { serverId -> offlineCacheRepository.clearServer(serverId) },
     ).also { authRepositoryRef = it }

@@ -80,6 +80,7 @@ dependencies {
 
     // Local storage
     implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // Offline cache -- Room, for structured/queryable local data (session lists, message
     // history) that DataStore's key-value model isn't suited for.

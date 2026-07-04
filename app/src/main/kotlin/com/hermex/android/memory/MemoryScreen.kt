@@ -22,12 +22,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.chat.MarkdownText
 import com.hermex.android.sessions.relativeTimeText
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,16 +63,21 @@ fun MemoryScreen(
             )
         },
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            if (uiState.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding),
+    ) {
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            PullToRefreshBox(
+                isRefreshing = uiState.isLoading,
+                onRefresh = viewModel::load,
+                modifier = Modifier.fillMaxSize(),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -98,6 +105,7 @@ fun MemoryScreen(
         }
     }
 }
+}
 
 @Composable
 private fun MemorySection(
@@ -121,10 +129,18 @@ private fun MemorySection(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            text = section?.content?.takeIf { it.isNotBlank() } ?: "No content.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (section?.content.isNullOrBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-        )
+        val sectionContent = section?.content?.takeIf { it.isNotBlank() } ?: "No content."
+        if (sectionContent == "No content." || section?.content == null) {
+            Text(
+                text = "No content.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            MarkdownText(
+                markdown = sectionContent,
+                textColor = MaterialTheme.colorScheme.onSurface,
+            )
+        }
     }
 }

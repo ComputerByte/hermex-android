@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -18,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -49,6 +51,11 @@ fun TasksScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { viewModel.load() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -73,11 +80,17 @@ fun TasksScreen(
                     )
                 }
 
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                else -> PullToRefreshBox(
+                    isRefreshing = uiState.isLoading,
+                    onRefresh = viewModel::load,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(uiState.jobs, key = { it.jobId ?: it.hashCode() }) { job ->
                         TaskRow(job = job, onClick = { job.jobId?.let(onOpenTask) })
                     }
                 }
+            }
             }
 
             uiState.errorMessage?.let { message ->

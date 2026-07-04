@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.chat.MarkdownText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,10 +69,10 @@ fun SkillDetailScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                 ) {
-                    // Raw text, no markdown rendering -- consistent with the rest of this MVP's scope.
-                    Text(
-                        text = uiState.content ?: "No content.",
-                        style = MaterialTheme.typography.bodyMedium,
+                    // Markdown rendering via MarkdownText (reuses v0.7.9 composable).
+                    MarkdownText(
+                        markdown = uiState.content ?: "No content.",
+                        textColor = MaterialTheme.colorScheme.onSurface,
                     )
                     if (uiState.linkedFiles.isNotEmpty()) {
                         Spacer(Modifier.height(24.dp))

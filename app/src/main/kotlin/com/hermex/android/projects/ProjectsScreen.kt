@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,7 +92,7 @@ fun ProjectsScreen(
         AlertDialog(
             onDismissRequest = { deleteCandidate = null },
             title = { Text("Delete project?") },
-            text = { Text("\"${project.displayName}\" will be permanently deleted. Sessions in it are not deleted.") },
+            text = { Text("Delete \"${project.displayName}\"? This cannot be undone. Sessions in it are not deleted.") },
             confirmButton = {
                 TextButton(onClick = {
                     deleteCandidate = null
@@ -142,6 +143,14 @@ fun ProjectsScreen(
                     CircularProgressIndicator()
                 }
 
+                uiState.errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(uiState.errorMessage ?: "", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = viewModel::load) { Text("Retry") }
+                    }
+                }
+
                 uiState.projects.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         "No projects yet. Tap + to create one.",
@@ -149,7 +158,12 @@ fun ProjectsScreen(
                     )
                 }
 
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                else -> PullToRefreshBox(
+                    isRefreshing = uiState.isLoading,
+                    onRefresh = viewModel::load,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(uiState.projects, key = { it.projectId ?: it.hashCode() }) { project ->
                         ProjectRow(
                             project = project,
@@ -159,15 +173,18 @@ fun ProjectsScreen(
                     }
                 }
             }
+            }
 
             uiState.errorMessage?.let { message ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 8.dp),
-                    contentAlignment = Alignment.BottomCenter,
-                ) {
-                    Text(text = message, color = MaterialTheme.colorScheme.error)
+                if (uiState.projects.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Text(text = message, color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }

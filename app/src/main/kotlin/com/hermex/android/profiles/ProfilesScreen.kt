@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -73,14 +74,19 @@ fun ProfilesScreen(
                     CircularProgressIndicator()
                 }
 
-                uiState.profiles.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                uiState.profiles.isEmpty() && uiState.filteredProfiles.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         "No profiles configured on this server.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                else -> PullToRefreshBox(
+                    isRefreshing = uiState.isLoading,
+                    onRefresh = viewModel::load,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item(key = "search") {
                         OutlinedTextField(
                             value = uiState.searchQuery,
@@ -116,6 +122,7 @@ fun ProfilesScreen(
                         )
                     }
                 }
+            }
             }
 
             uiState.errorMessage?.let { message ->

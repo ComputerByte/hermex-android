@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.chat.MarkdownText
 import com.hermex.android.core.network.dto.CronJobStatus
 import com.hermex.android.sessions.relativeTimeText
 
@@ -143,7 +144,7 @@ fun TaskDetailScreen(
                         DetailField(label = "Schedule", value = schedule)
                     }
                     job.prompt?.takeIf { it.isNotBlank() }?.let { prompt ->
-                        DetailField(label = "Prompt", value = prompt)
+                        DetailFieldMarkdown(label = "Prompt", value = prompt)
                     }
                     job.lastRunAt?.let { lastRunAt ->
                         DetailField(label = "Last run", value = relativeTimeText(lastRunAt))
@@ -173,11 +174,19 @@ fun TaskDetailScreen(
                                 output.filename?.let {
                                     Text(it, style = MaterialTheme.typography.labelMedium)
                                 }
-                                Text(
-                                    text = output.content?.takeIf { it.isNotBlank() } ?: "No content.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                val outputContent = output.content?.takeIf { it.isNotBlank() } ?: "No content."
+                                if (outputContent == "No content.") {
+                                    Text(
+                                        text = "No content.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    MarkdownText(
+                                        markdown = outputContent,
+                                        textColor = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
                             }
                             Spacer(Modifier.height(8.dp))
                         }
@@ -213,5 +222,23 @@ private fun DetailField(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(text = value, style = MaterialTheme.typography.bodyMedium, color = valueColor)
+    }
+}
+
+/** Markdown-aware version of [DetailField] — renders [value] via [MarkdownText] instead of plain
+ * [Text], so prompts and other formatted content preserve bold/code/lists etc. */
+@Composable
+private fun DetailFieldMarkdown(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.padding(bottom = 16.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        MarkdownText(markdown = value, textColor = MaterialTheme.colorScheme.onSurface)
     }
 }

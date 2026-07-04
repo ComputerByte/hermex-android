@@ -75,6 +75,7 @@ class WorkspaceViewModel(
     fun loadGitStatus(path: String? = null) {
         val api = authRepository.apiForActiveServer()
         if (api == null) return
+        _uiState.update { it.copy(gitState = GitState(isLoading = true)) }
         viewModelScope.launch {
             try {
                 val response = safeApiCall { api.gitStatus(sessionId, path) }
@@ -93,7 +94,7 @@ class WorkspaceViewModel(
                     ))
                 }
             } catch (_: Exception) {
-                // Git status is optional; silently return without state change.
+                _uiState.update { it.copy(gitState = GitState(isLoading = false, errorMessage = "Could not load git status.")) }
             }
         }
     }
@@ -355,7 +356,7 @@ class WorkspaceViewModel(
         val d = _uiState.value.createDialog ?: return
         val name = d.name.trim()
         if (!d.isValid) {
-            _uiState.update { it.copy(createDialog = d.copy(errorMessage = "Invalid name.")) }
+            _uiState.update { it.copy(createDialog = d.copy(errorMessage = d.getValidationError())) }
             return
         }
         val path = if (_uiState.value.currentPath == WORKSPACE_ROOT_PATH) name else "${_uiState.value.currentPath}/$name"

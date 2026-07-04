@@ -39,15 +39,17 @@ data class CreateDialogState(
     val errorMessage: String? = null,
 ) {
     val isValid: Boolean
-        get() {
-            val trimmed = name.trim()
-            if (trimmed.isEmpty()) return false
-            if (trimmed.contains("/") || trimmed.contains("\\")) return false
-            if (trimmed == "." || trimmed == "..") return false
-            if (trimmed.startsWith("..")) return false
-            if (trimmed == ".git") return false
-            return true
-        }
+        get() = getValidationError() == null
+
+    fun getValidationError(): String? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return "Name cannot be empty."
+        if (trimmed.contains("/") || trimmed.contains("\\")) return "Name cannot contain '/' or '\\'."
+        if (trimmed == "." || trimmed == "..") return "Name cannot be '.' or '..'."
+        if (trimmed.startsWith("..")) return "Name cannot start with '..'."
+        if (trimmed == ".git") return "Name '.git' is reserved."
+        return null
+    }
 }
 
 enum class CreateMode { FILE, FOLDER }

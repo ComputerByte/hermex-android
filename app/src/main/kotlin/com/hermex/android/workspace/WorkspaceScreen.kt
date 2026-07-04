@@ -693,16 +693,47 @@ private fun GitStatusCard(
                             )
                             Spacer(Modifier.height(4.dp))
                             gitState.files.forEach { file ->
-                                Text(
-                                    text = "[${file.status ?: "?"}] ${file.path ?: "(unknown)"}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                val statusColor = when (file.status) {
+                                    "M" -> MaterialTheme.colorScheme.primary
+                                    "A" -> MaterialTheme.colorScheme.tertiary
+                                    "D" -> MaterialTheme.colorScheme.error
+                                    "?" -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onOpenDiff(file) }
                                         .padding(vertical = 2.dp, horizontal = 4.dp),
-                                )
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = "[${file.status ?: "?"}]",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = statusColor,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = file.path ?: "(unknown)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if ((file.additions ?: 0) > 0 || (file.deletions ?: 0) > 0) {
+                                        val adds = file.additions ?: 0
+                                        val dels = file.deletions ?: 0
+                                        Text(
+                                            text = "+$adds/-$dels",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = if (adds > dels) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
                             }
                         } else {
                             Spacer(Modifier.height(4.dp))

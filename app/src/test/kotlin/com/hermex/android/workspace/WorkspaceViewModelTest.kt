@@ -598,7 +598,7 @@ class WorkspaceViewModelTest {
             awaitUntil { !it.isLoading }
             // Load git status explicitly
             viewModel.loadGitStatus()
-            val state = awaitUntil { it.gitState != null }
+            val state = awaitUntil { it.gitState?.isLoading == false }
             val git = state.gitState!!
             assertTrue(git.isGit)
             assertEquals("main", git.branch)
@@ -622,7 +622,7 @@ class WorkspaceViewModelTest {
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             viewModel.loadGitStatus()
-            val state = awaitUntil { it.gitState != null }
+            val state = awaitUntil { it.gitState?.isLoading == false }
             assertFalse(state.gitState!!.isGit)
             assertNull(state.gitState!!.errorMessage)
             cancelAndIgnoreRemainingEvents()
@@ -630,17 +630,18 @@ class WorkspaceViewModelTest {
     }
 
     @Test
-    fun `loadGitStatus missing endpoint does not crash or change state`() = runTest {
+    fun `loadGitStatus server error shows error state`() = runTest {
         val repo = loggedInRepository()
-        // Only enqueue directory response; git request will 404 silently
         server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"server error"}"""))
 
         val viewModel = WorkspaceViewModel("s1", repo)
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             viewModel.loadGitStatus()
-            // Should silently return without setting gitState
-            assertNull(viewModel.uiState.value.gitState)
+            // Should show error state, not crash
+            val state = awaitUntil { it.gitState?.isLoading == false }
+            assertNotNull(state.gitState?.errorMessage)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -668,7 +669,7 @@ class WorkspaceViewModelTest {
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             viewModel.loadGitStatus()
-            val state = awaitUntil { it.gitState != null }
+            val state = awaitUntil { it.gitState?.isLoading == false }
             viewModel.openGitDiff(state.gitState!!.files.first())
             val diffState = awaitUntil { it.gitState?.selectedDiff?.isLoading == false }
             assertFalse(diffState.gitState!!.selectedDiff!!.binary)
@@ -688,7 +689,7 @@ class WorkspaceViewModelTest {
         viewModel.uiState.test {
             awaitUntil { !it.isLoading }
             viewModel.loadGitStatus()
-            val state = awaitUntil { it.gitState != null }
+            val state = awaitUntil { it.gitState?.isLoading == false }
             viewModel.openGitDiff(state.gitState!!.files.first())
             awaitUntil { it.gitState?.selectedDiff != null }
             viewModel.closeGitDiff()

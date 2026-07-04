@@ -61,14 +61,28 @@ import kotlinx.coroutines.flow.StateFlow
 private object Routes {
     const val ONBOARDING = "onboarding"
     const val SESSION_LIST = "sessionList"
-    const val CHAT_PATTERN = "chat/{sessionId}?draft={draft}"
-    fun chat(sessionId: String, draft: String? = null): String {
+    const val CHAT_PATTERN = "chat/{sessionId}?draft={draft}&uploadUri={uploadUri}"
+    fun chat(sessionId: String, draft: String? = null, uploadUri: String? = null): String {
         val encodedSessionId = URLEncoder.encode(sessionId, "UTF-8")
-        val encodedDraft = draft?.takeIf { it.isNotBlank() }?.let { URLEncoder.encode(it, "UTF-8") }
-        return if (encodedDraft == null) "chat/$encodedSessionId" else "chat/$encodedSessionId?draft=$encodedDraft"
+        val queryParts = mutableListOf<String>()
+        draft?.takeIf { it.isNotBlank() }?.let {
+            queryParts.add("draft=${URLEncoder.encode(it, "UTF-8")}")
+        }
+        uploadUri?.takeIf { it.isNotBlank() }?.let {
+            queryParts.add("uploadUri=${URLEncoder.encode(it, "UTF-8")}")
+        }
+        val query = queryParts.joinToString("&")
+        return if (query.isEmpty()) "chat/$encodedSessionId" else "chat/$encodedSessionId?$query"
     }
-    const val SHARE_PATTERN = "share/{text}"
-    fun share(text: String) = "share/${URLEncoder.encode(text, "UTF-8")}"
+    const val SHARE_PATTERN = "share/{text}?fileUri={fileUri}"
+    fun share(text: String, fileUri: String? = null): String {
+        val encodedText = URLEncoder.encode(text, "UTF-8")
+        return if (fileUri != null) {
+            "share/$encodedText?fileUri=${URLEncoder.encode(fileUri, "UTF-8")}"
+        } else {
+            "share/$encodedText"
+        }
+    }
     const val SKILLS = "skills"
     const val SKILL_DETAIL_PATTERN = "skills/{name}"
 
@@ -89,7 +103,7 @@ private object Routes {
     const val INSIGHTS = "insights"
 
     const val FILES_PATTERN = "files/{sessionId}"
-    fun files(sessionId: String) = "files/$sessionId"
+    fun files(sessionId: String) = "files/${URLEncoder.encode(sessionId, "UTF-8")}"
 
     const val SETTINGS = "settings"
     const val DEFAULT_MODEL = "settings/defaultModel"
@@ -142,7 +156,10 @@ fun HermexNavGraph(
             HermexIntentDestination.Tasks -> Routes.TASKS
             is HermexIntentDestination.Session -> Routes.chat(destination.sessionId)
             is HermexIntentDestination.Task -> Routes.taskDetail(destination.jobId)
-            is HermexIntentDestination.ShareText -> Routes.share(destination.text)
+            is HermexIntentDestination.ShareContent -> {
+                val uriString = destination.uri?.toString()
+                Routes.share(destination.text ?: "", fileUri = uriString)
+            }
         }
         navController.navigate(route) { launchSingleTop = true }
         onExternalIntentConsumed()
@@ -186,14 +203,26 @@ fun HermexNavGraph(
         }
         composable(
             route = Routes.SHARE_PATTERN,
-            arguments = listOf(navArgument("text") { type = NavType.StringType }),
+            arguments = listOf(
+                navArgument("text") { type = NavType.StringType },
+                navArgument("fileUri") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
         ) { backStackEntry ->
             val encodedText = backStackEntry.arguments?.getString("text").orEmpty()
             val sharedText = URLDecoder.decode(encodedText, "UTF-8")
+            val rawFileUri = backStackEntry.arguments?.getString("fileUri")
+            val fileUri = rawFileUri?.takeIf { it.isNotEmpty() }?.let { URLDecoder.decode(it, "UTF-8") }
+
             val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
-            LaunchedEffect(sharedText) {
+            LaunchedEffect(sharedText, rawFileUri) {
                 viewModel.createSession { newSessionId ->
-                    navController.navigate(Routes.chat(newSessionId, draft = sharedText)) {
+                    navController.navigate(
+                        Routes.chat(
+                            sessionId = newSessionId,
+                            draft = sharedText.takeIf { it.isNotEmpty() },
+                            uploadUri = fileUri,
+                        ),
+                    ) {
                         popUpTo(Routes.SESSION_LIST) { inclusive = false }
                         launchSingleTop = true
                     }
@@ -362,16 +391,16 @@ fun HermexNavGraph(
             route = Routes.CHAT_PATTERN,
             arguments = listOf(
                 navArgument("sessionId") { type = NavType.StringType },
-                navArgument("draft") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
+                navArgument("draft") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("uploadUri") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { backStackEntry ->
             val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
             val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
             val initialDraft = backStackEntry.arguments?.getString("draft")?.let { URLDecoder.decode(it, "UTF-8") }
+            val pendingUploadUri = backStackEntry.arguments?.getString("uploadUri")
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { URLDecoder.decode(it, "UTF-8") }
             val viewModel: ChatViewModel = viewModel(
                 key = sessionId,
                 factory = appContainer.chatViewModelFactory(sessionId),
@@ -387,13 +416,15 @@ fun HermexNavGraph(
                 onOpenWorkspace = { navController.navigate(Routes.files(sessionId)) },
                 modifier = Modifier.fillMaxSize(),
                 initialComposerDraft = initialDraft,
+                pendingFileUploadUri = pendingUploadUri,
             )
         }
         composable(
             route = Routes.FILES_PATTERN,
             arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
         ) { backStackEntry ->
-            val sessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+            val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+            val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
             val viewModel: WorkspaceViewModel = viewModel(
                 key = sessionId,
                 factory = appContainer.workspaceViewModelFactory(sessionId),

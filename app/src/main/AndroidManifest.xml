@@ -21,12 +21,21 @@
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Hermex">
+            <!-- hermex:// deep-link scheme (Android primary) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="hermex" />
             </intent-filter>
+            <!-- hermes-agent:// deep-link scheme (iOS parity) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hermes-agent" />
+            </intent-filter>
+            <!-- Share target: text (used for text-only shares) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

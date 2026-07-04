@@ -16,6 +16,36 @@ class HermexIntentRouterTest {
     }
 
     @Test
+    fun `hermes-agent session deep link opens session detail`() {
+        assertEquals(HermexIntentDestination.Session("s1"), hermexDeepLinkDestination("hermes-agent://session/s1"))
+    }
+
+    @Test
+    fun `hermes-agent sessions deep link opens session list`() {
+        assertEquals(HermexIntentDestination.Sessions, hermexDeepLinkDestination("hermes-agent://sessions"))
+    }
+
+    @Test
+    fun `hermes-agent task deep link opens task detail`() {
+        assertEquals(HermexIntentDestination.Task("nightly digest"), hermexDeepLinkDestination("hermes-agent://task/nightly%20digest"))
+    }
+
+    @Test
+    fun `query based session id works on hermex scheme`() {
+        assertEquals(HermexIntentDestination.Session("abc123"), hermexDeepLinkDestination("hermex://session?id=abc123"))
+    }
+
+    @Test
+    fun `query based session_id works on hermes-agent scheme`() {
+        assertEquals(HermexIntentDestination.Session("xyz"), hermexDeepLinkDestination("hermes-agent://session?session_id=xyz"))
+    }
+
+    @Test
+    fun `query based session with blank id recovers to sessions`() {
+        assertEquals(HermexIntentDestination.Sessions, hermexDeepLinkDestination("hermex://session?id="))
+    }
+
+    @Test
     fun `task deep link opens task detail`() {
         assertEquals(HermexIntentDestination.Task("nightly digest"), hermexDeepLinkDestination("hermex://task/nightly%20digest"))
     }
@@ -36,12 +66,18 @@ class HermexIntentRouterTest {
     }
 
     @Test
-    fun `share intent stages plain text without sending`() {
-        assertEquals(HermexIntentDestination.ShareText("Review this before sending"), shareTextDestination(" Review this before sending "))
+    fun `share content with text stages it without sending`() {
+        val result = shareContentDestination(" Review before sending ", null)
+        assertEquals(HermexIntentDestination.ShareContent(text = "Review before sending", uri = null), result)
     }
 
     @Test
     fun `blank share text is ignored`() {
-        assertNull(shareTextDestination("   "))
+        assertNull(shareContentDestination("   ", null))
+    }
+
+    @Test
+    fun `null share text and null uri is ignored`() {
+        assertNull(shareContentDestination(null, null))
     }
 }

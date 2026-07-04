@@ -38,6 +38,7 @@ import com.hermex.android.projects.ProjectsScreen
 import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
+import com.hermex.android.sessions.ShareDestinationPicker
 import com.hermex.android.settings.CustomHeadersScreen
 import com.hermex.android.settings.CustomHeadersViewModel
 import com.hermex.android.settings.ServersScreen
@@ -214,21 +215,37 @@ fun HermexNavGraph(
             val fileUri = rawFileUri?.takeIf { it.isNotEmpty() }?.let { URLDecoder.decode(it, "UTF-8") }
 
             val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
-            LaunchedEffect(sharedText, rawFileUri) {
-                viewModel.createSession { newSessionId ->
+
+            ShareDestinationPicker(
+                viewModel = viewModel,
+                onSelectSession = { sessionId ->
                     navController.navigate(
                         Routes.chat(
-                            sessionId = newSessionId,
+                            sessionId = sessionId,
                             draft = sharedText.takeIf { it.isNotEmpty() },
                             uploadUri = fileUri,
                         ),
                     ) {
-                        popUpTo(Routes.SESSION_LIST) { inclusive = false }
+                        popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
                         launchSingleTop = true
                     }
-                }
-            }
-            ShareLaunchScreen(modifier = Modifier.fillMaxSize())
+                },
+                onNewSession = {
+                    viewModel.createSession { newSessionId ->
+                        navController.navigate(
+                            Routes.chat(
+                                sessionId = newSessionId,
+                                draft = sharedText.takeIf { it.isNotEmpty() },
+                                uploadUri = fileUri,
+                            ),
+                        ) {
+                            popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                onBack = { navController.popBackStack() },
+            )
         }
         composable(Routes.SETTINGS) { backStackEntry ->
             val viewModel: SettingsViewModel = viewModel(factory = appContainer.settingsViewModelFactory())
@@ -433,24 +450,6 @@ fun HermexNavGraph(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ShareLaunchScreen(modifier: Modifier = Modifier) {
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp),
-        ) {
-            CircularProgressIndicator()
-            Text(
-                text = "Preparing draft...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
             )
         }
     }

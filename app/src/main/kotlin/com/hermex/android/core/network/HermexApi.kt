@@ -11,6 +11,7 @@ import com.hermex.android.core.network.dto.CronOutputResponse
 import com.hermex.android.core.network.dto.CronStatusResponse
 import com.hermex.android.core.network.dto.CreateDirRequest
 import com.hermex.android.core.network.dto.CreateFileRequest
+import com.hermex.android.core.network.dto.DeleteFileRequest
 import com.hermex.android.core.network.dto.DirectoryListResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.FileSaveRequest
@@ -216,6 +217,9 @@ interface HermexApi {
 
     @POST("/api/file/rename")
     suspend fun renameFile(@Body body: RenameFileRequest): FileSaveResponse
+
+    @POST("/api/file/delete")
+    suspend fun deleteFile(@Body body: DeleteFileRequest): FileSaveResponse
 
     // Git endpoints (read-only -- no commit/pull/discard/checkout in v0.7.3).
     @GET("/api/git/status")

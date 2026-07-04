@@ -7,6 +7,7 @@ import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.dto.RenameFileRequest
+import com.hermex.android.core.network.dto.DeleteFileRequest
 import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1093,6 +1094,108 @@ class WorkspaceViewModelTest {
             viewModel.confirmRename()
             val failed = awaitUntil { it.renameDialog?.isRenaming == false && it.renameDialog?.errorMessage != null }
             assertNotNull(failed.renameDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── Delete file tests ──
+
+    @Test
+    fun `showDeleteDialog opens for file`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showDeleteFileDialog(entry)
+            assertNotNull(viewModel.uiState.value.deleteDialog)
+            assertEquals("test.txt", viewModel.uiState.value.deleteDialog?.targetName)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `showDeleteDialog rejects folders`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "folder", path = "folder", type = "dir")
+            viewModel.showDeleteFileDialog(entry)
+            assertNull(viewModel.uiState.value.deleteDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `showDeleteDialog rejects git`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = ".git", path = ".git", type = "file", size = 0)
+            viewModel.showDeleteFileDialog(entry)
+            assertNull(viewModel.uiState.value.deleteDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `dismissDeleteDialog clears state`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showDeleteFileDialog(entry)
+            assertNotNull(viewModel.uiState.value.deleteDialog)
+            viewModel.dismissDeleteDialog()
+            assertNull(viewModel.uiState.value.deleteDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `delete file calls api deleteFile`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showDeleteFileDialog(entry)
+            assertNotNull(viewModel.uiState.value.deleteDialog)
+            viewModel.confirmDeleteFile()
+            val done = awaitUntil { it.deleteDialog == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `delete failure preserves dialog`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"error":"File not found"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            val entry = WorkspaceEntry(name = "test.txt", path = "test.txt", type = "file", size = 10)
+            viewModel.showDeleteFileDialog(entry)
+            viewModel.confirmDeleteFile()
+            val failed = awaitUntil { it.deleteDialog?.isDeleting == false && it.deleteDialog?.errorMessage != null }
+            assertNotNull(failed.deleteDialog)
             cancelAndIgnoreRemainingEvents()
         }
     }

@@ -6,6 +6,7 @@ import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.dto.CreateDirRequest
 import com.hermex.android.core.network.dto.CreateFileRequest
+import com.hermex.android.core.network.dto.DeleteFileRequest
 import com.hermex.android.core.network.dto.FileSaveRequest
 import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.network.dto.WorkspaceEntry
@@ -451,6 +452,57 @@ class WorkspaceViewModel(
                 _uiState.update { it.copy(renameDialog = d.copy(isRenaming = false, errorMessage = e.message ?: "Could not rename.")) }
             } catch (_: Exception) {
                 _uiState.update { it.copy(renameDialog = d.copy(isRenaming = false, errorMessage = "Could not rename.")) }
+            }
+        }
+    }
+
+    // ── Delete file only ──
+
+    fun showDeleteFileDialog(entry: WorkspaceEntry) {
+        if (entry.isBrowsableDirectory) return
+        val path = entry.path ?: return
+        val name = entry.name ?: path.substringAfterLast('/')
+        // Block protected names
+        if (name == ".git" || name == ".github") return
+        _uiState.update {
+            it.copy(deleteDialog = DeleteDialogState(targetPath = path, targetName = name))
+        }
+    }
+
+    fun dismissDeleteDialog() {
+        _uiState.update { it.copy(deleteDialog = null) }
+    }
+
+    fun confirmDeleteFile() {
+        val d = _uiState.value.deleteDialog ?: return
+        val path = d.targetPath
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(deleteDialog = d.copy(errorMessage = "Not signed in.")) }
+            return
+        }
+        _uiState.update { it.copy(deleteDialog = d.copy(isDeleting = true, errorMessage = null)) }
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall {
+                    api.deleteFile(DeleteFileRequest(session_id = sessionId, path = path))
+                }
+                if (response.error != null) {
+                    _uiState.update { it.copy(deleteDialog = d.copy(isDeleting = false, errorMessage = response.error)) }
+                    return@launch
+                }
+                // Success
+                _uiState.update { it.copy(deleteDialog = null) }
+                loadDirectory(_uiState.value.currentPath, preserveSearch = true)
+                // If the deleted file was the currently open file, close viewer
+                val openFile = _uiState.value.selectedFile
+                if (openFile?.path == path) {
+                    _uiState.update { it.copy(selectedFile = null) }
+                }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(deleteDialog = d.copy(isDeleting = false, errorMessage = e.message ?: "Could not delete.")) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(deleteDialog = d.copy(isDeleting = false, errorMessage = "Could not delete.")) }
             }
         }
     }

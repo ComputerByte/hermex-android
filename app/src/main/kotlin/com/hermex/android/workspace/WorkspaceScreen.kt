@@ -187,6 +187,7 @@ fun WorkspaceScreen(
                             copyToClipboard(context, entry.name ?: entry.path ?: "entry", entry.path ?: "")
                         },
                         onRename = viewModel::showRenameDialog,
+                        onDelete = viewModel::showDeleteFileDialog,
                     )
                 }
             }
@@ -212,6 +213,68 @@ fun WorkspaceScreen(
             onConfirm = viewModel::confirmRename,
         )
     }
+
+    // Delete confirmation dialog
+    uiState.deleteDialog?.let { dialog ->
+        DeleteFileDialog(
+            dialog = dialog,
+            onDismiss = viewModel::dismissDeleteDialog,
+            onConfirm = viewModel::confirmDeleteFile,
+        )
+    }
+}
+
+@Composable
+private fun DeleteFileDialog(
+    dialog: DeleteDialogState,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete ${dialog.targetName}?") },
+        text = {
+            Column {
+                Text(
+                    text = "Are you sure you want to delete \"${dialog.targetName}\"?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "This cannot be undone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                if (dialog.errorMessage != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = dialog.errorMessage ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !dialog.isDeleting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (dialog.isDeleting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !dialog.isDeleting) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -356,6 +419,7 @@ private fun DirectoryContent(
     onRetry: () -> Unit,
     onCopyPath: (WorkspaceEntry) -> Unit,
     onRename: (WorkspaceEntry) -> Unit,
+    onDelete: (WorkspaceEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Client-side search filter: narrow entries by name without modifying the original list.
@@ -407,7 +471,7 @@ private fun DirectoryContent(
 
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(filteredEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) }, onRename = { onRename(entry) })
+                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) }, onRename = { onRename(entry) }, onDelete = { onDelete(entry) })
                 }
             }
         }
@@ -433,6 +497,7 @@ private fun WorkspaceEntryRow(
     onClick: () -> Unit,
     onCopyPath: () -> Unit,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -477,6 +542,15 @@ private fun WorkspaceEntryRow(
                                 onRename()
                             },
                         )
+                        if (!entry.isFolder) {
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    showMenu = false
+                                    onDelete()
+                                },
+                            )
+                        }
                     }
                 }
             }

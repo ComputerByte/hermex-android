@@ -29,6 +29,8 @@ data class WorkspaceUiState(
     val createDialog: CreateDialogState? = null,
     /** Non-null when a rename dialog is active. */
     val renameDialog: RenameDialogState? = null,
+    /** Non-null when a delete confirmation dialog is active. */
+    val deleteDialog: DeleteDialogState? = null,
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }
@@ -80,6 +82,14 @@ data class RenameDialogState(
         return null
     }
 }
+
+/** Dialog state for deleting a file (two-step confirmation). */
+data class DeleteDialogState(
+    val targetPath: String,
+    val targetName: String,
+    val isDeleting: Boolean = false,
+    val errorMessage: String? = null,
+)
 
 data class GitState(
     val isGit: Boolean = false,

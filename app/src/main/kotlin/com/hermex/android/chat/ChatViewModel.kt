@@ -28,6 +28,7 @@ import com.hermex.android.core.network.dto.mergingLiveModels
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.util.HermexLog
+import com.hermex.android.chat.ResponseCompletionNotifier
 import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,12 +64,19 @@ class ChatViewModel(
      * attachments keeps compiling unchanged -- see [AttachmentFileReader]'s doc for why real Uri
      * construction isn't available in this project's plain JVM unit tests anyway. */
     private val attachmentFileReader: AttachmentFileReader = AttachmentFileReader { AttachmentReadResult.Unreadable },
+    /** Injected callback for local response-completion notifications. No-op by default so every
+     * existing test/call site keeps compiling unchanged. */
+    private val responseCompletionNotifier: ResponseCompletionNotifier = ResponseCompletionNotifier { _, _ -> },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     private var streamJob: Job? = null
     private var activeStreamId: String? = null
+
+    /** Explicit reason for stream termination -- avoids conflating normal completion
+     * (should notify) with user-cancellation or errors (should not notify). */
+    private enum class StreamCompletionReason { NORMAL, CANCELLED, ERROR }
 
     init {
         loadSession()
@@ -88,7 +96,7 @@ class ChatViewModel(
                 // its current value to a new collector), not a real switch.
                 if (sawFirstState && currentServerId != previousServerId && _uiState.value.isStreaming) {
                     HermexLog.w("Chat", "active server changed mid-stream -- closing the local stream")
-                    finalizeStream(errorMessage = "The active server changed, so this run was stopped.")
+                    finalizeStream(errorMessage = "The active server changed, so this run was stopped.", reason = StreamCompletionReason.CANCELLED)
                 }
                 previousServerId = currentServerId
                 sawFirstState = true
@@ -543,11 +551,11 @@ class ChatViewModel(
             is SseEvent.Reasoning -> _uiState.update { it.copy(streamingReasoning = it.streamingReasoning + event.text) }
             is SseEvent.ToolStarted -> upsertToolCall(event.payload, completed = false)
             is SseEvent.ToolCompleted -> upsertToolCall(event.payload, completed = true)
-            is SseEvent.Done -> finalizeStream()
-            SseEvent.StreamEnd -> finalizeStream()
-            SseEvent.Cancelled -> finalizeStream()
-            is SseEvent.Error -> finalizeStream(errorMessage = event.message)
-            is SseEvent.TransportError -> finalizeStream(errorMessage = event.message)
+            is SseEvent.Done -> finalizeStream(reason = StreamCompletionReason.NORMAL)
+            SseEvent.StreamEnd -> finalizeStream(reason = StreamCompletionReason.NORMAL)
+            SseEvent.Cancelled -> finalizeStream(reason = StreamCompletionReason.CANCELLED)
+            is SseEvent.Error -> finalizeStream(errorMessage = event.message, reason = StreamCompletionReason.ERROR)
+            is SseEvent.TransportError -> finalizeStream(errorMessage = event.message, reason = StreamCompletionReason.ERROR)
             // Unrecognized event names, or a heartbeat/no-op the parser already swallowed --
             // never surfaced to the UI.
             SseEvent.Unknown -> Unit
@@ -592,8 +600,9 @@ class ChatViewModel(
     /** Finalizes the in-flight assistant message (if any) into [ChatUiState.messages], clears
      * the streaming buffers, and stops the stream. Called on every terminal SSE event
      * (done/stream_end/cancel/error) and on a local cancel -- always reachable exactly once per
-     * turn since [streamJob] is cancelled here too, so a late event after finalize is a no-op. */
-    private fun finalizeStream(errorMessage: String? = null) {
+     * turn since [streamJob] is cancelled here too, so a late event after finalize is a no-op.
+     * Fires the [responseCompletionNotifier] after state update so it observes the final UI state. */
+    private fun finalizeStream(errorMessage: String? = null, reason: StreamCompletionReason = StreamCompletionReason.CANCELLED) {
         HermexLog.d("Chat", "finalizeStream" + (errorMessage?.let { " (error: $it)" } ?: ""))
         streamJob?.cancel()
         streamJob = null
@@ -619,6 +628,9 @@ class ChatViewModel(
             )
         }
         refreshCacheInBackground()
+        if (reason == StreamCompletionReason.NORMAL) {
+            responseCompletionNotifier.onResponseCompleted(sessionId, completedNormally = true)
+        }
     }
 
     /** Re-fetches this session's detail from the network and caches *that* -- deliberately never
@@ -666,7 +678,7 @@ class ChatViewModel(
                 }
             }
         }
-        finalizeStream()
+        finalizeStream(reason = StreamCompletionReason.CANCELLED)
     }
 
     override fun onCleared() {

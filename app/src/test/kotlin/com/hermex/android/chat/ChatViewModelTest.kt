@@ -32,6 +32,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -230,6 +231,155 @@ class ChatViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertTrue(fakeSseClient.lastUrl.toString().contains("stream_id=stream-1"))
+    }
+
+    // ── Response-completion notification tests ──
+
+    private class SpyResponseCompletionNotifier : ResponseCompletionNotifier {
+        var lastSessionId: String? = null
+        var lastCompletedNormally: Boolean? = null
+
+        override fun onResponseCompleted(sessionId: String, completedNormally: Boolean) {
+            lastSessionId = sessionId
+            lastCompletedNormally = completedNormally
+        }
+    }
+
+    @Test
+    fun `SseEvent Done triggers notifier with completedNormally true`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        val notifier = SpyResponseCompletionNotifier()
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { listOf(SseEvent.Token("hello"), SseEvent.Done(null, null)).asFlow() },
+            FakeChatPreferencesStore(),
+            responseCompletionNotifier = notifier,
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("test")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            // Wait for finalization after Done
+            val finalState = awaitUntil { !it.isStreaming }
+            assertNotNull(finalState.messages)
+            assertEquals("s1", notifier.lastSessionId)
+            assertEquals(true, notifier.lastCompletedNormally)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `SseEvent Error does not trigger normal notification`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        val notifier = SpyResponseCompletionNotifier()
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { listOf(SseEvent.Error("server error")).asFlow() },
+            FakeChatPreferencesStore(),
+            responseCompletionNotifier = notifier,
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("test")
+            viewModel.sendMessage()
+            awaitUntil { !it.isStreaming }
+
+            assertNull(notifier.lastSessionId)
+            assertNull(notifier.lastCompletedNormally)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `SseEvent StreamEnd triggers notifier with completedNormally true`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        val notifier = SpyResponseCompletionNotifier()
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { listOf(SseEvent.Token("done"), SseEvent.StreamEnd).asFlow() },
+            FakeChatPreferencesStore(),
+            responseCompletionNotifier = notifier,
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("test")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            awaitUntil { !it.isStreaming }
+            assertEquals(true, notifier.lastCompletedNormally)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelStream does not trigger notification`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}""")) // cancel response
+
+        val notifier = SpyResponseCompletionNotifier()
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { flow { awaitCancellation() } }, // never completes on its own
+            FakeChatPreferencesStore(),
+            responseCompletionNotifier = notifier,
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("test")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+
+            viewModel.cancelStream()
+            awaitUntil { !it.isStreaming }
+
+            assertNull(notifier.lastSessionId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `default no-op notifier does not break existing completion flow`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        // No responseCompletionNotifier argument — uses the no-op default.
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { listOf(SseEvent.Token("hello"), SseEvent.Done(null, null)).asFlow() },
+            FakeChatPreferencesStore(),
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("works")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            val finalState = awaitUntil { !it.isStreaming }
+            assertEquals(2, finalState.messages.size)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test

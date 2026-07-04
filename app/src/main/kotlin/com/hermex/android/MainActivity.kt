@@ -39,6 +39,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        (application as HermexApplication).appContainer.setAppInForeground(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (application as HermexApplication).appContainer.setAppInForeground(false)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

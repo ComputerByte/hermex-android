@@ -17,6 +17,7 @@ import com.hermex.android.core.cache.RoomOfflineCacheRepository
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
+import com.hermex.android.core.notifications.HermexResponseCompletionNotifier
 import com.hermex.android.core.storage.DataStoreAppearancePreferencesStore
 import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
@@ -52,9 +53,22 @@ import com.hermex.android.workspace.WorkspaceViewModel
  * constructed -- a standard way to break constructor-order circular deps in manual DI.
  */
 class AppContainer(context: Context) {
+    private val applicationContext = context.applicationContext
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
     private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
+
+    /** Best-effort foreground/background signal. True while at least one activity is started.
+     * Updated by [MainActivity.onStart] / [MainActivity.onStop]. Single-activity app, so this
+     * faithfully tracks "app is on screen." Read by [HermexResponseCompletionNotifier] to gate
+     * response-completion notifications. */
+    @Volatile
+    var isAppInForeground: Boolean = false
+        private set
+
+    fun setAppInForeground(foreground: Boolean) {
+        isAppInForeground = foreground
+    }
     // Stored (rather than referencing the constructor's `context` param directly) so it's usable
     // from a regular member function like chatViewModelFactory -- an unstored constructor
     // parameter is only visible inside property initializers/init blocks, not later methods.
@@ -113,6 +127,10 @@ class AppContainer(context: Context) {
                 chatPreferencesStore,
                 offlineCacheRepository,
                 ContentResolverAttachmentReader(contentResolver),
+                HermexResponseCompletionNotifier(
+                    context = applicationContext,
+                    isAppInForeground = { this@AppContainer.isAppInForeground },
+                ),
             )
         }
     }

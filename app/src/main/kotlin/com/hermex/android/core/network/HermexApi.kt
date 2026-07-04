@@ -9,7 +9,9 @@ import com.hermex.android.core.network.dto.CronJobsResponse
 import com.hermex.android.core.network.dto.CronMutationResponse
 import com.hermex.android.core.network.dto.CronOutputResponse
 import com.hermex.android.core.network.dto.CronStatusResponse
+import com.hermex.android.core.network.dto.DirectoryListResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
+import com.hermex.android.core.network.dto.FileResponse
 import com.hermex.android.core.network.dto.HealthResponse
 import com.hermex.android.core.network.dto.InsightsResponse
 import com.hermex.android.core.network.dto.LoginRequest
@@ -78,6 +80,20 @@ interface HermexApi {
 
     @GET("/api/chat/cancel")
     suspend fun chatCancel(@Query("stream_id") streamId: String): ChatCancelResponse
+
+    // Workspace/file browser (read-only; no create/rename/delete/upload endpoints in this MVP).
+    // Both are session-scoped -- there is no session-independent directory browse.
+    @GET("/api/list")
+    suspend fun directoryList(
+        @Query("session_id") sessionId: String,
+        @Query("path") path: String? = null,
+    ): DirectoryListResponse
+
+    @GET("/api/file")
+    suspend fun workspaceFile(
+        @Query("session_id") sessionId: String,
+        @Query("path") path: String,
+    ): FileResponse
 
     @GET("/api/skills")
     suspend fun skills(): SkillsResponse

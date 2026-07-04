@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,6 +39,7 @@ fun ChatScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit,
     onSwitchedSession: (String) -> Unit,
+    onOpenWorkspace: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -70,6 +72,9 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenWorkspace) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Files")
+                    }
                     IconButton(onClick = viewModel::loadSession) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
                     }

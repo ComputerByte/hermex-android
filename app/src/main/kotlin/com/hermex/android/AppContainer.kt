@@ -37,6 +37,7 @@ import com.hermex.android.skills.SkillDetailViewModel
 import com.hermex.android.skills.SkillsViewModel
 import com.hermex.android.tasks.TaskDetailViewModel
 import com.hermex.android.tasks.TasksViewModel
+import com.hermex.android.workspace.WorkspaceViewModel
 
 /**
  * Manual dependency wiring for the whole app -- no Hilt for a 3-screen MVP (the dependency
@@ -132,6 +133,10 @@ class AppContainer(context: Context) {
 
     fun insightsViewModelFactory() = viewModelFactory {
         initializer { InsightsViewModel(authRepository) }
+    }
+
+    fun workspaceViewModelFactory(sessionId: String) = viewModelFactory {
+        initializer { WorkspaceViewModel(sessionId, authRepository) }
     }
 
     fun settingsViewModelFactory() = viewModelFactory {

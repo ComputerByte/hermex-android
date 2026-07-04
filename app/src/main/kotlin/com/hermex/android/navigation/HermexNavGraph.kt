@@ -47,6 +47,8 @@ import com.hermex.android.tasks.TaskDetailScreen
 import com.hermex.android.tasks.TaskDetailViewModel
 import com.hermex.android.tasks.TasksScreen
 import com.hermex.android.tasks.TasksViewModel
+import com.hermex.android.workspace.WorkspaceScreen
+import com.hermex.android.workspace.WorkspaceViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -73,6 +75,9 @@ private object Routes {
     const val PROJECTS = "projects"
 
     const val INSIGHTS = "insights"
+
+    const val FILES_PATTERN = "files/{sessionId}"
+    fun files(sessionId: String) = "files/$sessionId"
 
     const val SETTINGS = "settings"
     const val DEFAULT_MODEL = "settings/defaultModel"
@@ -321,6 +326,22 @@ fun HermexNavGraph(appContainer: AppContainer) {
                         popUpTo(Routes.chat(sessionId)) { inclusive = true }
                     }
                 },
+                onOpenWorkspace = { navController.navigate(Routes.files(sessionId)) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        composable(
+            route = Routes.FILES_PATTERN,
+            arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+            val viewModel: WorkspaceViewModel = viewModel(
+                key = sessionId,
+                factory = appContainer.workspaceViewModelFactory(sessionId),
+            )
+            WorkspaceScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
         }

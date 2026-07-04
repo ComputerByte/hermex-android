@@ -580,12 +580,23 @@ class ChatViewModel(
 
     private fun handleEvent(event: SseEvent) {
         when (event) {
-            is SseEvent.Token -> _uiState.update { it.copy(streamingText = it.streamingText + event.text) }
+            is SseEvent.Token -> {
+                // Logged once per turn, not per token -- streamingText is empty only for the very
+                // first token, so this can't fire again until the next finalizeStream resets it.
+                if (_uiState.value.streamingText.isEmpty()) HermexLog.d("Chat", "first token received")
+                _uiState.update { it.copy(streamingText = it.streamingText + event.text) }
+            }
             is SseEvent.Reasoning -> _uiState.update { it.copy(streamingReasoning = it.streamingReasoning + event.text) }
             is SseEvent.ToolStarted -> upsertToolCall(event.payload, completed = false)
             is SseEvent.ToolCompleted -> upsertToolCall(event.payload, completed = true)
-            is SseEvent.Done -> finalizeStream(reason = StreamCompletionReason.NORMAL)
-            SseEvent.StreamEnd -> finalizeStream(reason = StreamCompletionReason.NORMAL)
+            is SseEvent.Done -> {
+                HermexLog.d("Chat", "event: done")
+                finalizeStream(reason = StreamCompletionReason.NORMAL)
+            }
+            SseEvent.StreamEnd -> {
+                HermexLog.d("Chat", "event: stream_end")
+                finalizeStream(reason = StreamCompletionReason.NORMAL)
+            }
             SseEvent.Cancelled -> finalizeStream(reason = StreamCompletionReason.CANCELLED)
             is SseEvent.Error -> finalizeStream(errorMessage = event.message, reason = StreamCompletionReason.ERROR)
             is SseEvent.TransportError -> finalizeStream(errorMessage = event.message, reason = StreamCompletionReason.ERROR)
@@ -660,6 +671,7 @@ class ChatViewModel(
                 errorMessage = errorMessage ?: state.errorMessage,
             )
         }
+        HermexLog.d("Chat", "isRunning=false messages=${_uiState.value.messages.size}")
         refreshCacheInBackground()
         if (reason == StreamCompletionReason.NORMAL) {
             responseCompletionNotifier.onResponseCompleted(sessionId, completedNormally = true)

@@ -1,6 +1,7 @@
 package com.hermex.android.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,10 +29,16 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.core.util.HermexLog
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,14 +156,62 @@ fun ChatScreen(
                     val listState = rememberLazyListState()
                     val totalItems = uiState.messages.size + uiState.activeToolCalls.size +
                         (if (uiState.streamingText.isNotEmpty()) 1 else 0) +
-                        (if (uiState.streamingReasoning.isNotEmpty()) 1 else 0)
+                        (if (uiState.streamingReasoning.isNotEmpty()) 1 else 0) +
+                        (if (uiState.isStreaming) 1 else 0)
+
+                    // Whether the transcript should stay pinned to its true bottom as content
+                    // grows. Streaming appends dozens of times a second, so this can't be
+                    // re-derived from scratch on every append (that's what caused the original
+                    // bug: unconditionally snapping back to the bottom fought any manual scroll
+                    // the user made to read up, and -- since scrollToItem only aligns an item's
+                    // *top* edge with the viewport -- also permanently hid the tail of a
+                    // streaming bubble taller than one screen). Instead it's tracked explicitly:
+                    // true on load/new turn, re-evaluated only when a scroll gesture (ours or the
+                    // user's) actually finishes.
+                    var stickToBottom by remember { mutableStateOf(true) }
+
+                    LaunchedEffect(listState) {
+                        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+                            if (!scrolling) stickToBottom = !listState.canScrollForward
+                        }
+                    }
+
+                    // A freshly started turn always re-pins -- matches the composer jumping the
+                    // user to their own just-sent message and the reply that follows, even if
+                    // they'd scrolled away reading history in an earlier turn.
+                    LaunchedEffect(uiState.isStreaming) {
+                        if (uiState.isStreaming) stickToBottom = true
+                    }
+
+                    LaunchedEffect(stickToBottom) {
+                        HermexLog.d("ChatScroll", "stickToBottom=$stickToBottom")
+                    }
 
                     // Plain (non-animated) scroll: streamingText changes on every token, so an
                     // animated scroll here would re-trigger dozens of times a second and stutter.
                     // A discrete new message/tool card is rare enough that the instant jump still
-                    // reads as smooth.
-                    LaunchedEffect(totalItems, uiState.streamingText) {
-                        if (totalItems > 0) listState.scrollToItem(totalItems - 1)
+                    // reads as smooth. scrollToItem alone only aligns the last item's *top* edge
+                    // with the viewport -- for a streaming bubble taller than one screen that
+                    // leaves its growing tail permanently out of reach, so scrollBy(Float.MAX_VALUE)
+                    // (clamped by the framework to however much scrollable distance actually
+                    // remains) follows up to reach the true end.
+                    LaunchedEffect(totalItems, uiState.streamingText, uiState.streamingReasoning, stickToBottom) {
+                        if (totalItems > 0 && stickToBottom) {
+                            listState.scrollToItem(totalItems - 1)
+                            listState.scrollBy(Float.MAX_VALUE)
+                        }
+                    }
+
+                    // Distinguishes "tokens are actively arriving" from the quiet tail between the
+                    // last visible token and the real terminal SSE event -- restarts (and cancels
+                    // its own delayed flip) on every content change, so it only reads true once
+                    // content has actually gone quiet for a bit while the run is still active.
+                    var isFinalizing by remember { mutableStateOf(false) }
+                    LaunchedEffect(uiState.isStreaming, uiState.streamingText, uiState.streamingReasoning) {
+                        isFinalizing = false
+                        if (!uiState.isStreaming) return@LaunchedEffect
+                        delay(3_000)
+                        isFinalizing = true
                     }
 
                     // Tool cards don't live in `messages` -- each one is anchored to the message
@@ -193,6 +248,19 @@ fun ChatScreen(
                         }
                         if (uiState.streamingText.isNotEmpty()) {
                             item(key = "streaming-text") { StreamingBubble(uiState.streamingText) }
+                        }
+                        // Fills the quiet gap between "visible text looks done" and the real
+                        // terminal SSE event -- without this the run can look frozen even though
+                        // it's still generating (see ChatScreen investigation notes).
+                        if (uiState.isStreaming) {
+                            item(key = "streaming-status") {
+                                Text(
+                                    text = if (isFinalizing) "Finalizing…" else "Generating…",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                )
+                            }
                         }
                     }
                 }

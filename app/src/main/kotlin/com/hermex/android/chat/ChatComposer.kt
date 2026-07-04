@@ -37,12 +37,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ProfileSummary
+import com.hermex.android.core.util.HermexLog
 
 /** [ChatComposer]'s callbacks, grouped so adding a future action (slash commands) doesn't widen
  * [ChatComposer]'s own parameter list. */
@@ -117,8 +119,20 @@ fun ChatComposer(
     // contentWindowInsets (WindowInsets.safeDrawing, which includes ime) already accounts for
     // the keyboard once, so stacking an explicit imePadding() on top double-counted the
     // keyboard height and left a large blank gap above it when the keyboard opened.
+    // Logged only on change, not every recomposition -- lets `adb logcat -s Hermex/Composer`
+    // confirm Scaffold's innerPadding is actually reserving this much space for the transcript
+    // (see ChatScreen investigation notes on composer/content overlap).
+    var lastLoggedHeightPx by remember { mutableStateOf(-1) }
     Surface(
-        modifier = modifier.navigationBarsPadding(),
+        modifier = modifier
+            .navigationBarsPadding()
+            .onGloballyPositioned { coordinates ->
+                val heightPx = coordinates.size.height
+                if (heightPx != lastLoggedHeightPx) {
+                    lastLoggedHeightPx = heightPx
+                    HermexLog.d("Composer", "measured height=${heightPx}px")
+                }
+            },
         tonalElevation = 2.dp,
     ) {
         Column {

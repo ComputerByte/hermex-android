@@ -6,19 +6,45 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.hermex.android.core.storage.HeaderLogoColor
 
-// A deliberate palette instead of Compose's unstyled baseline purple (which is what made the
-// app look like an undesigned default theme) -- a warm red accent on a near-black surface for
-// dark mode, echoing the iOS app's dark/red branding without copying its assets.
-// Internal (not private): reused by HeaderLogoColor.RED below, so the header-color option stays
-// in sync with the app's actual brand color instead of duplicating the hex value.
-internal val HermexRed = Color(0xFFE0473C)
-private val HermexRedDark = Color(0xFFB6392F)
+object HermexColors {
+    val HermesGold = Color(0xFFFFD700)
+    val AccentBlueDark = Color(0xFF0A84FF)
+    val AccentBlueLight = Color(0xFF007AFF)
+    val SuccessDark = Color(0xFF30D158)
+    val SuccessLight = Color(0xFF34C759)
+    val WarningDark = Color(0xFFFF9F0A)
+    val WarningLight = Color(0xFFFF9500)
+    val ErrorDark = Color(0xFFFF453A)
+    val ErrorLight = Color(0xFFFF3B30)
+    val DarkBackground = Color(0xFF000000)
+    val DarkSecondaryBackground = Color(0xFF1C1C1E)
+    val DarkSurfaceLow = Color(0xFF141416)
+    val DarkSurfaceHigh = Color(0xFF242426)
+    val DarkSurfaceHighest = Color(0xFF2C2C2E)
+    val DarkLabel = Color(0xFFFFFFFF)
+    val DarkSecondaryLabel = Color(0xFF98989F)
+    val DarkSeparator = Color(0xFF38383A)
+    val UserBubbleDark = Color(0xFF48484A)
+    val CodeBackgroundDark = Color(0xFF0A0D12)
+}
 
-// Fixed swatches for the Header Logo Color setting -- chosen to read clearly against both the
-// light and dark app-bar backgrounds above, since a user's choice here isn't theme-adaptive like
-// HeaderLogoColor.DEFAULT (which instead resolves to the current title color at read time).
+object HermexRadii {
+    val Accessory = 10.dp
+    val Tool = 9.dp
+    val Cell = 12.dp
+    val SettingsCard = 18.dp
+    val Dialog = 20.dp
+    val Bubble = 20.dp
+    val Composer = 22.dp
+    val Code = 24.dp
+}
+
+// Kept for the legacy Settings header-color option. It is not the primary action/accent color.
+internal val HermexRed = Color(0xFFE0473C)
+
 private val HeaderLogoBlue = Color(0xFF4A90D9)
 private val HeaderLogoPurple = Color(0xFF9B59B6)
 private val HeaderLogoGreen = Color(0xFF4CAF50)
@@ -42,33 +68,58 @@ fun HeaderLogoColor.toComposeColor(): Color = when (this) {
 }
 
 private val DarkColors = darkColorScheme(
-    primary = HermexRed,
-    onPrimary = Color.White,
-    primaryContainer = HermexRedDark,
-    onPrimaryContainer = Color.White,
-    background = Color(0xFF121212),
-    onBackground = Color(0xFFEDEDED),
-    surface = Color(0xFF1C1C1E),
-    onSurface = Color(0xFFEDEDED),
-    surfaceVariant = Color(0xFF2A2A2C),
-    onSurfaceVariant = Color(0xFFC7C7CC),
-    surfaceContainerHighest = Color(0xFF2E2E30),
-    error = Color(0xFFFF6B6B),
+    // Primary actions in Hermex are inverted monochrome: white surface, black content.
+    primary = Color.White,
+    onPrimary = Color.Black,
+    primaryContainer = HermexColors.UserBubbleDark,
+    onPrimaryContainer = HermexColors.DarkLabel,
+    secondary = HermexColors.AccentBlueDark,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF0A2E52),
+    onSecondaryContainer = Color(0xFFB8D8FF),
+    background = HermexColors.DarkBackground,
+    onBackground = HermexColors.DarkLabel,
+    surface = HermexColors.DarkSecondaryBackground,
+    onSurface = HermexColors.DarkLabel,
+    surfaceVariant = HermexColors.DarkSurfaceHighest,
+    onSurfaceVariant = HermexColors.DarkSecondaryLabel,
+    surfaceContainerLowest = HermexColors.DarkBackground,
+    surfaceContainerLow = HermexColors.DarkSurfaceLow,
+    surfaceContainer = HermexColors.DarkSecondaryBackground,
+    surfaceContainerHigh = HermexColors.DarkSurfaceHigh,
+    surfaceContainerHighest = HermexColors.DarkSurfaceHighest,
+    outline = HermexColors.DarkSeparator,
+    outlineVariant = Color(0xFF2C2C2E),
+    error = HermexColors.ErrorDark,
+    errorContainer = Color(0xFF3A1210),
+    onErrorContainer = Color(0xFFFFB3AD),
 )
 
 private val LightColors = lightColorScheme(
-    primary = HermexRed,
+    primary = Color.Black,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDAD4),
-    onPrimaryContainer = Color(0xFF410001),
-    background = Color(0xFFFFFBFF),
-    onBackground = Color(0xFF1C1B1B),
-    surface = Color(0xFFFFFBFF),
-    onSurface = Color(0xFF1C1B1B),
-    surfaceVariant = Color(0xFFF2DEDB),
-    onSurfaceVariant = Color(0xFF534341),
-    surfaceContainerHighest = Color(0xFFECE0DE),
-    error = Color(0xFFBA1A1A),
+    primaryContainer = Color(0xFFF2F2F7),
+    onPrimaryContainer = Color.Black,
+    secondary = HermexColors.AccentBlueLight,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE0EEFF),
+    onSecondaryContainer = Color(0xFF00325C),
+    background = Color.White,
+    onBackground = Color.Black,
+    surface = Color(0xFFF2F2F7),
+    onSurface = Color.Black,
+    surfaceVariant = Color(0xFFE5E5EA),
+    onSurfaceVariant = Color(0xFF8A8A8E),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFF7F7FA),
+    surfaceContainer = Color(0xFFF2F2F7),
+    surfaceContainerHigh = Color(0xFFECECF1),
+    surfaceContainerHighest = Color(0xFFE5E5EA),
+    outline = Color(0xFFC6C6C8),
+    outlineVariant = Color(0xFFE5E5EA),
+    error = HermexColors.ErrorLight,
+    errorContainer = Color(0xFFFFE9E7),
+    onErrorContainer = Color(0xFF7F1D16),
 )
 
 @Composable

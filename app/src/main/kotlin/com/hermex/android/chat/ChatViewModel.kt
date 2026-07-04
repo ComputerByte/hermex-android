@@ -253,6 +253,16 @@ class ChatViewModel(
         _uiState.update { it.copy(composerText = value) }
     }
 
+    /** Stages externally supplied text (Android share sheet) for user review. This deliberately
+     * never sends; it only pre-fills an empty composer so the user can edit or discard first. */
+    fun stageDraftIfComposerEmpty(value: String) {
+        val draft = value.trim()
+        if (draft.isEmpty()) return
+        _uiState.update { state ->
+            if (state.composerText.isBlank()) state.copy(composerText = draft) else state
+        }
+    }
+
     /** The entry point a future file/photo picker will call after a real, successful
      * `HermexApi.uploadAttachment()` -- not called from any UI yet in this phase, so it's
      * `internal` rather than `private` purely to let tests stage pending attachments without a

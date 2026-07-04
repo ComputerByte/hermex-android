@@ -1,13 +1,18 @@
 package com.hermex.android.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -51,12 +56,19 @@ import com.hermex.android.workspace.WorkspaceScreen
 import com.hermex.android.workspace.WorkspaceViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
+import kotlinx.coroutines.flow.StateFlow
 
 private object Routes {
     const val ONBOARDING = "onboarding"
     const val SESSION_LIST = "sessionList"
-    const val CHAT_PATTERN = "chat/{sessionId}"
-    fun chat(sessionId: String) = "chat/$sessionId"
+    const val CHAT_PATTERN = "chat/{sessionId}?draft={draft}"
+    fun chat(sessionId: String, draft: String? = null): String {
+        val encodedSessionId = URLEncoder.encode(sessionId, "UTF-8")
+        val encodedDraft = draft?.takeIf { it.isNotBlank() }?.let { URLEncoder.encode(it, "UTF-8") }
+        return if (encodedDraft == null) "chat/$encodedSessionId" else "chat/$encodedSessionId?draft=$encodedDraft"
+    }
+    const val SHARE_PATTERN = "share/{text}"
+    fun share(text: String) = "share/${URLEncoder.encode(text, "UTF-8")}"
     const val SKILLS = "skills"
     const val SKILL_DETAIL_PATTERN = "skills/{name}"
 
@@ -93,9 +105,15 @@ private object Routes {
  * list -> chat) is ordinary NavHost navigation and doesn't touch this gate.
  */
 @Composable
-fun HermexNavGraph(appContainer: AppContainer) {
+fun HermexNavGraph(
+    appContainer: AppContainer,
+    externalIntentDestination: StateFlow<HermexIntentDestination?>? = null,
+    onExternalIntentConsumed: () -> Unit = {},
+) {
     val isRestoring by appContainer.authRepository.isRestoring.collectAsStateWithLifecycle()
     val authState by appContainer.authRepository.state.collectAsStateWithLifecycle()
+    val requestedDestination by externalIntentDestination?.collectAsStateWithLifecycle()
+        ?: androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(null) }
 
     if (isRestoring) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -114,6 +132,20 @@ fun HermexNavGraph(appContainer: AppContainer) {
                 launchSingleTop = true
             }
         }
+    }
+
+    LaunchedEffect(authState, requestedDestination) {
+        val destination = requestedDestination ?: return@LaunchedEffect
+        if (authState !is AuthState.LoggedIn) return@LaunchedEffect
+        val route = when (destination) {
+            HermexIntentDestination.Sessions -> Routes.SESSION_LIST
+            HermexIntentDestination.Tasks -> Routes.TASKS
+            is HermexIntentDestination.Session -> Routes.chat(destination.sessionId)
+            is HermexIntentDestination.Task -> Routes.taskDetail(destination.jobId)
+            is HermexIntentDestination.ShareText -> Routes.share(destination.text)
+        }
+        navController.navigate(route) { launchSingleTop = true }
+        onExternalIntentConsumed()
     }
 
     NavHost(
@@ -151,6 +183,23 @@ fun HermexNavGraph(appContainer: AppContainer) {
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+        composable(
+            route = Routes.SHARE_PATTERN,
+            arguments = listOf(navArgument("text") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val encodedText = backStackEntry.arguments?.getString("text").orEmpty()
+            val sharedText = URLDecoder.decode(encodedText, "UTF-8")
+            val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+            LaunchedEffect(sharedText) {
+                viewModel.createSession { newSessionId ->
+                    navController.navigate(Routes.chat(newSessionId, draft = sharedText)) {
+                        popUpTo(Routes.SESSION_LIST) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }
+            }
+            ShareLaunchScreen(modifier = Modifier.fillMaxSize())
         }
         composable(Routes.SETTINGS) { backStackEntry ->
             val viewModel: SettingsViewModel = viewModel(factory = appContainer.settingsViewModelFactory())
@@ -311,9 +360,18 @@ fun HermexNavGraph(appContainer: AppContainer) {
         }
         composable(
             route = Routes.CHAT_PATTERN,
-            arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
+            arguments = listOf(
+                navArgument("sessionId") { type = NavType.StringType },
+                navArgument("draft") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
         ) { backStackEntry ->
-            val sessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+            val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+            val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
+            val initialDraft = backStackEntry.arguments?.getString("draft")?.let { URLDecoder.decode(it, "UTF-8") }
             val viewModel: ChatViewModel = viewModel(
                 key = sessionId,
                 factory = appContainer.chatViewModelFactory(sessionId),
@@ -328,6 +386,7 @@ fun HermexNavGraph(appContainer: AppContainer) {
                 },
                 onOpenWorkspace = { navController.navigate(Routes.files(sessionId)) },
                 modifier = Modifier.fillMaxSize(),
+                initialComposerDraft = initialDraft,
             )
         }
         composable(
@@ -343,6 +402,24 @@ fun HermexNavGraph(appContainer: AppContainer) {
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShareLaunchScreen(modifier: Modifier = Modifier) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(24.dp),
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = "Preparing draft...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
             )
         }
     }

@@ -41,8 +41,13 @@ fun ChatScreen(
     onSwitchedSession: (String) -> Unit,
     onOpenWorkspace: () -> Unit,
     modifier: Modifier = Modifier,
+    initialComposerDraft: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(initialComposerDraft) {
+        initialComposerDraft?.let(viewModel::stageDraftIfComposerEmpty)
+    }
 
     uiState.pendingProfileSwitch?.let { profileName ->
         val displayName = uiState.profileOptions.firstOrNull { it.normalizedName == profileName }?.displayName ?: profileName

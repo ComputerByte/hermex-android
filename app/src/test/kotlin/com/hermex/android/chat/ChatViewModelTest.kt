@@ -137,6 +137,48 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun `stageDraftIfComposerEmpty stages shared text without sending`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            viewModel.stageDraftIfComposerEmpty(" Review before sending ")
+            val staged = awaitUntil { it.composerText == "Review before sending" }
+
+            assertEquals("Review before sending", staged.composerText)
+            assertEquals(false, staged.isSending)
+            assertEquals(false, staged.isStreaming)
+            assertTrue(staged.messages.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `stageDraftIfComposerEmpty does not overwrite existing composer text`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            viewModel.onComposerTextChanged("local draft")
+            awaitUntil { it.composerText == "local draft" }
+            viewModel.stageDraftIfComposerEmpty("shared draft")
+
+            assertEquals("local draft", viewModel.uiState.value.composerText)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `a full turn -- tokens, tool start+complete, done -- finalizes the message and clears streaming state`() = runTest {
         authRepository = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))

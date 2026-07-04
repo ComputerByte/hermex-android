@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="hermex_widget_background">#FF000000</color>
+    <color name="hermex_widget_text">#FFFFFFFF</color>
+    <color name="hermex_widget_text_subtle">#FF98989F</color>
+</resources>

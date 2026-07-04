@@ -27,10 +27,17 @@ this app targets.
 - Header logo color theming
 - Room-based offline cache for the session list, with per-server cache isolation
 - Room-based offline cache for chat/message history, with cache-first load and fallback banners
+- Session-scoped read-only workspace browser with folder navigation and text file preview
+- Attachment foundation and upload API wiring
+- Android share target support for shared text, single files, and multiple files
+- Deep link entry routes for `hermex://` and `hermes-agent://`
+- Notification channel and notification routing foundation
+- Home screen widget entry surface
 
 ## In Progress / Not Finished Yet
 
-- Workspace and git panels
+- Workspace actions polish: copy path, refresh, search, and raw/open/download support
+- Git status/diff panels pending backend endpoint discovery
 - More iOS parity polish
 - Play Store release hardening (this preview ships a debug build; release signing isn't set up yet)
 

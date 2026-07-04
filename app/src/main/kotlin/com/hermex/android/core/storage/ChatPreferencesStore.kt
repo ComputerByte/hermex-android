@@ -8,4 +8,6 @@ interface ChatPreferencesStore {
     suspend fun setExpandThinkingByDefault(value: Boolean)
     suspend fun loadExpandToolCallsByDefault(): Boolean
     suspend fun setExpandToolCallsByDefault(value: Boolean)
+    suspend fun loadNotificationsEnabled(): Boolean
+    suspend fun setNotificationsEnabled(value: Boolean)
 }

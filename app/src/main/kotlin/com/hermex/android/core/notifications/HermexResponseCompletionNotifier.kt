@@ -15,10 +15,12 @@ import com.hermex.android.chat.ResponseCompletionNotifier
 class HermexResponseCompletionNotifier(
     private val context: Context,
     private val isAppInForeground: () -> Boolean,
+    private val isNotificationsEnabled: () -> Boolean = { true },
 ) : ResponseCompletionNotifier {
 
     override fun onResponseCompleted(sessionId: String, completedNormally: Boolean) {
         if (!ResponseCompletionGate.shouldNotify(completedNormally, isAppInForeground())) return
+        if (!isNotificationsEnabled()) return
         HermexNotifier.showSessionAttention(context, sessionId)
     }
 }

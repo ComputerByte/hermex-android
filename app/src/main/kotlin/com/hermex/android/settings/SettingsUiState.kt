@@ -21,4 +21,5 @@ data class SettingsUiState(
     val customHeaderCount: Int = 0,
     val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
     val appIconVariant: AppIconVariant = AppIconVariant.SYSTEM,
+    val notificationsEnabled: Boolean = false,
 )

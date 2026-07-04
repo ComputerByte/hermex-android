@@ -50,11 +50,14 @@ private class FakeSseClient(private val flowProvider: (HttpUrl) -> Flow<SseEvent
 private class FakeChatPreferencesStore(
     private var expandThinkingByDefault: Boolean = false,
     private var expandToolCallsByDefault: Boolean = false,
+    private var notificationsEnabled: Boolean = false,
 ) : ChatPreferencesStore {
     override suspend fun loadExpandThinkingByDefault(): Boolean = expandThinkingByDefault
     override suspend fun setExpandThinkingByDefault(value: Boolean) { expandThinkingByDefault = value }
     override suspend fun loadExpandToolCallsByDefault(): Boolean = expandToolCallsByDefault
     override suspend fun setExpandToolCallsByDefault(value: Boolean) { expandToolCallsByDefault = value }
+    override suspend fun loadNotificationsEnabled(): Boolean = notificationsEnabled
+    override suspend fun setNotificationsEnabled(value: Boolean) { notificationsEnabled = value }
 }
 
 /** See [com.hermex.android.sessions.SessionListViewModelTest] for why this pattern (Turbine +

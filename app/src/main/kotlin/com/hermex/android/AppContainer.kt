@@ -40,6 +40,9 @@ import com.hermex.android.skills.SkillsViewModel
 import com.hermex.android.tasks.TaskDetailViewModel
 import com.hermex.android.tasks.TasksViewModel
 import com.hermex.android.workspace.WorkspaceViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Manual dependency wiring for the whole app -- no Hilt for a 3-screen MVP (the dependency
@@ -69,6 +72,18 @@ class AppContainer(context: Context) {
     fun setAppInForeground(foreground: Boolean) {
         isAppInForeground = foreground
     }
+
+    /** Cached copy of [ChatPreferencesStore.loadNotificationsEnabled] -- loaded once on app start
+     * and kept in sync by [SettingsViewModel.setNotificationsEnabled]. Read synchronously by
+     * [HermexResponseCompletionNotifier] at notification time (never calls a suspend DataStore
+     * read on the hot notification path). */
+    @Volatile
+    var notificationsEnabled: Boolean = false
+        private set
+
+    fun setNotificationsEnabled(enabled: Boolean) {
+        notificationsEnabled = enabled
+    }
     // Stored (rather than referencing the constructor's `context` param directly) so it's usable
     // from a regular member function like chatViewModelFactory -- an unstored constructor
     // parameter is only visible inside property initializers/init blocks, not later methods.
@@ -93,6 +108,14 @@ class AppContainer(context: Context) {
     )
 
     private lateinit var authRepositoryRef: AuthRepository
+
+    init {
+        // Load the cached notification preference so the notifier gate has a value
+        // before the user ever opens Settings. Default false until the DataStore read completes.
+        CoroutineScope(Dispatchers.IO).launch {
+            notificationsEnabled = chatPreferencesStore.loadNotificationsEnabled()
+        }
+    }
 
     // Placeholder scope only -- AuthRepository.restoreSavedServer() (called right after this is
     // built, see HermexApplication) repoints this via NetworkModule.useServer() before any real
@@ -130,6 +153,7 @@ class AppContainer(context: Context) {
                 HermexResponseCompletionNotifier(
                     context = applicationContext,
                     isAppInForeground = { this@AppContainer.isAppInForeground },
+                    isNotificationsEnabled = { this@AppContainer.notificationsEnabled },
                 ),
             )
         }
@@ -173,7 +197,7 @@ class AppContainer(context: Context) {
 
     fun settingsViewModelFactory() = viewModelFactory {
         initializer {
-            SettingsViewModel(
+            val vm = SettingsViewModel(
                 authRepository,
                 chatPreferencesStore,
                 authRepository.customHeadersStoreForActiveServer() ?: NoOpCustomHeadersStore,
@@ -181,6 +205,8 @@ class AppContainer(context: Context) {
                 appearancePreferencesStore,
                 appIconSwitcher,
             )
+            vm.onNotificationsChanged = { enabled -> this@AppContainer.setNotificationsEnabled(enabled) }
+            vm
         }
     }
 

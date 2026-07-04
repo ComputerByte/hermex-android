@@ -25,6 +25,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -33,11 +34,14 @@ import org.junit.Test
 private class FakeChatPreferencesStore(
     private var expandThinkingByDefault: Boolean = false,
     private var expandToolCallsByDefault: Boolean = false,
+    private var notificationsEnabled: Boolean = false,
 ) : ChatPreferencesStore {
     override suspend fun loadExpandThinkingByDefault(): Boolean = expandThinkingByDefault
     override suspend fun setExpandThinkingByDefault(value: Boolean) { expandThinkingByDefault = value }
     override suspend fun loadExpandToolCallsByDefault(): Boolean = expandToolCallsByDefault
     override suspend fun setExpandToolCallsByDefault(value: Boolean) { expandToolCallsByDefault = value }
+    override suspend fun loadNotificationsEnabled(): Boolean = notificationsEnabled
+    override suspend fun setNotificationsEnabled(value: Boolean) { notificationsEnabled = value }
 }
 
 private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean): T {
@@ -291,23 +295,68 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `load reads the persisted app icon variant`() = runTest {
+    fun `load reads the persisted notificationsEnabled preference`() = runTest {
         val repo = loggedInRepository()
         server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
         server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
 
-        val viewModel = SettingsViewModel(
-            repo,
-            FakeChatPreferencesStore(),
-            FakeCustomHeadersStore(),
-            appearancePreferencesStore = FakeAppearancePreferencesStore(initialAppIconVariant = AppIconVariant.DISCO),
-        )
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(notificationsEnabled = true), FakeCustomHeadersStore())
 
         viewModel.uiState.test {
             val loaded = awaitUntil { !it.isLoading }
-            assertEquals(AppIconVariant.DISCO, loaded.appIconVariant)
+            assertTrue(loaded.notificationsEnabled)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `setNotificationsEnabled updates state immediately and persists to the store`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+        val store = FakeChatPreferencesStore()
+        val viewModel = SettingsViewModel(repo, store, FakeCustomHeadersStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.uiState.test {
+            viewModel.setNotificationsEnabled(true)
+            val afterToggle = awaitUntil { it.notificationsEnabled }
+            assertTrue(afterToggle.notificationsEnabled)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertTrue(store.loadNotificationsEnabled())
+    }
+
+    @Test
+    fun `notificationsEnabled defaults to false`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertFalse(loaded.notificationsEnabled)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `setNotificationsEnabled invokes the onNotificationsChanged callback`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+        var callbackValue: Boolean? = null
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(), FakeCustomHeadersStore())
+        viewModel.onNotificationsChanged = { callbackValue = it }
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.setNotificationsEnabled(true)
+        assertEquals(true, callbackValue)
+
+        viewModel.setNotificationsEnabled(false)
+        assertEquals(false, callbackValue)
     }
 
     @Test

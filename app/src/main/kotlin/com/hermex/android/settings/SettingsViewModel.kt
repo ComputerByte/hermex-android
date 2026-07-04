@@ -32,6 +32,9 @@ class SettingsViewModel(
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
+    /** Called whenever the preference changes so [AppContainer] can keep its cached copy in sync. */
+    var onNotificationsChanged: ((Boolean) -> Unit)? = null
+
     init { load() }
 
     fun load() {
@@ -48,6 +51,7 @@ class SettingsViewModel(
             // rest of this call succeeds.
             _uiState.update { it.copy(expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()) }
             _uiState.update { it.copy(expandToolCallsByDefault = chatPreferencesStore.loadExpandToolCallsByDefault()) }
+            _uiState.update { it.copy(notificationsEnabled = chatPreferencesStore.loadNotificationsEnabled()) }
             _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
             _uiState.update { it.copy(appIconVariant = appearancePreferencesStore.loadAppIconVariant()) }
             val customHeaders = customHeadersStore.load()
@@ -98,6 +102,12 @@ class SettingsViewModel(
             appearancePreferencesStore.setAppIconVariant(variant)
             appIconSwitcher.applyVariant(variant)
         }
+    }
+
+    fun setNotificationsEnabled(value: Boolean) {
+        _uiState.update { it.copy(notificationsEnabled = value) }
+        viewModelScope.launch { chatPreferencesStore.setNotificationsEnabled(value) }
+        onNotificationsChanged?.invoke(value)
     }
 
     /** Doesn't need to navigate or flip [SettingsUiState.isSigningOut] back -- once

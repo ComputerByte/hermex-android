@@ -11,6 +11,7 @@ private val Context.chatPreferencesDataStore by preferencesDataStore(name = "her
 class DataStoreChatPreferencesStore(private val context: Context) : ChatPreferencesStore {
     private val expandThinkingKey = booleanPreferencesKey("expand_thinking_by_default")
     private val expandToolCallsKey = booleanPreferencesKey("expand_tool_calls_by_default")
+    private val notificationsEnabledKey = booleanPreferencesKey("notifications_enabled")
 
     override suspend fun loadExpandThinkingByDefault(): Boolean =
         context.chatPreferencesDataStore.data.firstOrNull()?.get(expandThinkingKey) ?: false
@@ -24,5 +25,12 @@ class DataStoreChatPreferencesStore(private val context: Context) : ChatPreferen
 
     override suspend fun setExpandToolCallsByDefault(value: Boolean) {
         context.chatPreferencesDataStore.edit { prefs -> prefs[expandToolCallsKey] = value }
+    }
+
+    override suspend fun loadNotificationsEnabled(): Boolean =
+        context.chatPreferencesDataStore.data.firstOrNull()?.get(notificationsEnabledKey) ?: false
+
+    override suspend fun setNotificationsEnabled(value: Boolean) {
+        context.chatPreferencesDataStore.edit { prefs -> prefs[notificationsEnabledKey] = value }
     }
 }

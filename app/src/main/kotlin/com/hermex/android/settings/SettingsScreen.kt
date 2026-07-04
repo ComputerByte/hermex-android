@@ -1,5 +1,7 @@
 package com.hermex.android.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +48,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import com.hermex.android.BuildConfig
 import com.hermex.android.R
 import com.hermex.android.core.storage.AppIconVariant
@@ -66,6 +74,51 @@ fun SettingsScreen(
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showAppIconPicker by remember { mutableStateOf(false) }
+    var showNotificationEducation by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            if (granted) {
+                viewModel.setNotificationsEnabled(true)
+            } else {
+                viewModel.setNotificationsEnabled(false)
+                showNotificationEducation = true
+            }
+        },
+    )
+
+    if (showNotificationEducation) {
+        AlertDialog(
+            onDismissRequest = { showNotificationEducation = false },
+            title = { Text("Notifications") },
+            text = {
+                Text("Notifications are disabled. Enable them in Settings → Apps → Hermex → Notifications.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNotificationEducation = false
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${BuildConfig.APPLICATION_ID}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(intent)
+                    } catch (_: Exception) {
+                        // If the settings intent fails, just dismiss
+                    }
+                }) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotificationEducation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     if (showColorPicker) {
         HeaderLogoColorDialog(
@@ -173,6 +226,35 @@ fun SettingsScreen(
                         description = "Tool call blocks start expanded instead of collapsed. Tapping a block still toggles it.",
                         checked = uiState.expandToolCallsByDefault,
                         onCheckedChange = viewModel::setExpandToolCallsByDefault,
+                        showDivider = false,
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+                SectionLabel("Notifications")
+                Card {
+                    SettingsSwitchRow(
+                        label = "Response completion notifications",
+                        description = "Notify me when a response finishes while Hermex is in the background.",
+                        checked = uiState.notificationsEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    val permission = Manifest.permission.POST_NOTIFICATIONS
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, permission)
+                                        == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        viewModel.setNotificationsEnabled(true)
+                                    } else {
+                                        notificationPermissionLauncher.launch(permission)
+                                    }
+                                } else {
+                                    viewModel.setNotificationsEnabled(true)
+                                }
+                            } else {
+                                viewModel.setNotificationsEnabled(false)
+                            }
+                        },
                         showDivider = false,
                     )
                 }

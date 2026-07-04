@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,16 +53,16 @@ fun MessageBubble(
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Text(
-                text = message.content.orEmpty(),
-                color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            MarkdownText(
+                markdown = message.content.orEmpty(),
+                textColor = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
 /** Bound to [ChatUiState.streamingText] -- rendered like an assistant bubble while a reply is
- * still arriving. No markdown/syntax highlighting in this MVP (see API_CONTRACT.md scope). */
+ * still arriving. Markdown supported via [MarkdownText]. */
 @Composable
 fun StreamingBubble(
     text: String,
@@ -80,7 +79,7 @@ fun StreamingBubble(
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Text(text = text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            MarkdownText(markdown = text, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

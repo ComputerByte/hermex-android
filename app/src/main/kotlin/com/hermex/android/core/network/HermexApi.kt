@@ -225,6 +225,14 @@ interface HermexApi {
     @POST("/api/file/move")
     suspend fun moveFile(@Body body: MoveFileRequest): FileSaveResponse
 
+    @Multipart
+    @POST("/api/workspace/upload")
+    suspend fun workspaceUpload(
+        @Part("session_id") sessionId: RequestBody,
+        @Part("path") path: RequestBody,
+        @Part file: MultipartBody.Part,
+    ): FileSaveResponse
+
     // Git endpoints (read-only -- no commit/pull/discard/checkout in v0.7.3).
     @GET("/api/git/status")
     suspend fun gitStatus(

@@ -9,6 +9,7 @@ import com.hermex.android.core.network.dto.CreateFileRequest
 import com.hermex.android.core.network.dto.DeleteFileRequest
 import com.hermex.android.core.network.dto.FileSaveRequest
 import com.hermex.android.core.network.dto.MoveFileRequest
+import com.hermex.android.core.network.dto.FileSaveResponse
 import com.hermex.android.core.network.dto.RenameFileRequest
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.safeApiCall
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 
 /**
  * Read-only workspace directory/file browser for one chat session -- `/api/list` and `/api/file`
@@ -675,6 +678,45 @@ class WorkspaceViewModel(
             }
         }
         return true
+    }
+
+    // ── Upload ──
+
+    fun uploadFile(fileName: String, fileBytes: ByteArray) {
+        val path = _uiState.value.currentPath
+        val name = fileName.substringAfterLast('/').ifEmpty { "upload" }
+        if (name == ".git" || name == ".github") {
+            _uiState.update { it.copy(isUploading = false, uploadMessage = "Cannot upload to this name.") }
+            return
+        }
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(isUploading = false, uploadMessage = "Not signed in.") }
+            return
+        }
+        _uiState.update { it.copy(isUploading = true, uploadMessage = null) }
+        val textMediaType = "text/plain".toMediaType()
+        val octetMediaType = "application/octet-stream".toMediaType()
+        val sessionIdPart = okhttp3.RequestBody.Companion.create(textMediaType, sessionId)
+        val pathPart = okhttp3.RequestBody.Companion.create(textMediaType, path)
+        val filePart = MultipartBody.Part.createFormData("file", name, okhttp3.RequestBody.Companion.create(octetMediaType, fileBytes))
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall { api.workspaceUpload(sessionIdPart, pathPart, filePart) }
+                if (response.error != null) {
+                    _uiState.update { it.copy(isUploading = false, uploadMessage = response.error) }
+                    return@launch
+                }
+                _uiState.update { it.copy(isUploading = false, uploadMessage = "Uploaded $name") }
+                loadDirectory(_uiState.value.currentPath, preserveSearch = true)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isUploading = false, uploadMessage = "Could not upload file.") }
+            }
+        }
+    }
+
+    fun clearUploadMessage() {
+        _uiState.update { it.copy(uploadMessage = null) }
     }
 }
 

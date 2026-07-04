@@ -3,7 +3,11 @@ package com.hermex.android.workspace
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
+import android.text.format.Formatter
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -89,9 +93,35 @@ fun WorkspaceScreen(
     val openFile = uiState.selectedFile
     val context = LocalContext.current
 
-    // Load git status when the directory path changes (root → subfolder → parent).
+    // File picker launcher for workspace upload
+    val uploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
+            val bytes = inputStream.readBytes()
+            inputStream.close()
+            val displayName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else uri.lastPathSegment ?: "upload"
+            } ?: uri.lastPathSegment ?: "upload"
+            viewModel.uploadFile(displayName, bytes)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Could not read file.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // LaunchedEffect for git status loading
     LaunchedEffect(uiState.currentPath) {
         viewModel.loadGitStatus(uiState.currentPath)
+    }
+
+    // Show upload messages as Toast and clear
+    LaunchedEffect(uiState.uploadMessage) {
+        val msg = uiState.uploadMessage ?: return@LaunchedEffect
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        viewModel.clearUploadMessage()
     }
 
     Scaffold(
@@ -135,6 +165,14 @@ fun WorkspaceScreen(
                         // New folder
                         TextButton(onClick = viewModel::showCreateFolderDialog, modifier = Modifier.height(32.dp)) {
                             Text("+ Folder", style = MaterialTheme.typography.labelSmall)
+                        }
+                        // Upload
+                        TextButton(
+                            onClick = { uploadLauncher.launch(arrayOf("*/*")) },
+                            enabled = !uiState.isUploading,
+                            modifier = Modifier.height(32.dp),
+                        ) {
+                            Text("Upload", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 },

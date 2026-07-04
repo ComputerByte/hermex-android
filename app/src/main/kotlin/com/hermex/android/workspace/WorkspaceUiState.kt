@@ -33,6 +33,10 @@ data class WorkspaceUiState(
     val deleteDialog: DeleteDialogState? = null,
     /** Non-null when a move dialog is active. */
     val moveDialog: MoveDialogState? = null,
+    /** True while a workspace file upload is in progress. */
+    val isUploading: Boolean = false,
+    /** Non-null after a successful or failed upload attempt. */
+    val uploadMessage: String? = null,
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }

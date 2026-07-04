@@ -1350,5 +1350,39 @@ class WorkspaceViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // ── Upload tests ──
+
+    @Test
+    fun `upload sets uploading state`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.uploadFile("test.txt", "hello".toByteArray())
+            val uploading = awaitUntil { it.isUploading == true }
+            val done = awaitUntil { it.isUploading == false }
+            assertNull(done.uploadMessage?.let { if (it.startsWith("Uploaded")) null else it })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `upload dotgit rejected`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.uploadFile(".git", "data".toByteArray())
+            assertNotNull(viewModel.uiState.value.uploadMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
 

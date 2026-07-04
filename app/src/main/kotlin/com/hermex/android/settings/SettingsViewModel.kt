@@ -47,6 +47,7 @@ class SettingsViewModel(
             // Local-only, independent of server connectivity -- loaded regardless of whether the
             // rest of this call succeeds.
             _uiState.update { it.copy(expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()) }
+            _uiState.update { it.copy(expandToolCallsByDefault = chatPreferencesStore.loadExpandToolCallsByDefault()) }
             _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
             _uiState.update { it.copy(appIconVariant = appearancePreferencesStore.loadAppIconVariant()) }
             val customHeaders = customHeadersStore.load()
@@ -76,6 +77,11 @@ class SettingsViewModel(
     fun setExpandThinkingByDefault(value: Boolean) {
         _uiState.update { it.copy(expandThinkingByDefault = value) }
         viewModelScope.launch { chatPreferencesStore.setExpandThinkingByDefault(value) }
+    }
+
+    fun setExpandToolCallsByDefault(value: Boolean) {
+        _uiState.update { it.copy(expandToolCallsByDefault = value) }
+        viewModelScope.launch { chatPreferencesStore.setExpandToolCallsByDefault(value) }
     }
 
     fun setHeaderLogoColor(color: HeaderLogoColor) {

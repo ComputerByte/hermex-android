@@ -43,9 +43,14 @@ private class FakeSseClient(private val flowProvider: (HttpUrl) -> Flow<SseEvent
     }
 }
 
-private class FakeChatPreferencesStore(private var expandThinkingByDefault: Boolean = false) : ChatPreferencesStore {
+private class FakeChatPreferencesStore(
+    private var expandThinkingByDefault: Boolean = false,
+    private var expandToolCallsByDefault: Boolean = false,
+) : ChatPreferencesStore {
     override suspend fun loadExpandThinkingByDefault(): Boolean = expandThinkingByDefault
     override suspend fun setExpandThinkingByDefault(value: Boolean) { expandThinkingByDefault = value }
+    override suspend fun loadExpandToolCallsByDefault(): Boolean = expandToolCallsByDefault
+    override suspend fun setExpandToolCallsByDefault(value: Boolean) { expandToolCallsByDefault = value }
 }
 
 /** See [com.hermex.android.sessions.SessionListViewModelTest] for why this pattern (Turbine +
@@ -704,6 +709,26 @@ class ChatViewModelTest {
         viewModel.uiState.test {
             val loaded = awaitUntil { it.expandThinkingByDefault }
             assertTrue(loaded.expandThinkingByDefault)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loads expandToolCallsByDefault from the preferences store at init`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(expandToolCallsByDefault = true),
+        )
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { it.expandToolCallsByDefault }
+            assertTrue(loaded.expandToolCallsByDefault)
             cancelAndIgnoreRemainingEvents()
         }
     }

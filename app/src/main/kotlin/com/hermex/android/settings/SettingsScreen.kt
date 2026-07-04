@@ -167,6 +167,12 @@ fun SettingsScreen(
                         description = "Thinking blocks start expanded instead of collapsed. Tapping a block still toggles it.",
                         checked = uiState.expandThinkingByDefault,
                         onCheckedChange = viewModel::setExpandThinkingByDefault,
+                    )
+                    SettingsSwitchRow(
+                        label = "Expand Tool Calls by Default",
+                        description = "Tool call blocks start expanded instead of collapsed. Tapping a block still toggles it.",
+                        checked = uiState.expandToolCallsByDefault,
+                        onCheckedChange = viewModel::setExpandToolCallsByDefault,
                         showDivider = false,
                     )
                 }

@@ -6,4 +6,6 @@ package com.hermex.android.core.storage
 interface ChatPreferencesStore {
     suspend fun loadExpandThinkingByDefault(): Boolean
     suspend fun setExpandThinkingByDefault(value: Boolean)
+    suspend fun loadExpandToolCallsByDefault(): Boolean
+    suspend fun setExpandToolCallsByDefault(value: Boolean)
 }

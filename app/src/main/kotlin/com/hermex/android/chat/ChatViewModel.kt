@@ -62,6 +62,8 @@ class ChatViewModel(
         viewModelScope.launch {
             val expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()
             _uiState.update { it.copy(expandThinkingByDefault = expandThinkingByDefault) }
+            val expandToolCallsByDefault = chatPreferencesStore.loadExpandToolCallsByDefault()
+            _uiState.update { it.copy(expandToolCallsByDefault = expandToolCallsByDefault) }
         }
         viewModelScope.launch {
             var previousServerId: String? = null

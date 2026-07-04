@@ -160,7 +160,9 @@ fun ChatScreen(
                     ) {
                         uiState.messages.forEachIndexed { index, message ->
                             toolCallsByAnchor[index]?.forEach { toolCall ->
-                                item(key = toolCall.stableId) { ToolCallCard(toolCall) }
+                                item(key = toolCall.stableId) {
+                                    ToolCallCard(toolCall, initiallyExpanded = uiState.expandToolCallsByDefault)
+                                }
                             }
                             item(key = message.stableId) { MessageBubble(message) }
                         }
@@ -172,7 +174,9 @@ fun ChatScreen(
                         // The current, not-yet-finalized turn's tool calls: anchored at the index
                         // the eventual finalized reply will occupy, i.e. messages.size right now.
                         toolCallsByAnchor[uiState.messages.size]?.forEach { toolCall ->
-                            item(key = toolCall.stableId) { ToolCallCard(toolCall) }
+                            item(key = toolCall.stableId) {
+                                ToolCallCard(toolCall, initiallyExpanded = uiState.expandToolCallsByDefault)
+                            }
                         }
                         if (uiState.streamingText.isNotEmpty()) {
                             item(key = "streaming-text") { StreamingBubble(uiState.streamingText) }

@@ -30,9 +30,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-private class FakeChatPreferencesStore(private var expandThinkingByDefault: Boolean = false) : ChatPreferencesStore {
+private class FakeChatPreferencesStore(
+    private var expandThinkingByDefault: Boolean = false,
+    private var expandToolCallsByDefault: Boolean = false,
+) : ChatPreferencesStore {
     override suspend fun loadExpandThinkingByDefault(): Boolean = expandThinkingByDefault
     override suspend fun setExpandThinkingByDefault(value: Boolean) { expandThinkingByDefault = value }
+    override suspend fun loadExpandToolCallsByDefault(): Boolean = expandToolCallsByDefault
+    override suspend fun setExpandToolCallsByDefault(value: Boolean) { expandToolCallsByDefault = value }
 }
 
 private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean): T {
@@ -159,6 +164,39 @@ class SettingsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertTrue(store.loadExpandThinkingByDefault())
+    }
+
+    @Test
+    fun `load reads the persisted expandToolCallsByDefault preference`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+
+        val viewModel = SettingsViewModel(repo, FakeChatPreferencesStore(expandToolCallsByDefault = true), FakeCustomHeadersStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertTrue(loaded.expandToolCallsByDefault)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `setExpandToolCallsByDefault updates state immediately and persists to the store`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"version":"v0.51.766"}"""))
+        server.enqueue(MockResponse().setBody("""{"default_model":"gpt-5.5"}"""))
+        val store = FakeChatPreferencesStore()
+        val viewModel = SettingsViewModel(repo, store, FakeCustomHeadersStore())
+        viewModel.uiState.test { awaitUntil { !it.isLoading }; cancelAndIgnoreRemainingEvents() }
+
+        viewModel.uiState.test {
+            viewModel.setExpandToolCallsByDefault(true)
+            val afterToggle = awaitUntil { it.expandToolCallsByDefault }
+            assertTrue(afterToggle.expandToolCallsByDefault)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertTrue(store.loadExpandToolCallsByDefault())
     }
 
     @Test

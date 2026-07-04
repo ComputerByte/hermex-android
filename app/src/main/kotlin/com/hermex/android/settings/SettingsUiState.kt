@@ -15,6 +15,7 @@ data class SettingsUiState(
     val isSigningOut: Boolean = false,
     val errorMessage: String? = null,
     val expandThinkingByDefault: Boolean = false,
+    val expandToolCallsByDefault: Boolean = false,
     /** Count of saved custom headers (after blank-name rows are dropped) -- drives the
      * "None" / "N configured" subtitle on the Connection Headers row. */
     val customHeaderCount: Int = 0,

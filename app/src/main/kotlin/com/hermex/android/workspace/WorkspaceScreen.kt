@@ -483,7 +483,7 @@ private fun GitStatusCard(
                             }
                         } else {
                             Text(
-                                text = "Not a git repository at this path",
+                                text = "Not a git repository in workspace",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

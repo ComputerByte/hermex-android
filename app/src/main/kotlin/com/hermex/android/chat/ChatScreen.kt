@@ -88,18 +88,16 @@ fun ChatScreen(
         bottomBar = {
             ChatComposer(
                 composerState = ChatComposerState.from(uiState),
-                onTextChanged = viewModel::onComposerTextChanged,
-                onSend = viewModel::sendMessage,
-                onStop = viewModel::cancelStream,
-                profileOptions = uiState.profileOptions,
-                selectedProfileName = uiState.selectedProfileName,
-                onSelectProfile = viewModel::selectProfile,
-                modelCatalogGroups = uiState.modelCatalogGroups,
-                currentModel = uiState.currentModel,
-                currentModelProvider = uiState.currentModelProvider,
-                isLoadingModelCatalog = uiState.isLoadingModelCatalog,
-                onOpenModelPicker = viewModel::refreshModelCatalogForPickerOpen,
-                onSelectModel = viewModel::selectComposerModel,
+                profileSelectorState = ChatComposerProfileSelectorState.from(uiState),
+                modelSelectorState = ChatComposerModelSelectorState.from(uiState),
+                actions = ChatComposerActions(
+                    onTextChanged = viewModel::onComposerTextChanged,
+                    onSend = viewModel::sendMessage,
+                    onStop = viewModel::cancelStream,
+                    onSelectProfile = viewModel::selectProfile,
+                    onOpenModelPicker = viewModel::refreshModelCatalogForPickerOpen,
+                    onSelectModel = viewModel::selectComposerModel,
+                ),
             )
         },
     ) { innerPadding ->

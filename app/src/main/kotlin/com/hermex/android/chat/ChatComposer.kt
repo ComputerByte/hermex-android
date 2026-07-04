@@ -33,21 +33,55 @@ import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ProfileSummary
 
+/** [ChatComposer]'s callbacks, grouped so adding a future action (attachments, slash commands)
+ * doesn't widen [ChatComposer]'s own parameter list. */
+data class ChatComposerActions(
+    val onTextChanged: (String) -> Unit,
+    val onSend: () -> Unit,
+    val onStop: () -> Unit,
+    val onSelectProfile: (String) -> Unit,
+    val onOpenModelPicker: () -> Unit,
+    val onSelectModel: (ModelCatalogOption) -> Unit,
+)
+
+/** The profile dropdown's own list/selection data -- separate from [ChatComposerState] because
+ * it's plain display data, not busy/disabled state. */
+data class ChatComposerProfileSelectorState(
+    val profileOptions: List<ProfileSummary>,
+    val selectedProfileName: String?,
+) {
+    companion object {
+        fun from(uiState: ChatUiState): ChatComposerProfileSelectorState = ChatComposerProfileSelectorState(
+            profileOptions = uiState.profileOptions,
+            selectedProfileName = uiState.selectedProfileName,
+        )
+    }
+}
+
+/** The model dropdown's own list/selection data -- separate from [ChatComposerState] for the
+ * same reason as [ChatComposerProfileSelectorState]. */
+data class ChatComposerModelSelectorState(
+    val modelCatalogGroups: List<ModelCatalogGroup>,
+    val currentModel: String?,
+    val currentModelProvider: String?,
+    val isLoadingModelCatalog: Boolean,
+) {
+    companion object {
+        fun from(uiState: ChatUiState): ChatComposerModelSelectorState = ChatComposerModelSelectorState(
+            modelCatalogGroups = uiState.modelCatalogGroups,
+            currentModel = uiState.currentModel,
+            currentModelProvider = uiState.currentModelProvider,
+            isLoadingModelCatalog = uiState.isLoadingModelCatalog,
+        )
+    }
+}
+
 @Composable
 fun ChatComposer(
     composerState: ChatComposerState,
-    onTextChanged: (String) -> Unit,
-    onSend: () -> Unit,
-    onStop: () -> Unit,
-    profileOptions: List<ProfileSummary>,
-    selectedProfileName: String?,
-    onSelectProfile: (String) -> Unit,
-    modelCatalogGroups: List<ModelCatalogGroup>,
-    currentModel: String?,
-    currentModelProvider: String?,
-    isLoadingModelCatalog: Boolean,
-    onOpenModelPicker: () -> Unit,
-    onSelectModel: (ModelCatalogOption) -> Unit,
+    profileSelectorState: ChatComposerProfileSelectorState,
+    modelSelectorState: ChatComposerModelSelectorState,
+    actions: ChatComposerActions,
     modifier: Modifier = Modifier,
 ) {
     // enableEdgeToEdge() (MainActivity) draws the app behind the system navigation bar, so a
@@ -68,34 +102,34 @@ fun ChatComposer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProfileSelectorButton(
-                profileOptions = profileOptions,
-                selectedProfileName = selectedProfileName,
+                profileOptions = profileSelectorState.profileOptions,
+                selectedProfileName = profileSelectorState.selectedProfileName,
                 isSwitchingProfile = composerState.isProfileSelectorLoading,
-                onSelectProfile = onSelectProfile,
+                onSelectProfile = actions.onSelectProfile,
             )
             ModelSelectorButton(
-                modelCatalogGroups = modelCatalogGroups,
-                currentModel = currentModel,
-                currentModelProvider = currentModelProvider,
-                isLoadingModelCatalog = isLoadingModelCatalog,
+                modelCatalogGroups = modelSelectorState.modelCatalogGroups,
+                currentModel = modelSelectorState.currentModel,
+                currentModelProvider = modelSelectorState.currentModelProvider,
+                isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
                 isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
-                onOpenModelPicker = onOpenModelPicker,
-                onSelectModel = onSelectModel,
+                onOpenModelPicker = actions.onOpenModelPicker,
+                onSelectModel = actions.onSelectModel,
             )
             OutlinedTextField(
                 value = composerState.text,
-                onValueChange = onTextChanged,
+                onValueChange = actions.onTextChanged,
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Message") },
                 enabled = composerState.isTextFieldEnabled,
                 maxLines = 5,
             )
             when {
-                composerState.showStopButton -> IconButton(onClick = onStop) {
+                composerState.showStopButton -> IconButton(onClick = actions.onStop) {
                     Icon(Icons.Filled.Close, contentDescription = "Stop")
                 }
                 composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                else -> IconButton(onClick = onSend, enabled = composerState.canSend) {
+                else -> IconButton(onClick = actions.onSend, enabled = composerState.canSend) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                 }
             }

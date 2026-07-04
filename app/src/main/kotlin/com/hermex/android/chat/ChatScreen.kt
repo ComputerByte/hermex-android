@@ -42,7 +42,7 @@ fun ChatScreen(
     onOpenWorkspace: () -> Unit,
     modifier: Modifier = Modifier,
     initialComposerDraft: String? = null,
-    pendingFileUploadUri: String? = null,
+    pendingFileUploadUris: List<String>? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -50,11 +50,14 @@ fun ChatScreen(
         initialComposerDraft?.let(viewModel::stageDraftIfComposerEmpty)
     }
 
-    // Upload a pending shared file once the view model is ready (share intent EXTRA_STREAM)
-    LaunchedEffect(pendingFileUploadUri) {
-        val uriString = pendingFileUploadUri ?: return@LaunchedEffect
-        val uri = android.net.Uri.parse(uriString) ?: return@LaunchedEffect
-        viewModel.uploadAttachment(uri)
+    // Upload pending shared files sequentially once the view model is ready
+    LaunchedEffect(pendingFileUploadUris) {
+        val uriStrings = pendingFileUploadUris ?: return@LaunchedEffect
+        val uris = uriStrings.mapNotNull { android.net.Uri.parse(it) }
+            .filter { it != android.net.Uri.EMPTY }
+        if (uris.isNotEmpty()) {
+            viewModel.uploadAttachmentsSequentially(uris)
+        }
     }
 
     uiState.pendingProfileSwitch?.let { profileName ->

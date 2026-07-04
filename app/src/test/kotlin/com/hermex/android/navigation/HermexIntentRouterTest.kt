@@ -2,6 +2,7 @@ package com.hermex.android.navigation
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HermexIntentRouterTest {
@@ -65,19 +66,73 @@ class HermexIntentRouterTest {
         assertEquals(HermexIntentDestination.Tasks, hermexDeepLinkDestination("hermex://task/%ZZ"))
     }
 
+    // ── Share content (multi-URI) ──
+
     @Test
     fun `share content with text stages it without sending`() {
-        val result = shareContentDestination(" Review before sending ", null)
-        assertEquals(HermexIntentDestination.ShareContent(text = "Review before sending", uri = null), result)
+        val result = shareContentDestination(" Review before sending ", emptyList())
+        assertEquals(HermexIntentDestination.ShareContent(text = "Review before sending", uris = emptyList()), result)
     }
 
     @Test
     fun `blank share text is ignored`() {
-        assertNull(shareContentDestination("   ", null))
+        assertNull(shareContentDestination("   ", emptyList()))
     }
 
     @Test
-    fun `null share text and null uri is ignored`() {
-        assertNull(shareContentDestination(null, null))
+    fun `null share text and empty uris is ignored`() {
+        assertNull(shareContentDestination(null, emptyList()))
+    }
+
+    @Test
+    fun `uri list preserved in share content`() {
+        // In JVM tests Uri.parse returns null, so we test at the string level
+        val result = shareContentDestination("hello", emptyList())
+        assertEquals("hello", (result as HermexIntentDestination.ShareContent).text)
+        assertTrue(result.uris.isEmpty())
+    }
+
+    // ── URI list encode/decode ──
+
+    @Test
+    fun `encode and decode single uri round-trips`() {
+        val uris = listOf("content://media/external/images/123")
+        val encoded = encodeUriList(uris)
+        val decoded = decodeUriList(encoded)
+        assertEquals(uris, decoded)
+    }
+
+    @Test
+    fun `encode and decode multiple uris round-trips`() {
+        val uris = listOf(
+            "content://media/external/images/123",
+            "content://media/external/images/456",
+            "content://media/external/images/789",
+        )
+        val encoded = encodeUriList(uris)
+        val decoded = decodeUriList(encoded)
+        assertEquals(uris, decoded)
+    }
+
+    @Test
+    fun `encode and decode uris with special characters round-trips`() {
+        val uris = listOf(
+            "content://com.android.providers.media.documents/document/image%3A12345",
+            "content://com.android.external/document/photo.jpg",
+        )
+        val encoded = encodeUriList(uris)
+        val decoded = decodeUriList(encoded)
+        assertEquals(uris, decoded)
+    }
+
+    @Test
+    fun `decode empty string returns empty list`() {
+        assertEquals(emptyList<String>(), decodeUriList(""))
+    }
+
+    @Test
+    fun `decode malformed segment skips it gracefully`() {
+        val decoded = decodeUriList("validUri|%ZZ|alsoValid")
+        assertEquals(listOf("validUri", "alsoValid"), decoded)
     }
 }

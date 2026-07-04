@@ -32,6 +32,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -1873,5 +1874,92 @@ class ChatViewModelTest {
             assertEquals(1, afterFailure.pendingAttachments.size)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `uploadAttachmentsSequentially with empty list is no-op`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.uploadAttachmentsSequentially(emptyList())
+            // No state change expected because empty list is a no-op
+            assertEquals(0, viewModel.uiState.value.pendingAttachments.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `multiple performAttachmentUpload calls produce pending attachments sequentially`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"filename":"a.txt","path":"/a.txt"}"""))
+        server.enqueue(MockResponse().setBody("""{"filename":"b.txt","path":"/b.txt"}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // First upload
+        viewModel.performAttachmentUpload(AttachmentFile(name = "a.txt", bytes = byteArrayOf(1), mime = "text/plain"))
+        assertEquals(1, viewModel.uiState.value.pendingAttachments.size)
+        assertEquals("a.txt", viewModel.uiState.value.pendingAttachments[0].name)
+
+        // Second upload
+        viewModel.performAttachmentUpload(AttachmentFile(name = "b.txt", bytes = byteArrayOf(2), mime = "text/plain"))
+        assertEquals(2, viewModel.uiState.value.pendingAttachments.size)
+        assertEquals("b.txt", viewModel.uiState.value.pendingAttachments[1].name)
+    }
+
+    @Test
+    fun `one failed performAttachmentUpload does not corrupt state for subsequent uploads`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        // First upload fails (500)
+        server.enqueue(MockResponse().setResponseCode(500))
+        // Second upload succeeds
+        server.enqueue(MockResponse().setBody("""{"filename":"good.txt","path":"/good.txt"}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // Failed upload
+        viewModel.performAttachmentUpload(AttachmentFile(name = "fail.txt", bytes = byteArrayOf(1), mime = "text/plain"))
+        // Error state should be set but pending attachments remain empty (failure, not added)
+        assertNull(viewModel.uiState.value.pendingAttachments.firstOrNull()?.name)
+
+        // Successful upload after failure
+        viewModel.performAttachmentUpload(AttachmentFile(name = "good.txt", bytes = byteArrayOf(2), mime = "text/plain"))
+        assertEquals(1, viewModel.uiState.value.pendingAttachments.size)
+        assertEquals("good.txt", viewModel.uiState.value.pendingAttachments[0].name)
+    }
+
+    @Test
+    fun `no auto-send after performAttachmentUpload`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"filename":"f.txt","path":"/f.txt"}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+        viewModel.performAttachmentUpload(AttachmentFile(name = "f.txt", bytes = byteArrayOf(1), mime = "text/plain"))
+        // Attachment is pending, not sent
+        assertEquals(1, viewModel.uiState.value.pendingAttachments.size)
+        assertFalse(viewModel.uiState.value.isSending)
+        assertFalse(viewModel.uiState.value.isStreaming)
     }
 }

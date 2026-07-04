@@ -34,6 +34,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -315,18 +316,50 @@ class ChatViewModel(
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isUploadingAttachment = true, errorMessage = null) }
-            when (val result = attachmentFileReader.read(uri)) {
-                is AttachmentReadResult.TooLarge -> _uiState.update {
-                    it.copy(
-                        isUploadingAttachment = false,
-                        errorMessage = "${result.name} is too large. Attachments must be 20 MB or smaller.",
-                    )
-                }
-                AttachmentReadResult.Unreadable -> _uiState.update {
-                    it.copy(isUploadingAttachment = false, errorMessage = "Could not read the selected file.")
-                }
-                is AttachmentReadResult.Success -> performAttachmentUpload(result.file)
+            uploadAttachmentSuspend(uri)
+        }
+    }
+
+    /** Suspend variant that completes when the single upload is done. Shared between
+     * [uploadAttachment] (which launches it in a coroutine) and [uploadAttachmentsSequentially]
+     * (which calls it in a loop). */
+    private suspend fun uploadAttachmentSuspend(uri: Uri) {
+        _uiState.update { it.copy(isUploadingAttachment = true, errorMessage = null) }
+        when (val result = attachmentFileReader.read(uri)) {
+            is AttachmentReadResult.TooLarge -> _uiState.update {
+                it.copy(
+                    isUploadingAttachment = false,
+                    errorMessage = "${result.name} is too large. Attachments must be 20 MB or smaller.",
+                )
+            }
+            AttachmentReadResult.Unreadable -> _uiState.update {
+                it.copy(isUploadingAttachment = false, errorMessage = "Could not read the selected file.")
+            }
+            is AttachmentReadResult.Success -> performAttachmentUpload(result.file)
+        }
+    }
+
+    /**
+     * Uploads multiple shared files sequentially. Each file is read, uploaded to the server, and
+     * staged as a pending attachment before the next one starts. A single file failure (too large,
+     * unreadable, server error) does not block the remaining files -- it surfaces an error message
+     * and continues. Does not auto-send; the user must tap Send to dispatch.
+     */
+    fun uploadAttachmentsSequentially(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        if (_uiState.value.isShowingCachedData) {
+            _uiState.update { it.copy(errorMessage = "Reconnect to the server to upload attachments.") }
+            return
+        }
+        if (authRepository.apiForActiveServer() == null) {
+            _uiState.update { it.copy(errorMessage = "Not signed in.") }
+            return
+        }
+        viewModelScope.launch {
+            for (uri in uris) {
+                uploadAttachmentSuspend(uri)
+                // Wait for the current upload to settle before moving to the next
+                _uiState.first { !it.isUploadingAttachment }
             }
         }
     }

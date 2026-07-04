@@ -39,6 +39,8 @@ import com.hermex.android.projects.ProjectsViewModel
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
 import com.hermex.android.sessions.ShareDestinationPicker
+import com.hermex.android.navigation.decodeUriList
+import com.hermex.android.navigation.encodeUriList
 import com.hermex.android.settings.CustomHeadersScreen
 import com.hermex.android.settings.CustomHeadersViewModel
 import com.hermex.android.settings.ServersScreen
@@ -62,27 +64,28 @@ import kotlinx.coroutines.flow.StateFlow
 private object Routes {
     const val ONBOARDING = "onboarding"
     const val SESSION_LIST = "sessionList"
-    const val CHAT_PATTERN = "chat/{sessionId}?draft={draft}&uploadUri={uploadUri}"
-    fun chat(sessionId: String, draft: String? = null, uploadUri: String? = null): String {
+    const val CHAT_PATTERN = "chat/{sessionId}?draft={draft}&uploadUris={uploadUris}"
+    fun chat(sessionId: String, draft: String? = null, uploadUris: List<String>? = null): String {
         val encodedSessionId = URLEncoder.encode(sessionId, "UTF-8")
         val queryParts = mutableListOf<String>()
         draft?.takeIf { it.isNotBlank() }?.let {
             queryParts.add("draft=${URLEncoder.encode(it, "UTF-8")}")
         }
-        uploadUri?.takeIf { it.isNotBlank() }?.let {
-            queryParts.add("uploadUri=${URLEncoder.encode(it, "UTF-8")}")
+        uploadUris?.takeIf { it.isNotEmpty() }?.let {
+            queryParts.add("uploadUris=${encodeUriList(it)}")
         }
         val query = queryParts.joinToString("&")
         return if (query.isEmpty()) "chat/$encodedSessionId" else "chat/$encodedSessionId?$query"
     }
-    const val SHARE_PATTERN = "share/{text}?fileUri={fileUri}"
-    fun share(text: String, fileUri: String? = null): String {
+    const val SHARE_PATTERN = "share/{text}?fileUris={fileUris}"
+    fun share(text: String, fileUris: List<String>? = null): String {
         val encodedText = URLEncoder.encode(text, "UTF-8")
-        return if (fileUri != null) {
-            "share/$encodedText?fileUri=${URLEncoder.encode(fileUri, "UTF-8")}"
-        } else {
-            "share/$encodedText"
+        val queryParts = mutableListOf<String>()
+        fileUris?.takeIf { it.isNotEmpty() }?.let {
+            queryParts.add("fileUris=${encodeUriList(it)}")
         }
+        val query = queryParts.joinToString("&")
+        return if (query.isEmpty()) "share/$encodedText" else "share/$encodedText?$query"
     }
     const val SKILLS = "skills"
     const val SKILL_DETAIL_PATTERN = "skills/{name}"
@@ -158,8 +161,8 @@ fun HermexNavGraph(
             is HermexIntentDestination.Session -> Routes.chat(destination.sessionId)
             is HermexIntentDestination.Task -> Routes.taskDetail(destination.jobId)
             is HermexIntentDestination.ShareContent -> {
-                val uriString = destination.uri?.toString()
-                Routes.share(destination.text ?: "", fileUri = uriString)
+                val fileUris = destination.uris.map { it.toString() }
+                Routes.share(destination.text ?: "", fileUris = fileUris)
             }
         }
         navController.navigate(route) { launchSingleTop = true }
@@ -206,13 +209,15 @@ fun HermexNavGraph(
             route = Routes.SHARE_PATTERN,
             arguments = listOf(
                 navArgument("text") { type = NavType.StringType },
-                navArgument("fileUri") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("fileUris") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { backStackEntry ->
             val encodedText = backStackEntry.arguments?.getString("text").orEmpty()
             val sharedText = URLDecoder.decode(encodedText, "UTF-8")
-            val rawFileUri = backStackEntry.arguments?.getString("fileUri")
-            val fileUri = rawFileUri?.takeIf { it.isNotEmpty() }?.let { URLDecoder.decode(it, "UTF-8") }
+            val rawFileUris = backStackEntry.arguments?.getString("fileUris")
+            val fileUris = rawFileUris?.takeIf { it.isNotEmpty() }
+                ?.let { decodeUriList(it) }
+                ?.ifEmpty { null }
 
             val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
 
@@ -223,7 +228,7 @@ fun HermexNavGraph(
                         Routes.chat(
                             sessionId = sessionId,
                             draft = sharedText.takeIf { it.isNotEmpty() },
-                            uploadUri = fileUri,
+                            uploadUris = fileUris,
                         ),
                     ) {
                         popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
@@ -236,7 +241,7 @@ fun HermexNavGraph(
                             Routes.chat(
                                 sessionId = newSessionId,
                                 draft = sharedText.takeIf { it.isNotEmpty() },
-                                uploadUri = fileUri,
+                                uploadUris = fileUris,
                             ),
                         ) {
                             popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
@@ -409,15 +414,16 @@ fun HermexNavGraph(
             arguments = listOf(
                 navArgument("sessionId") { type = NavType.StringType },
                 navArgument("draft") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("uploadUri") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("uploadUris") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { backStackEntry ->
             val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
             val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
             val initialDraft = backStackEntry.arguments?.getString("draft")?.let { URLDecoder.decode(it, "UTF-8") }
-            val pendingUploadUri = backStackEntry.arguments?.getString("uploadUri")
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { URLDecoder.decode(it, "UTF-8") }
+            val rawUploadUris = backStackEntry.arguments?.getString("uploadUris")
+            val pendingUploadUris = rawUploadUris?.takeIf { it.isNotEmpty() }
+                ?.let { decodeUriList(it) }
+                ?.ifEmpty { null }
             val viewModel: ChatViewModel = viewModel(
                 key = sessionId,
                 factory = appContainer.chatViewModelFactory(sessionId),
@@ -433,7 +439,7 @@ fun HermexNavGraph(
                 onOpenWorkspace = { navController.navigate(Routes.files(sessionId)) },
                 modifier = Modifier.fillMaxSize(),
                 initialComposerDraft = initialDraft,
-                pendingFileUploadUri = pendingUploadUri,
+                pendingFileUploadUris = pendingUploadUris,
             )
         }
         composable(

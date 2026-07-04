@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
 // Icons used without explicit import: ArrowBack, KeyboardArrowUp via Icons.AutoMirrored.Filled / Icons.Filled
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -135,6 +139,19 @@ fun WorkspaceScreen(
                         query = uiState.searchQuery,
                         onQueryChange = viewModel::updateSearchQuery,
                     )
+                    // Git status card (collapsed when not a git repo, always shown when loading)
+                    uiState.gitState?.let { git ->
+                        if (!git.isLoading && !git.isGit) {
+                            // Show nothing for non-git repos (no error, no card)
+                        } else {
+                            GitStatusCard(
+                                gitState = git,
+                                onOpenDiff = { file -> viewModel.openGitDiff(file) },
+                                onCloseDiff = viewModel::closeGitDiff,
+                                onRetry = viewModel::loadGitStatus,
+                            )
+                        }
+                    }
                     DirectoryContent(
                         uiState = uiState,
                         onEntryClick = { entry ->
@@ -391,4 +408,160 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
     else -> "${bytes / (1024 * 1024)} MB"
+}
+
+// ── Git (read-only) ──
+
+@Composable
+private fun GitStatusCard(
+    gitState: GitState,
+    onOpenDiff: (com.hermex.android.core.network.dto.GitFileStatus) -> Unit,
+    onCloseDiff: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // If a diff is open, show the diff viewer instead of the status card
+    val diff = gitState.selectedDiff
+    if (diff != null) {
+        GitDiffViewer(
+            diff = diff,
+            onClose = onCloseDiff,
+        )
+        return
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            when {
+                gitState.isLoading -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Loading git status...", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                gitState.errorMessage != null -> {
+                    Text(gitState.errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = onRetry, modifier = Modifier.height(28.dp)) { Text("Retry", style = MaterialTheme.typography.labelSmall) }
+                }
+
+                else -> {
+                    // Branch and commit
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Git",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = gitState.branch ?: "(detached)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                        gitState.commit?.let { commit ->
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = commit,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+
+                    if (gitState.changedFileCount > 0) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${gitState.changedFileCount} changed file(s): +${gitState.additions}/-${gitState.deletions}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        gitState.files.forEach { file ->
+                            Text(
+                                text = "[${file.status ?: "?"}] ${file.path ?: "(unknown)"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenDiff(file) }
+                                    .padding(vertical = 2.dp, horizontal = 4.dp),
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Clean working tree.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitDiffViewer(
+    diff: DiffViewState,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Diff: ${diff.path}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = onClose, modifier = Modifier.height(28.dp)) {
+                    Text("Close", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            when {
+                diff.isLoading -> {
+                    Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    }
+                }
+                diff.errorMessage != null -> {
+                    Text(diff.errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                diff.binary -> {
+                    Text("Binary file — diff not available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                else -> {
+                    Text(
+                        text = diff.diff,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .verticalScroll(rememberScrollState()),
+                    )
+                }
+            }
+        }
+    }
 }

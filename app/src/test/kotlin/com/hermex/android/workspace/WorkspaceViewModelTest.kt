@@ -577,5 +577,122 @@ class WorkspaceViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // ── Git tests ──
+
+    @Test
+    fun `loadGitStatus success for a git repo`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(
+            MockResponse().setBody(
+                """{"is_git":true,"branch":"main","commit":"abc123","totals":{"changed":2,"additions":5,"deletions":3},"files":[{"path":"README.md","status":"M","additions":3,"deletions":2},{"path":"src/main.py","status":"M","additions":2,"deletions":1}]}""",
+            ),
+        )
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus()
+            val state = awaitUntil { it.gitState != null }
+            val git = state.gitState!!
+            assertTrue(git.isGit)
+            assertEquals("main", git.branch)
+            assertEquals("abc123", git.commit)
+            assertEquals(2, git.changedFileCount)
+            assertEquals(5, git.additions)
+            assertEquals(3, git.deletions)
+            assertEquals(2, git.files.size)
+            assertNull(git.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadGitStatus for a non-git workspace`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"is_git":false}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus()
+            val state = awaitUntil { it.gitState != null }
+            assertFalse(state.gitState!!.isGit)
+            assertNull(state.gitState!!.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadGitStatus error silently clears git state`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus()
+            // Git errors should silently clear gitState to null (no crash)
+            assertNull(viewModel.uiState.value.gitState)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadGitStatus no api silently returns without error`() = runTest {
+        val networkModule = NetworkModule(FakeCookieStore()) {}
+        val repo = AuthRepository(networkModule, FakeServerStore())
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+
+        viewModel.loadGitStatus()
+        // No crash -- silently returns when there is no active server
+        assertNull(viewModel.uiState.value.gitState)
+    }
+
+    @Test
+    fun `openGitDiff loads diff for a changed file`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"is_git":true,"branch":"main","files":[{"path":"README.md","status":"M"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"diff":"@@ -1,3 +1,4 @@\\n hello\\n+new line","path":"README.md","size":32}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus()
+            val state = awaitUntil { it.gitState != null }
+            viewModel.openGitDiff(state.gitState!!.files.first())
+            val diffState = awaitUntil { it.gitState?.selectedDiff?.isLoading == false }
+            assertFalse(diffState.gitState!!.selectedDiff!!.binary)
+            assertNull(diffState.gitState!!.selectedDiff!!.errorMessage)
+            assertTrue(diffState.gitState!!.selectedDiff!!.diff.isNotEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `closeGitDiff clears the selected diff`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"is_git":true,"branch":"main","files":[{"path":"README.md","status":"M"}]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.loadGitStatus()
+            val state = awaitUntil { it.gitState != null }
+            viewModel.openGitDiff(state.gitState!!.files.first())
+            awaitUntil { it.gitState?.selectedDiff != null }
+            viewModel.closeGitDiff()
+            val closed = awaitUntil { it.gitState?.selectedDiff == null }
+            assertNull(closed.gitState?.selectedDiff)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
 

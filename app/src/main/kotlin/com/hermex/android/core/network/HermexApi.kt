@@ -12,6 +12,9 @@ import com.hermex.android.core.network.dto.CronStatusResponse
 import com.hermex.android.core.network.dto.DirectoryListResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.FileResponse
+import com.hermex.android.core.network.dto.GitBranchesResponse
+import com.hermex.android.core.network.dto.GitDiffResponse
+import com.hermex.android.core.network.dto.GitStatusResponse
 import com.hermex.android.core.network.dto.HealthResponse
 import com.hermex.android.core.network.dto.InsightsResponse
 import com.hermex.android.core.network.dto.LoginRequest
@@ -193,4 +196,22 @@ interface HermexApi {
         @Query("download") download: Int? = null,
         @Query("inline") inline: Int? = null,
     ): ResponseBody
+
+    // Git endpoints (read-only -- no commit/pull/discard/checkout in v0.7.3).
+    @GET("/api/git/status")
+    suspend fun gitStatus(
+        @Query("session_id") sessionId: String,
+    ): GitStatusResponse
+
+    @GET("/api/git/diff")
+    suspend fun gitDiff(
+        @Query("session_id") sessionId: String,
+        @Query("path") path: String,
+        @Query("kind") kind: String = "unstaged",
+    ): GitDiffResponse
+
+    @GET("/api/git/branches")
+    suspend fun gitBranches(
+        @Query("session_id") sessionId: String,
+    ): GitBranchesResponse
 }

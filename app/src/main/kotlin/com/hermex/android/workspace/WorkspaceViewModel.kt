@@ -33,7 +33,9 @@ class WorkspaceViewModel(
         loadRoot()
     }
 
-    fun loadRoot() = loadDirectory(WORKSPACE_ROOT_PATH)
+    fun loadRoot() {
+        loadDirectory(WORKSPACE_ROOT_PATH)
+    }
 
     /** Re-issues the request for whatever directory is currently showing (or failed to show). */
     fun retryDirectory() = loadDirectory(_uiState.value.currentPath)
@@ -63,6 +65,68 @@ class WorkspaceViewModel(
      * modified -- clearing the query restores the full listing immediately. */
     fun updateSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    // ── Git (read-only) ──
+
+    fun loadGitStatus() {
+        val api = authRepository.apiForActiveServer()
+        if (api == null) return
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall { api.gitStatus(sessionId) }
+                if (response.error != null) {
+                    _uiState.update { it.copy(gitState = null) }
+                } else {
+                    _uiState.update {
+                        it.copy(gitState = GitState(
+                            isGit = response.is_git == true,
+                            branch = response.branch,
+                            commit = response.commit,
+                            changedFileCount = response.totals?.changed ?: 0,
+                            additions = response.totals?.additions ?: 0,
+                            deletions = response.totals?.deletions ?: 0,
+                            files = response.files.orEmpty(),
+                            isLoading = false,
+                        ))
+                    }
+                }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(gitState = null) }
+            }
+        }
+    }
+
+    fun openGitDiff(file: com.hermex.android.core.network.dto.GitFileStatus) {
+        val path = file.path ?: return
+        _uiState.update { state ->
+            state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, isLoading = true)))
+        }
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { state -> state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, errorMessage = "Not signed in.", isLoading = false))) }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val response = safeApiCall { api.gitDiff(sessionId, path) }
+                _uiState.update { state ->
+                    if (response.error != null) {
+                        state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, errorMessage = response.error, isLoading = false)))
+                    } else if (response.binary == true) {
+                        state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, diff = "", binary = true, isLoading = false)))
+                    } else {
+                        state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, diff = response.diff ?: "", isLoading = false)))
+                    }
+                }
+            } catch (e: ApiError) {
+                _uiState.update { state -> state.copy(gitState = state.gitState?.copy(selectedDiff = DiffViewState(path = path, errorMessage = e.message ?: "Could not load diff.", isLoading = false))) }
+            }
+        }
+    }
+
+    fun closeGitDiff() {
+        _uiState.update { state -> state.copy(gitState = state.gitState?.copy(selectedDiff = null)) }
     }
 
     private fun loadDirectory(path: String, preserveSearch: Boolean = false) {

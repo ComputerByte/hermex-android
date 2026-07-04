@@ -1,6 +1,7 @@
 package com.hermex.android.workspace
 
 import com.hermex.android.core.network.dto.WorkspaceEntry
+import com.hermex.android.core.network.dto.GitFileStatus
 
 /** `"."` is the server's own root-path convention (matches the verified iOS `FileBrowserViewModel`
  * -- it always sends `path="."` for the top of a session's workspace, never an omitted/null path). */
@@ -21,9 +22,34 @@ data class WorkspaceUiState(
      * modifying the original list -- the full listing stays intact so clearing the filter
      * restores it immediately. */
     val searchQuery: String = "",
+    /** Git status for the current workspace. Null until loaded; non-null even for
+     * non-git workspaces (where [GitState.isGit] will be false). */
+    val gitState: GitState? = null,
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }
+
+data class GitState(
+    val isGit: Boolean = false,
+    val branch: String? = null,
+    val commit: String? = null,
+    val changedFileCount: Int = 0,
+    val additions: Int = 0,
+    val deletions: Int = 0,
+    val files: List<GitFileStatus> = emptyList(),
+    val isLoading: Boolean = true,
+    val errorMessage: String? = null,
+    /** A file currently being viewed as a diff. Non-null means the diff viewer is open. */
+    val selectedDiff: DiffViewState? = null,
+)
+
+data class DiffViewState(
+    val path: String,
+    val diff: String = "",
+    val binary: Boolean = false,
+    val isLoading: Boolean = true,
+    val errorMessage: String? = null,
+)
 
 data class FileViewState(
     val path: String,

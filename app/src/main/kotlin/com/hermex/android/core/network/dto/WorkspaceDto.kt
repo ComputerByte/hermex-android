@@ -17,6 +17,20 @@ data class FileSaveResponse(
     val error: String? = null,
 )
 
+/** `POST /api/file/create` request body. */
+@Serializable
+data class CreateFileRequest(
+    val session_id: String,
+    val path: String,
+)
+
+/** `POST /api/file/create-dir` request body. */
+@Serializable
+data class CreateDirRequest(
+    val session_id: String,
+    val path: String,
+)
+
 /**
  * `GET /api/list?session_id=...&path=...` -- directory listing, scoped to a session's workspace
  * (there is no session-independent directory browse). Read-only: no create/rename/delete/upload

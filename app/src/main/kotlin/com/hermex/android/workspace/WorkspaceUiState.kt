@@ -25,9 +25,32 @@ data class WorkspaceUiState(
     /** Git status for the current workspace. Null until loaded; non-null even for
      * non-git workspaces (where [GitState.isGit] will be false). */
     val gitState: GitState? = null,
+    /** Non-null when a create-file or create-folder dialog is active. */
+    val createDialog: CreateDialogState? = null,
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }
+
+/** Dialog state for creating a file or folder inside the workspace. */
+data class CreateDialogState(
+    val mode: CreateMode,
+    val name: String = "",
+    val isCreating: Boolean = false,
+    val errorMessage: String? = null,
+) {
+    val isValid: Boolean
+        get() {
+            val trimmed = name.trim()
+            if (trimmed.isEmpty()) return false
+            if (trimmed.contains("/") || trimmed.contains("\\")) return false
+            if (trimmed == "." || trimmed == "..") return false
+            if (trimmed.startsWith("..")) return false
+            if (trimmed == ".git") return false
+            return true
+        }
+}
+
+enum class CreateMode { FILE, FOLDER }
 
 data class GitState(
     val isGit: Boolean = false,

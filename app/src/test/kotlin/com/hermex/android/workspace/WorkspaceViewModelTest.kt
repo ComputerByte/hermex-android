@@ -18,6 +18,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -833,6 +834,142 @@ class WorkspaceViewModelTest {
         // Verify save request was sent (may be at different queue position)
         val reqs = (0..5).map { server.takeRequest(100L, java.util.concurrent.TimeUnit.MILLISECONDS) }.filterNotNull()
         val found = reqs.any { it.path?.contains("/api/file/save") == true }
+    }
+
+    // ── Create file/folder tests ──
+
+    @Test
+    fun `create file at root posts correct path`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"content":"","name":"test.txt","path":"test.txt"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            assertNotNull(viewModel.uiState.value.createDialog)
+            viewModel.updateCreateName("test.txt")
+            viewModel.confirmCreate()
+            awaitUntil { it.selectedFile != null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `create folder at root posts correct path`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFolderDialog()
+            assertNotNull(viewModel.uiState.value.createDialog)
+            viewModel.updateCreateName("new-folder")
+            viewModel.confirmCreate()
+            // Dialog dismissed after success
+            val after = awaitUntil { it.createDialog == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `dismissCreateDialog clears state`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            assertNotNull(viewModel.uiState.value.createDialog)
+            viewModel.dismissCreateDialog()
+            assertNull(viewModel.uiState.value.createDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `blank name is invalid`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            viewModel.updateCreateName("")
+            assertFalse(viewModel.uiState.value.createDialog!!.isValid)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `slash name is invalid`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            viewModel.updateCreateName("a/b")
+            assertFalse(viewModel.uiState.value.createDialog!!.isValid)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `git name is invalid`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            viewModel.updateCreateName(".git")
+            assertFalse(viewModel.uiState.value.createDialog!!.isValid)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `valid name passes validation`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            viewModel.updateCreateName("valid-file.txt")
+            assertTrue(viewModel.uiState.value.createDialog!!.isValid)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `create failure preserves dialog and shows error`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"error":"File already exists"}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.showCreateFileDialog()
+            viewModel.updateCreateName("exists.txt")
+            viewModel.confirmCreate()
+            val failed = awaitUntil { it.createDialog?.isCreating == false && it.createDialog?.errorMessage != null }
+            assertNotNull(failed.createDialog)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }
 

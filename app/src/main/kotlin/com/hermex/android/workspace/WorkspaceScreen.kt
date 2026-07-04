@@ -128,6 +128,14 @@ fun WorkspaceScreen(
                         IconButton(onClick = viewModel::navigateUp, enabled = !uiState.isAtRoot) {
                             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Up to parent folder")
                         }
+                        // New file
+                        TextButton(onClick = viewModel::showCreateFileDialog, modifier = Modifier.height(32.dp)) {
+                            Text("+ File", style = MaterialTheme.typography.labelSmall)
+                        }
+                        // New folder
+                        TextButton(onClick = viewModel::showCreateFolderDialog, modifier = Modifier.height(32.dp)) {
+                            Text("+ Folder", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -183,6 +191,68 @@ fun WorkspaceScreen(
             }
         }
     }
+
+    // Create file/folder dialog
+    uiState.createDialog?.let { dialog ->
+        CreateDialog(
+            dialog = dialog,
+            onDismiss = viewModel::dismissCreateDialog,
+            onNameChange = viewModel::updateCreateName,
+            onConfirm = viewModel::confirmCreate,
+        )
+    }
+}
+
+@Composable
+private fun CreateDialog(
+    dialog: CreateDialogState,
+    onDismiss: () -> Unit,
+    onNameChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val title = when (dialog.mode) {
+        CreateMode.FILE -> "New file"
+        CreateMode.FOLDER -> "New folder"
+    }
+    val label = when (dialog.mode) {
+        CreateMode.FILE -> "File name"
+        CreateMode.FOLDER -> "Folder name"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = dialog.name,
+                    onValueChange = onNameChange,
+                    label = { Text(label) },
+                    singleLine = true,
+                    enabled = !dialog.isCreating,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = dialog.errorMessage != null,
+                    supportingText = if (dialog.errorMessage != null) {
+                        { Text(dialog.errorMessage ?: "", color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = dialog.isValid && !dialog.isCreating,
+            ) {
+                if (dialog.isCreating) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !dialog.isCreating) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

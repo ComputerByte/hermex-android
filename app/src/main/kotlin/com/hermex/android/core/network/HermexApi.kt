@@ -9,6 +9,8 @@ import com.hermex.android.core.network.dto.CronJobsResponse
 import com.hermex.android.core.network.dto.CronMutationResponse
 import com.hermex.android.core.network.dto.CronOutputResponse
 import com.hermex.android.core.network.dto.CronStatusResponse
+import com.hermex.android.core.network.dto.CreateDirRequest
+import com.hermex.android.core.network.dto.CreateFileRequest
 import com.hermex.android.core.network.dto.DirectoryListResponse
 import com.hermex.android.core.network.dto.EmptyRequestBody
 import com.hermex.android.core.network.dto.FileSaveRequest
@@ -204,6 +206,12 @@ interface HermexApi {
 
     @POST("/api/file/save")
     suspend fun saveFile(@Body body: FileSaveRequest): FileSaveResponse
+
+    @POST("/api/file/create")
+    suspend fun createFile(@Body body: CreateFileRequest): FileSaveResponse
+
+    @POST("/api/file/create-dir")
+    suspend fun createDir(@Body body: CreateDirRequest): FileSaveResponse
 
     // Git endpoints (read-only -- no commit/pull/discard/checkout in v0.7.3).
     @GET("/api/git/status")

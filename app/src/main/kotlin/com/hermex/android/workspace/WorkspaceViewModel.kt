@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.network.ApiError
+import com.hermex.android.core.network.dto.CreateDirRequest
+import com.hermex.android.core.network.dto.CreateFileRequest
 import com.hermex.android.core.network.dto.FileSaveRequest
 import com.hermex.android.core.network.dto.WorkspaceEntry
 import com.hermex.android.core.network.safeApiCall
@@ -320,6 +322,73 @@ class WorkspaceViewModel(
                     if (current == null || current.path != path) return@update state
                     state.copy(selectedFile = current.copy(isLoading = false, errorMessage = e.message ?: "Could not open this file."))
                 }
+            }
+        }
+    }
+
+    fun showCreateFileDialog() {
+        _uiState.update { it.copy(createDialog = CreateDialogState(mode = CreateMode.FILE)) }
+    }
+
+    fun showCreateFolderDialog() {
+        _uiState.update { it.copy(createDialog = CreateDialogState(mode = CreateMode.FOLDER)) }
+    }
+
+    fun dismissCreateDialog() {
+        _uiState.update { it.copy(createDialog = null) }
+    }
+
+    fun updateCreateName(name: String) {
+        val d = _uiState.value.createDialog ?: return
+        _uiState.update { it.copy(createDialog = d.copy(name = name, errorMessage = null)) }
+    }
+
+    /** Opens a file by its full server-side path. Creates an ephemeral [WorkspaceEntry] since
+     * the server may not return entry metadata from the create endpoint. */
+    private fun openFileByName(path: String) {
+        val name = path.substringAfterLast('/')
+        val entry = WorkspaceEntry(name = name, path = path, type = "file")
+        openFile(entry)
+    }
+
+    fun confirmCreate() {
+        val d = _uiState.value.createDialog ?: return
+        val name = d.name.trim()
+        if (!d.isValid) {
+            _uiState.update { it.copy(createDialog = d.copy(errorMessage = "Invalid name.")) }
+            return
+        }
+        val path = if (_uiState.value.currentPath == WORKSPACE_ROOT_PATH) name else "${_uiState.value.currentPath}/$name"
+        val api = authRepository.apiForActiveServer()
+        if (api == null) {
+            _uiState.update { it.copy(createDialog = d.copy(errorMessage = "Not signed in.")) }
+            return
+        }
+        _uiState.update { it.copy(createDialog = d.copy(isCreating = true, errorMessage = null)) }
+        viewModelScope.launch {
+            try {
+                val response = when (d.mode) {
+                    CreateMode.FILE -> safeApiCall {
+                        api.createFile(CreateFileRequest(session_id = sessionId, path = path))
+                    }
+                    CreateMode.FOLDER -> safeApiCall {
+                        api.createDir(CreateDirRequest(session_id = sessionId, path = path))
+                    }
+                }
+                if (response.error != null) {
+                    _uiState.update { it.copy(createDialog = d.copy(isCreating = false, errorMessage = response.error)) }
+                    return@launch
+                }
+                // Success -- close dialog, refresh directory, open new file if applicable
+                _uiState.update { it.copy(createDialog = null) }
+                loadDirectory(_uiState.value.currentPath, preserveSearch = true)
+                if (d.mode == CreateMode.FILE) {
+                    openFileByName(path)
+                }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(createDialog = d.copy(isCreating = false, errorMessage = e.message ?: "Could not create.")) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(createDialog = d.copy(isCreating = false, errorMessage = "Could not create.")) }
             }
         }
     }

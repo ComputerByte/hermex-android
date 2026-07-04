@@ -35,21 +35,17 @@ import com.hermex.android.core.network.dto.ProfileSummary
 
 @Composable
 fun ChatComposer(
-    text: String,
+    composerState: ChatComposerState,
     onTextChanged: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    isStreaming: Boolean,
-    isSending: Boolean,
     profileOptions: List<ProfileSummary>,
     selectedProfileName: String?,
-    isSwitchingProfile: Boolean,
     onSelectProfile: (String) -> Unit,
     modelCatalogGroups: List<ModelCatalogGroup>,
     currentModel: String?,
     currentModelProvider: String?,
     isLoadingModelCatalog: Boolean,
-    isUpdatingComposerConfiguration: Boolean,
     onOpenModelPicker: () -> Unit,
     onSelectModel: (ModelCatalogOption) -> Unit,
     modifier: Modifier = Modifier,
@@ -74,7 +70,7 @@ fun ChatComposer(
             ProfileSelectorButton(
                 profileOptions = profileOptions,
                 selectedProfileName = selectedProfileName,
-                isSwitchingProfile = isSwitchingProfile,
+                isSwitchingProfile = composerState.isProfileSelectorLoading,
                 onSelectProfile = onSelectProfile,
             )
             ModelSelectorButton(
@@ -82,24 +78,24 @@ fun ChatComposer(
                 currentModel = currentModel,
                 currentModelProvider = currentModelProvider,
                 isLoadingModelCatalog = isLoadingModelCatalog,
-                isUpdatingComposerConfiguration = isUpdatingComposerConfiguration,
+                isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
                 onOpenModelPicker = onOpenModelPicker,
                 onSelectModel = onSelectModel,
             )
             OutlinedTextField(
-                value = text,
+                value = composerState.text,
                 onValueChange = onTextChanged,
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Message") },
-                enabled = !isSending && !isStreaming,
+                enabled = composerState.isTextFieldEnabled,
                 maxLines = 5,
             )
             when {
-                isStreaming -> IconButton(onClick = onStop) {
+                composerState.showStopButton -> IconButton(onClick = onStop) {
                     Icon(Icons.Filled.Close, contentDescription = "Stop")
                 }
-                isSending -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                else -> IconButton(onClick = onSend, enabled = text.isNotBlank()) {
+                composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                else -> IconButton(onClick = onSend, enabled = composerState.canSend) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                 }
             }

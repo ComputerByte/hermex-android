@@ -87,21 +87,17 @@ fun ChatScreen(
         },
         bottomBar = {
             ChatComposer(
-                text = uiState.composerText,
+                composerState = ChatComposerState.from(uiState),
                 onTextChanged = viewModel::onComposerTextChanged,
                 onSend = viewModel::sendMessage,
                 onStop = viewModel::cancelStream,
-                isStreaming = uiState.isStreaming,
-                isSending = uiState.isSending,
                 profileOptions = uiState.profileOptions,
                 selectedProfileName = uiState.selectedProfileName,
-                isSwitchingProfile = uiState.isSwitchingProfile,
                 onSelectProfile = viewModel::selectProfile,
                 modelCatalogGroups = uiState.modelCatalogGroups,
                 currentModel = uiState.currentModel,
                 currentModelProvider = uiState.currentModelProvider,
                 isLoadingModelCatalog = uiState.isLoadingModelCatalog,
-                isUpdatingComposerConfiguration = uiState.isUpdatingComposerConfiguration,
                 onOpenModelPicker = viewModel::refreshModelCatalogForPickerOpen,
                 onSelectModel = viewModel::selectComposerModel,
             )

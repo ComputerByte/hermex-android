@@ -449,5 +449,133 @@ class WorkspaceViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `refreshDirectory re-issues the request for the current path`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[{"name":"a.txt","path":"a.txt","type":"file"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[{"name":"b.txt","path":"b.txt","type":"file"}]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+        // Wait for initial load
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading && it.entries.size == 1 }
+            // Refresh should pick up the second response
+            viewModel.refreshDirectory()
+            val refreshed = awaitUntil { it.entries.size == 1 && it.entries.first().name == "b.txt" }
+            assertEquals(".", refreshed.currentPath)
+            cancelAndIgnoreRemainingEvents()
+        }
+        val request1 = server.takeRequest()
+        assertTrue(request1.path?.contains("path=.") == true)
+        val request2 = server.takeRequest()
+        assertTrue(request2.path?.contains("path=.") == true)
+    }
+
+    @Test
+    fun `search filter narrows entries without modifying the original list`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"path":".","entries":[{"name":"Main.kt","path":"Main.kt"},{"name":"README.md","path":"README.md"},{"name":"build.gradle","path":"build.gradle"}]}""",
+            ),
+        )
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(3, loaded.entries.size)
+            assertTrue(loaded.searchQuery.isEmpty())
+
+            viewModel.updateSearchQuery("Main")
+            val filtered = awaitUntil { it.searchQuery == "Main" }
+            // Entries are never modified; searchQuery is stored separately
+            assertEquals(3, filtered.entries.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `search query clears on navigation into a folder`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"path":".","entries":[{"name":"src","path":"src","type":"dir","is_directory":true}]}""",
+            ),
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """{"path":"src","entries":[{"name":"Main.kt","path":"src/Main.kt","type":"file"}]}""",
+            ),
+        )
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            viewModel.updateSearchQuery("test")
+            assertEquals("test", viewModel.uiState.value.searchQuery)
+
+            viewModel.navigateInto(loaded.entries.first())
+            val navigated = awaitUntil { it.currentPath == "src" }
+            // Search query is cleared after navigating
+            assertTrue(navigated.searchQuery.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `search query clears on navigate up`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"path":".","entries":[{"name":"src","path":"src","type":"dir","is_directory":true}]}""",
+            ),
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """{"path":"src","entries":[{"name":"Main.kt","path":"src/Main.kt","type":"file"}]}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[{"name":"src","path":"src","type":"dir"}]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            viewModel.navigateInto(loaded.entries.first())
+            awaitUntil { it.currentPath == "src" }
+
+            viewModel.updateSearchQuery("query")
+            assertEquals("query", viewModel.uiState.value.searchQuery)
+
+            viewModel.navigateUp()
+            val backAtRoot = awaitUntil { it.currentPath == "." }
+            assertTrue(backAtRoot.searchQuery.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `search query clears on refresh by default`() = runTest {
+        val repo = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[{"name":"a.txt","path":"a.txt","type":"file"}]}"""))
+        server.enqueue(MockResponse().setBody("""{"path":".","entries":[{"name":"b.txt","path":"b.txt","type":"file"}]}"""))
+
+        val viewModel = WorkspaceViewModel("s1", repo)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.updateSearchQuery("test")
+            assertEquals("test", viewModel.uiState.value.searchQuery)
+
+            // refreshDirectory preserves search query (preserveSearch = true)
+            viewModel.refreshDirectory()
+            val refreshed = awaitUntil { it.entries.first().name == "b.txt" }
+            assertEquals("test", refreshed.searchQuery)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
 

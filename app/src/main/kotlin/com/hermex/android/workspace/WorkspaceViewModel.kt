@@ -52,7 +52,20 @@ class WorkspaceViewModel(
         loadDirectory(parentPathOf(current))
     }
 
-    private fun loadDirectory(path: String) {
+    /** Re-fetches the current directory listing without navigating. Useful after a failed load
+     * or to pick up external changes. Preserves [searchQuery] so the filter is reapplied
+     * after the fresh listing arrives. */
+    fun refreshDirectory() {
+        loadDirectory(_uiState.value.currentPath, preserveSearch = true)
+    }
+
+    /** Updates the client-side search/filter text. The underlying [entries] list is never
+     * modified -- clearing the query restores the full listing immediately. */
+    fun updateSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    private fun loadDirectory(path: String, preserveSearch: Boolean = false) {
         val api = authRepository.apiForActiveServer()
         if (api == null) {
             _uiState.update { it.copy(isLoading = false, errorMessage = "Not signed in.") }
@@ -69,11 +82,13 @@ class WorkspaceViewModel(
                     // should leave the user exactly where they were, not on a half-updated path.
                     _uiState.update { it.copy(isLoading = false, errorMessage = response.error) }
                 } else {
+                    val clearedSearch = if (preserveSearch) _uiState.value.searchQuery else ""
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             currentPath = response.path ?: path,
                             entries = response.entries.orEmpty(),
+                            searchQuery = clearedSearch,
                         )
                     }
                 }

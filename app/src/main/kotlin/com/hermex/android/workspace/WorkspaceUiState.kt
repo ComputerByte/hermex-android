@@ -17,6 +17,10 @@ data class WorkspaceUiState(
      * file viewer is just clearing this back to null -- the directory underneath was never
      * touched, so there's nothing to reload. */
     val selectedFile: FileViewState? = null,
+    /** Client-side search/filter text. Narrowed server-side `entries` are displayed without
+     * modifying the original list -- the full listing stays intact so clearing the filter
+     * restores it immediately. */
+    val searchQuery: String = "",
 ) {
     val isAtRoot: Boolean get() = currentPath == WORKSPACE_ROOT_PATH
 }

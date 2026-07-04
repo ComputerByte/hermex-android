@@ -1,26 +1,44 @@
 package com.hermex.android.workspace
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
+// Icons used without explicit import: ArrowBack, KeyboardArrowUp via Icons.AutoMirrored.Filled / Icons.Filled
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,8 +46,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,6 +76,7 @@ fun WorkspaceScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val openFile = uiState.selectedFile
+    val context = LocalContext.current
 
     Scaffold(
         modifier = modifier,
@@ -81,6 +105,10 @@ fun WorkspaceScreen(
                 },
                 actions = {
                     if (openFile == null) {
+                        // Refresh
+                        IconButton(onClick = viewModel::refreshDirectory) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                        }
                         IconButton(onClick = viewModel::navigateUp, enabled = !uiState.isAtRoot) {
                             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Up to parent folder")
                         }
@@ -101,16 +129,60 @@ fun WorkspaceScreen(
             if (openFile != null) {
                 FileViewerContent(file = openFile, onRetry = viewModel::retryOpenFile)
             } else {
-                DirectoryContent(
-                    uiState = uiState,
-                    onEntryClick = { entry ->
-                        if (entry.isFolder) viewModel.navigateInto(entry) else viewModel.openFile(entry)
-                    },
-                    onRetry = viewModel::retryDirectory,
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Search field
+                    SearchBar(
+                        query = uiState.searchQuery,
+                        onQueryChange = viewModel::updateSearchQuery,
+                    )
+                    DirectoryContent(
+                        uiState = uiState,
+                        onEntryClick = { entry ->
+                            if (entry.isFolder) viewModel.navigateInto(entry) else viewModel.openFile(entry)
+                        },
+                        onRetry = viewModel::retryDirectory,
+                        onCopyPath = { entry ->
+                            copyToClipboard(context, entry.name ?: entry.path ?: "entry", entry.path ?: "")
+                        },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        placeholder = { Text("Search files...") },
+        leadingIcon = {
+            Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Filled.Clear, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+                }
+            }
+        },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { /* filter is applied live */ }),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        ),
+        textStyle = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable
@@ -118,8 +190,19 @@ private fun DirectoryContent(
     uiState: WorkspaceUiState,
     onEntryClick: (WorkspaceEntry) -> Unit,
     onRetry: () -> Unit,
+    onCopyPath: (WorkspaceEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Client-side search filter: narrow entries by name without modifying the original list.
+    val filteredEntries = if (uiState.searchQuery.isBlank()) {
+        uiState.entries
+    } else {
+        uiState.entries.filter { entry ->
+            entry.name?.contains(uiState.searchQuery, ignoreCase = true) == true ||
+                entry.path?.contains(uiState.searchQuery, ignoreCase = true) == true
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         when {
             uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -147,16 +230,24 @@ private fun DirectoryContent(
                 Text("This folder is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
+            filteredEntries.isEmpty() && uiState.searchQuery.isNotBlank() -> Box(
+                Modifier.fillMaxSize().padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No files match \"${uiState.searchQuery}\".",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(uiState.entries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) })
+                items(filteredEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
+                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) })
                 }
             }
         }
 
-        // A navigation failure that left the previous listing on screen (see
-        // WorkspaceViewModel.loadDirectory) surfaces here instead, alongside the stale-but-still
-        // valid entries above, matching how errors are shown elsewhere in this app.
+        // A navigation failure that left the previous listing on screen
         if (uiState.errorMessage != null && uiState.entries.isNotEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(bottom = 8.dp),
@@ -175,22 +266,46 @@ private fun DirectoryContent(
 private fun WorkspaceEntryRow(
     entry: WorkspaceEntry,
     onClick: () -> Unit,
+    onCopyPath: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     ListItem(
         modifier = modifier.clickable(onClick = onClick),
         headlineContent = {
             Text(entry.name ?: entry.path ?: "Unnamed", maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         trailingContent = {
-            if (entry.isFolder) {
-                Text("Folder", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            } else {
-                Text(
-                    text = entry.size?.let(::formatFileSize) ?: "File",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (entry.isFolder) {
+                    Text("Folder", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    Text(
+                        text = entry.size?.let(::formatFileSize) ?: "File",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More actions",
+                            modifier = Modifier.size(20.dp))
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Copy path") },
+                            onClick = {
+                                showMenu = false
+                                onCopyPath()
+                            },
+                        )
+                    }
+                }
             }
         },
     )
@@ -248,18 +363,21 @@ private fun FileViewerContent(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     )
                 }
-                // Raw text, no syntax highlighting -- consistent with SkillDetailScreen's content
-                // view and the rest of this MVP's scope.
                 Text(text = file.content.text, style = MaterialTheme.typography.bodyMedium)
             }
 
-            // file.content == null and no error and not loading shouldn't happen in practice, but
-            // render *something* rather than a blank screen if it ever does.
             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No content to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+/** Copies a workspace path to the system clipboard and shows a brief toast. */
+private fun copyToClipboard(context: Context, label: String, path: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, path))
+    Toast.makeText(context, "Copied: $path", Toast.LENGTH_SHORT).show()
 }
 
 /** Some servers only send `type: "dir"`, others only `is_directory`/`is_dir` -- treat either as

@@ -1,22 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/hermex_widget_background"
-    android:clickable="true"
-    android:focusable="true"
-    android:foreground="?android:attr/selectableItemBackgroundBorderless">
+    android:padding="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center"
-        android:padding="16dp">
+        android:gravity="center">
 
         <TextView
-            android:id="@+id/widget_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/widget_title"
@@ -27,7 +22,6 @@
             android:includeFontPadding="false" />
 
         <TextView
-            android:id="@+id/widget_subtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
@@ -35,5 +29,18 @@
             android:textColor="@color/hermex_widget_text_subtle"
             android:textSize="11sp"
             android:includeFontPadding="false" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/widget_new_chat"
+            android:textColor="@color/hermex_widget_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.04"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp" />
     </LinearLayout>
 </FrameLayout>

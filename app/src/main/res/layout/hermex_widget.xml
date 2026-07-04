@@ -27,7 +27,6 @@
             android:includeFontPadding="false" />
 
         <TextView
-            android:id="@+id/widget_subtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
@@ -35,5 +34,22 @@
             android:textColor="@color/hermex_widget_text_subtle"
             android:textSize="11sp"
             android:includeFontPadding="false" />
+
+        <TextView
+            android:id="@+id/widget_new_chat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/widget_new_chat"
+            android:textColor="@color/hermex_widget_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.04"
+            android:includeFontPadding="false"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="@android:drawable/list_selector_background"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp" />
     </LinearLayout>
 </FrameLayout>

@@ -3,4 +3,5 @@
     <string name="app_name">Hermex</string>
     <string name="widget_title">Hermex</string>
     <string name="widget_subtitle">Tap to open</string>
+    <string name="widget_new_chat">New Chat</string>
 </resources>

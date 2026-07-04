@@ -11,6 +11,7 @@ private const val MAX_SHARED_URIS = 10
 sealed interface HermexIntentDestination {
     data object Sessions : HermexIntentDestination
     data object Tasks : HermexIntentDestination
+    data object NewChat : HermexIntentDestination
     data class Session(val sessionId: String) : HermexIntentDestination
     data class Task(val jobId: String) : HermexIntentDestination
     data class ShareContent(
@@ -79,6 +80,7 @@ internal fun hermexDeepLinkDestination(uriString: String?): HermexIntentDestinat
     return when (route) {
         "sessions" -> HermexIntentDestination.Sessions
         "session" -> extractSessionOrFallback(remainder, firstPathSegment)
+        "new-chat" -> HermexIntentDestination.NewChat
         "tasks" -> HermexIntentDestination.Tasks
         "task" -> firstPathSegment?.takeIf { it.isNotBlank() }?.let(HermexIntentDestination::Task)
             ?: HermexIntentDestination.Tasks

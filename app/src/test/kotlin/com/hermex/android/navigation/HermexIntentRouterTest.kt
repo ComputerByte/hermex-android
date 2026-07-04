@@ -62,6 +62,16 @@ class HermexIntentRouterTest {
     }
 
     @Test
+    fun `new-chat deep link opens new chat destination`() {
+        assertEquals(HermexIntentDestination.NewChat, hermexDeepLinkDestination("hermex://new-chat"))
+    }
+
+    @Test
+    fun `hermes-agent new-chat deep link opens new chat destination`() {
+        assertEquals(HermexIntentDestination.NewChat, hermexDeepLinkDestination("hermes-agent://new-chat"))
+    }
+
+    @Test
     fun `malformed task deep link recovers to tasks`() {
         assertEquals(HermexIntentDestination.Tasks, hermexDeepLinkDestination("hermex://task/%ZZ"))
     }

@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.StateFlow
 private object Routes {
     const val ONBOARDING = "onboarding"
     const val SESSION_LIST = "sessionList"
+    const val NEW_CHAT = "newChat"
     const val CHAT_PATTERN = "chat/{sessionId}?draft={draft}&uploadUris={uploadUris}"
     fun chat(sessionId: String, draft: String? = null, uploadUris: List<String>? = null): String {
         val encodedSessionId = URLEncoder.encode(sessionId, "UTF-8")
@@ -157,9 +158,10 @@ fun HermexNavGraph(
         if (authState !is AuthState.LoggedIn) return@LaunchedEffect
         val route = when (destination) {
             HermexIntentDestination.Sessions -> Routes.SESSION_LIST
-            HermexIntentDestination.Tasks -> Routes.TASKS
+            is HermexIntentDestination.Tasks -> Routes.TASKS
             is HermexIntentDestination.Session -> Routes.chat(destination.sessionId)
             is HermexIntentDestination.Task -> Routes.taskDetail(destination.jobId)
+            HermexIntentDestination.NewChat -> Routes.NEW_CHAT
             is HermexIntentDestination.ShareContent -> {
                 val fileUris = destination.uris.map { it.toString() }
                 Routes.share(destination.text ?: "", fileUris = fileUris)
@@ -254,18 +256,6 @@ fun HermexNavGraph(
         }
         composable(Routes.SETTINGS) { backStackEntry ->
             val viewModel: SettingsViewModel = viewModel(factory = appContainer.settingsViewModelFactory())
-            // SettingsViewModel's instance persists across a push-to-DefaultModel-and-back trip,
-            // since this back stack entry never leaves the graph -- so a model change made there
-            // won't otherwise be reflected here without an explicit signal.
-            val shouldRefresh by backStackEntry.savedStateHandle
-                .getStateFlow("refreshSettings", false)
-                .collectAsStateWithLifecycle()
-            LaunchedEffect(shouldRefresh) {
-                if (shouldRefresh) {
-                    viewModel.load()
-                    backStackEntry.savedStateHandle["refreshSettings"] = false
-                }
-            }
             SettingsScreen(
                 viewModel = viewModel,
                 onBack = {
@@ -278,20 +268,23 @@ fun HermexNavGraph(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        composable(Routes.SERVERS) {
-            val viewModel: ServersViewModel = viewModel(factory = appContainer.serversViewModelFactory())
-            ServersScreen(
-                viewModel = viewModel,
-                onBack = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
+        composable(Routes.NEW_CHAT) {
+            val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+            LaunchedEffect(Unit) {
+                viewModel.createSession { newSessionId ->
+                    navController.navigate(Routes.chat(newSessionId)) {
+                        popUpTo(Routes.NEW_CHAT) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
-        composable(Routes.DEFAULT_MODEL) {
-            val viewModel: DefaultModelViewModel = viewModel(factory = appContainer.defaultModelViewModelFactory())
-            DefaultModelScreen(
+        composable(Routes.SERVERS) {
+                val viewModel: ServersViewModel = viewModel(factory = appContainer.serversViewModelFactory())
+                ServersScreen(
                 viewModel = viewModel,
                 onBack = {
                     navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)

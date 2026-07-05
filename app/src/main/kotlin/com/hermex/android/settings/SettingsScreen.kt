@@ -2,6 +2,7 @@ package com.hermex.android.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -95,6 +99,7 @@ fun SettingsScreen(
     if (showNotificationEducation) {
         AlertDialog(
             onDismissRequest = { showNotificationEducation = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Notifications") },
             text = {
                 Text("Notifications are disabled. Enable them in Settings → Apps → Hermex → Notifications.")
@@ -148,6 +153,7 @@ fun SettingsScreen(
     if (showSignOutConfirm) {
         AlertDialog(
             onDismissRequest = { showSignOutConfirm = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Sign out?") },
             text = { Text("Signs out of the active server and returns to onboarding.") },
             confirmButton = {
@@ -325,7 +331,29 @@ fun SettingsScreen(
 
                 uiState.errorMessage?.let { message ->
                     Spacer(Modifier.height(16.dp))
-                    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.Accessory),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -386,6 +414,7 @@ private fun HeaderLogoColorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("Header Logo Color") },
         text = {
             Column {
@@ -424,6 +453,7 @@ private fun AppIconVariantDialog(
     val isDarkTheme = isSystemInDarkTheme()
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("App Icon") },
         text = {
             Column {

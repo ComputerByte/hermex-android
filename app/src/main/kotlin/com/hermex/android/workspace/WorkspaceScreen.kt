@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.WorkspaceEntry
+import com.hermex.android.ui.theme.HermexColors
 import com.hermex.android.ui.theme.HermexRadii
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1235,6 +1237,7 @@ private fun GitStatusCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(4.dp))
+                            val successColor = if (isSystemInDarkTheme()) HermexColors.SuccessDark else HermexColors.SuccessLight
                             gitState.files.forEachIndexed { index, file ->
                                 if (index > 0) {
                                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -1249,7 +1252,7 @@ private fun GitStatusCard(
                                 }
                                 val statusColor = when (file.status) {
                                     "M" -> MaterialTheme.colorScheme.primary
-                                    "A" -> MaterialTheme.colorScheme.tertiary
+                                    "A" -> successColor
                                     "D" -> MaterialTheme.colorScheme.error
                                     "?" -> MaterialTheme.colorScheme.onSurfaceVariant
                                     else -> MaterialTheme.colorScheme.onSurface
@@ -1284,7 +1287,7 @@ private fun GitStatusCard(
                                             text = "+$adds/-$dels",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontFamily = FontFamily.Monospace,
-                                            color = if (adds > dels) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                                            color = if (adds > dels) successColor else MaterialTheme.colorScheme.error,
                                         )
                                     }
                                 }

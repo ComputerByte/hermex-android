@@ -81,6 +81,7 @@ fun ChatScreen(
         val displayName = uiState.profileOptions.firstOrNull { it.normalizedName == profileName }?.displayName ?: profileName
         AlertDialog(
             onDismissRequest = viewModel::dismissPendingProfileSwitch,
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Start a new session?") },
             text = { Text("Switching to \"$displayName\" starts a new session on that profile. This chat's history stays here.") },
             confirmButton = {

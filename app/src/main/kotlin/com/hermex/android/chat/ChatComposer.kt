@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ProfileSummary
 import com.hermex.android.core.util.HermexLog
+import com.hermex.android.ui.theme.HermexRadii
 
 /** [ChatComposer]'s callbacks, grouped so adding a future action (slash commands) doesn't widen
  * [ChatComposer]'s own parameter list. */
@@ -175,6 +177,7 @@ fun ChatComposer(
                     placeholder = { Text("Message") },
                     enabled = composerState.isTextFieldEnabled,
                     maxLines = 5,
+                    shape = RoundedCornerShape(HermexRadii.Composer),
                 )
                 when {
                     composerState.showStopButton -> IconButton(onClick = actions.onStop) {

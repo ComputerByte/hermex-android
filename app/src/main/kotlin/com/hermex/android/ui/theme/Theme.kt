@@ -2,11 +2,15 @@ package com.hermex.android.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hermex.android.core.storage.HeaderLogoColor
 
 object HermexColors {
@@ -30,6 +34,25 @@ object HermexColors {
     val UserBubbleDark = Color(0xFF48484A)
     val CodeBackgroundDark = Color(0xFF0A0D12)
 }
+
+/** Mirrors the design system's `tokens/typography.css` scale (itself mirrored from the iOS app's
+ * Dynamic Type-inspired `Type.kt`) -- sizes/weights/line-heights only, no custom font family, so
+ * this still resolves to the platform system font (Roboto) exactly like the Material3 default it
+ * replaces. Only the 11 slots the token file actually defines are overridden; `displayLarge/
+ * Medium/Small` (unused by this dense, mobile-first UI) keep Material3's stock defaults. */
+private val HermexTypography = Typography(
+    headlineLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 30.sp, lineHeight = 37.sp),
+    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 30.sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, lineHeight = 25.sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 17.sp, lineHeight = 22.sp),
+    titleSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 17.sp, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 13.sp),
+)
 
 object HermexRadii {
     val Accessory = 10.dp
@@ -129,6 +152,7 @@ fun HermexTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
+        typography = HermexTypography,
         content = content,
     )
 }

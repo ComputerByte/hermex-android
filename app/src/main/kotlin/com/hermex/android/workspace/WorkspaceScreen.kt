@@ -191,17 +191,26 @@ fun WorkspaceScreen(
                             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Up to parent folder")
                         }
                         // New file
-                        TextButton(onClick = viewModel::showCreateFileDialog, modifier = Modifier.height(32.dp)) {
+                        TextButton(
+                            onClick = viewModel::showCreateFileDialog,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.height(32.dp),
+                        ) {
                             Text("+ File", style = MaterialTheme.typography.labelSmall)
                         }
                         // New folder
-                        TextButton(onClick = viewModel::showCreateFolderDialog, modifier = Modifier.height(32.dp)) {
+                        TextButton(
+                            onClick = viewModel::showCreateFolderDialog,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.height(32.dp),
+                        ) {
                             Text("+ Folder", style = MaterialTheme.typography.labelSmall)
                         }
                         // Upload
                         TextButton(
                             onClick = { uploadLauncher.launch(arrayOf("*/*")) },
                             enabled = !uiState.isUploading,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
                             modifier = Modifier.height(32.dp),
                         ) {
                             Text("Upload", style = MaterialTheme.typography.labelSmall)
@@ -320,6 +329,7 @@ private fun DeleteFileDialog(
     val isFolder = dialog.isDirectory
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text(if (isFolder) "Delete folder ${dialog.targetName}?" else "Delete ${dialog.targetName}?") },
         text = {
             Column {
@@ -348,6 +358,11 @@ private fun DeleteFileDialog(
                         value = dialog.confirmationText,
                         onValueChange = { onConfirmationTextChange?.invoke(it) },
                         singleLine = true,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !dialog.isDeleting,
                         placeholder = { Text(dialog.targetName) },
@@ -367,6 +382,7 @@ private fun DeleteFileDialog(
             Button(
                 onClick = onConfirm,
                 enabled = dialog.confirmationTypedCorrectly && !dialog.isDeleting,
+                shape = RoundedCornerShape(HermexRadii.Cell),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError,
@@ -394,6 +410,7 @@ private fun RenameDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("Rename") },
         text = {
             Column {
@@ -407,6 +424,11 @@ private fun RenameDialog(
                     onValueChange = onNameChange,
                     label = { Text("New name") },
                     singleLine = true,
+                    shape = RoundedCornerShape(HermexRadii.Cell),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
                     enabled = !dialog.isRenaming,
                     modifier = Modifier.fillMaxWidth(),
                     isError = dialog.errorMessage != null,
@@ -420,6 +442,7 @@ private fun RenameDialog(
             Button(
                 onClick = onConfirm,
                 enabled = dialog.isValid && !dialog.isUnchanged && !dialog.isRenaming,
+                shape = RoundedCornerShape(HermexRadii.Cell),
             ) {
                 if (dialog.isRenaming) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -451,6 +474,7 @@ private fun CreateDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text(title) },
         text = {
             Column {
@@ -459,6 +483,11 @@ private fun CreateDialog(
                     onValueChange = onNameChange,
                     label = { Text(label) },
                     singleLine = true,
+                    shape = RoundedCornerShape(HermexRadii.Cell),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
                     enabled = !dialog.isCreating,
                     modifier = Modifier.fillMaxWidth(),
                     isError = dialog.errorMessage != null,
@@ -472,6 +501,7 @@ private fun CreateDialog(
             Button(
                 onClick = onConfirm,
                 enabled = dialog.isValid && !dialog.isCreating,
+                shape = RoundedCornerShape(HermexRadii.Cell),
             ) {
                 if (dialog.isCreating) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -778,6 +808,7 @@ private fun FileViewerContent(
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Discard changes?") },
             text = { Text("You have unsaved changes to ${file.name}.") },
             confirmButton = {
@@ -803,6 +834,7 @@ private fun FileViewerContent(
                 if (file.isEditing) {
                     Button(
                         onClick = { handleClose() },
+                        shape = RoundedCornerShape(HermexRadii.Cell),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -812,10 +844,15 @@ private fun FileViewerContent(
                     Button(
                         onClick = onSave,
                         enabled = file.hasUnsavedChanges && !file.isSaving,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
                         modifier = Modifier.height(32.dp),
                     ) { Text("Save", style = MaterialTheme.typography.labelSmall) }
                 } else {
-                    TextButton(onClick = onStartEdit, modifier = Modifier.height(32.dp)) {
+                    TextButton(
+                        onClick = onStartEdit,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
+                        modifier = Modifier.height(32.dp),
+                    ) {
                         Text("Edit", style = MaterialTheme.typography.labelSmall)
                     }
                 }
@@ -879,6 +916,11 @@ private fun FileViewerContent(
                         OutlinedTextField(
                             value = file.editedContent,
                             onValueChange = onUpdateEditedContent,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(12.dp),
@@ -978,6 +1020,7 @@ private fun MoveDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("Move ${dialog.targetName}") },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -988,7 +1031,11 @@ private fun MoveDialog(
                         modifier = Modifier.weight(1f),
                     )
                     if (dialog.destinationPath != WORKSPACE_ROOT_PATH) {
-                        TextButton(onClick = onNavigateUp, modifier = Modifier.height(28.dp)) {
+                        TextButton(
+                            onClick = onNavigateUp,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.height(28.dp),
+                        ) {
                             Text("Up", style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -1003,16 +1050,25 @@ private fun MoveDialog(
                 } else if (dialog.destinationEntries.isEmpty()) {
                     Text("No subfolders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         items(dialog.destinationEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                            Text(
-                                text = "📁  ${entry.name ?: entry.path ?: "?"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onNavigateInto(entry) }
-                                    .padding(vertical = 4.dp, horizontal = 4.dp),
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(HermexRadii.Accessory),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = "📁  ${entry.name ?: entry.path ?: "?"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onNavigateInto(entry) }
+                                        .padding(vertical = 8.dp, horizontal = 8.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -1026,6 +1082,7 @@ private fun MoveDialog(
             Button(
                 onClick = onConfirm,
                 enabled = !dialog.isMoving && dialog.destinationPath.isNotEmpty(),
+                shape = RoundedCornerShape(HermexRadii.Cell),
             ) {
                 if (dialog.isMoving) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)

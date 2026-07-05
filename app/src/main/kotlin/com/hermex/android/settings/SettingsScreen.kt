@@ -46,7 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.Manifest
 import android.content.Intent
@@ -58,6 +60,7 @@ import com.hermex.android.BuildConfig
 import com.hermex.android.R
 import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
+import com.hermex.android.ui.theme.HermexRadii
 import com.hermex.android.ui.theme.toComposeColor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,14 +168,20 @@ fun SettingsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = {
+                    Text(
+                        "Settings",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -287,7 +296,7 @@ fun SettingsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(HermexRadii.SettingsCard))
                         .padding(16.dp),
                 ) {
                     Text(
@@ -299,6 +308,7 @@ fun SettingsScreen(
                     Button(
                         onClick = { showSignOutConfirm = true },
                         enabled = !uiState.isSigningOut,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -327,6 +337,8 @@ private fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.5.sp,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp),
     )
@@ -337,11 +349,16 @@ private fun Card(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(HermexRadii.SettingsCard))
             .padding(horizontal = 16.dp),
     ) {
         content()
     }
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
 @Composable
@@ -350,13 +367,13 @@ private fun SettingsRow(label: String, value: String, showDivider: Boolean = tru
         Column(
             modifier = Modifier
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
         ) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.titleMedium)
         }
         if (showDivider) {
-            HorizontalDivider()
+            SettingsDivider()
         }
     }
 }
@@ -458,7 +475,7 @@ private fun SettingsSwitchRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -468,7 +485,7 @@ private fun SettingsSwitchRow(
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
         if (showDivider) {
-            HorizontalDivider()
+            SettingsDivider()
         }
     }
 }

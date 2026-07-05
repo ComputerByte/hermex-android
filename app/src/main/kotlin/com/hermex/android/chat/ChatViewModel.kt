@@ -272,9 +272,9 @@ class ChatViewModel(
         }
     }
 
-    /** The entry point a future file/photo picker will call after a real, successful
-     * `HermexApi.uploadAttachment()` -- not called from any UI yet in this phase, so it's
-     * `internal` rather than `private` purely to let tests stage pending attachments without a
+    /** Folds a completed upload's response into [ChatUiState.pendingAttachments]. Called by
+     * [performAttachmentUpload] after a real `HermexApi.uploadAttachment()` succeeds; kept
+     * `internal` rather than `private` so tests can stage pending attachments directly without a
      * real upload/network call. A [response] carrying [UploadResponse.error] surfaces that error
      * the same way other composer failures do, without ever entering the pending list. */
     internal fun addUploadedAttachment(response: UploadResponse) {

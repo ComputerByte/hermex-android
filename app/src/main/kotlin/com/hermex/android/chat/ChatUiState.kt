@@ -52,13 +52,12 @@ data class ChatUiState(
     /** User-facing explanation for [isShowingCachedData]. Null whenever [isShowingCachedData] is
      * false. */
     val cacheStatusMessage: String? = null,
-    /** Attachments staged for the next [ChatViewModel.sendMessage] call. Dormant in this phase --
-     * nothing appends to this list yet, since no file/photo picker exists. Populated via
-     * [ChatViewModel.addUploadedAttachment] once one does. */
+    /** Attachments staged for the next [ChatViewModel.sendMessage] call -- populated by
+     * [ChatViewModel.uploadAttachment] (the composer's attach button) via
+     * [ChatViewModel.addUploadedAttachment] once each picked file's upload completes. */
     val pendingAttachments: List<PendingAttachmentUi> = emptyList(),
-    /** True while a future picker's upload call is in flight. Dormant in this phase -- nothing
-     * sets this true yet, since [ChatViewModel] never calls `HermexApi.uploadAttachment` itself;
-     * exists now so the composer's eventual "uploading" indicator has a single flag to watch. */
+    /** True while a single attachment's upload is in flight -- drives the composer's uploading
+     * indicator; see [ChatViewModel.uploadAttachment] / [ChatViewModel.performAttachmentUpload]. */
     val isUploadingAttachment: Boolean = false,
 )
 

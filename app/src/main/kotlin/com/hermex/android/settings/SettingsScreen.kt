@@ -2,6 +2,7 @@ package com.hermex.android.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,7 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.Manifest
 import android.content.Intent
@@ -58,6 +64,7 @@ import com.hermex.android.BuildConfig
 import com.hermex.android.R
 import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
+import com.hermex.android.ui.theme.HermexRadii
 import com.hermex.android.ui.theme.toComposeColor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +99,7 @@ fun SettingsScreen(
     if (showNotificationEducation) {
         AlertDialog(
             onDismissRequest = { showNotificationEducation = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Notifications") },
             text = {
                 Text("Notifications are disabled. Enable them in Settings → Apps → Hermex → Notifications.")
@@ -145,6 +153,7 @@ fun SettingsScreen(
     if (showSignOutConfirm) {
         AlertDialog(
             onDismissRequest = { showSignOutConfirm = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Sign out?") },
             text = { Text("Signs out of the active server and returns to onboarding.") },
             confirmButton = {
@@ -165,14 +174,20 @@ fun SettingsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = {
+                    Text(
+                        "Settings",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -287,7 +302,7 @@ fun SettingsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(HermexRadii.SettingsCard))
                         .padding(16.dp),
                 ) {
                     Text(
@@ -299,6 +314,7 @@ fun SettingsScreen(
                     Button(
                         onClick = { showSignOutConfirm = true },
                         enabled = !uiState.isSigningOut,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -315,7 +331,29 @@ fun SettingsScreen(
 
                 uiState.errorMessage?.let { message ->
                     Spacer(Modifier.height(16.dp))
-                    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.Accessory),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -327,6 +365,8 @@ private fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.5.sp,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp),
     )
@@ -337,11 +377,16 @@ private fun Card(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(HermexRadii.SettingsCard))
             .padding(horizontal = 16.dp),
     ) {
         content()
     }
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
 @Composable
@@ -350,13 +395,13 @@ private fun SettingsRow(label: String, value: String, showDivider: Boolean = tru
         Column(
             modifier = Modifier
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
         ) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.titleMedium)
         }
         if (showDivider) {
-            HorizontalDivider()
+            SettingsDivider()
         }
     }
 }
@@ -369,6 +414,7 @@ private fun HeaderLogoColorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("Header Logo Color") },
         text = {
             Column {
@@ -407,6 +453,7 @@ private fun AppIconVariantDialog(
     val isDarkTheme = isSystemInDarkTheme()
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("App Icon") },
         text = {
             Column {
@@ -458,7 +505,7 @@ private fun SettingsSwitchRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -468,7 +515,7 @@ private fun SettingsSwitchRow(
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
         if (showDivider) {
-            HorizontalDivider()
+            SettingsDivider()
         }
     }
 }

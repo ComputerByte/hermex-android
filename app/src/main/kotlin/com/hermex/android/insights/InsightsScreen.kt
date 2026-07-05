@@ -15,7 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,12 +36,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.InsightsDailyToken
 import com.hermex.android.core.network.dto.InsightsModelBreakdown
 import com.hermex.android.core.network.dto.SessionSummary
+import com.hermex.android.ui.theme.HermexRadii
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +60,13 @@ fun InsightsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Usage Analytics") },
+                title = {
+                    Text(
+                        "Usage Analytics",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -71,7 +82,7 @@ fun InsightsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -100,7 +111,18 @@ fun InsightsScreen(
                         modifier = Modifier.padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("Could Not Load Analytics", style = MaterialTheme.typography.titleMedium)
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Could Not Load Analytics",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(
                             uiState.errorMessage.orEmpty(),
@@ -108,7 +130,10 @@ fun InsightsScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Spacer(Modifier.height(16.dp))
-                        Button(onClick = { viewModel.load() }) { Text("Try Again") }
+                        Button(
+                            onClick = { viewModel.load() },
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                        ) { Text("Try Again") }
                     }
                 }
 
@@ -119,7 +144,18 @@ fun InsightsScreen(
                         modifier = Modifier.padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("No Data", style = MaterialTheme.typography.titleMedium)
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "No Data",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "Session usage data will appear here once you have conversations.",
@@ -149,8 +185,13 @@ private fun InsightsContent(uiState: InsightsUiState, onSelectTimeframe: (Insigh
                     selected = uiState.timeframe == timeframe,
                     onClick = { onSelectTimeframe(timeframe) },
                     shape = SegmentedButtonDefaults.itemShape(index, InsightsTimeframe.entries.size),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.primary,
+                        activeContentColor = MaterialTheme.colorScheme.onPrimary,
+                        activeBorderColor = MaterialTheme.colorScheme.primary,
+                    ),
                 ) {
-                    Text(timeframe.label, style = MaterialTheme.typography.labelMedium)
+                    Text(timeframe.label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -236,6 +277,8 @@ private fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.5.sp,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp),
     )
@@ -246,11 +289,16 @@ private fun Card(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(HermexRadii.SettingsCard))
             .padding(horizontal = 16.dp),
     ) {
         content()
     }
+}
+
+@Composable
+private fun InsightsDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
 @Composable
@@ -264,11 +312,11 @@ private fun StatRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(value, style = MaterialTheme.typography.titleMedium)
+                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             trailingText?.let {
                 Text(
@@ -280,7 +328,7 @@ private fun StatRow(
             }
         }
         if (showDivider) {
-            HorizontalDivider()
+            InsightsDivider()
         }
     }
 }
@@ -292,6 +340,7 @@ private fun ModelRow(model: InsightsModelBreakdown, showDivider: Boolean) {
             Text(
                 model.model ?: "Unknown model",
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -309,7 +358,7 @@ private fun ModelRow(model: InsightsModelBreakdown, showDivider: Boolean) {
             )
         }
         if (showDivider) {
-            HorizontalDivider()
+            InsightsDivider()
         }
     }
 }
@@ -318,7 +367,7 @@ private fun ModelRow(model: InsightsModelBreakdown, showDivider: Boolean) {
 private fun DailyTokenRow(day: InsightsDailyToken, showDivider: Boolean) {
     Column {
         Column(modifier = Modifier.padding(vertical = 12.dp)) {
-            Text(day.date ?: "--", style = MaterialTheme.typography.bodyLarge)
+            Text(day.date ?: "--", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(2.dp))
             val parts = listOfNotNull(
                 "${day.totalTokens.formatCount()} tokens",
@@ -332,7 +381,7 @@ private fun DailyTokenRow(day: InsightsDailyToken, showDivider: Boolean) {
             )
         }
         if (showDivider) {
-            HorizontalDivider()
+            InsightsDivider()
         }
     }
 }
@@ -344,6 +393,7 @@ private fun TopSessionRow(session: SessionSummary, showDivider: Boolean) {
             Text(
                 session.title ?: "Untitled Session",
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -360,7 +410,7 @@ private fun TopSessionRow(session: SessionSummary, showDivider: Boolean) {
             )
         }
         if (showDivider) {
-            HorizontalDivider()
+            InsightsDivider()
         }
     }
 }

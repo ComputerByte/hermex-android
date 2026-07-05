@@ -10,11 +10,14 @@ import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,15 +29,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
@@ -42,19 +50,20 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -68,13 +77,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.WorkspaceEntry
+import com.hermex.android.ui.theme.HermexColors
+import com.hermex.android.ui.theme.HermexRadii
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -144,7 +158,13 @@ fun WorkspaceScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(openFile?.name ?: "Files", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            openFile?.name ?: "Files",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
                         if (openFile == null) {
                             Text(
                                 text = if (uiState.isAtRoot) "Root" else uiState.currentPath,
@@ -173,17 +193,26 @@ fun WorkspaceScreen(
                             Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Up to parent folder")
                         }
                         // New file
-                        TextButton(onClick = viewModel::showCreateFileDialog, modifier = Modifier.height(32.dp)) {
+                        TextButton(
+                            onClick = viewModel::showCreateFileDialog,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.height(32.dp),
+                        ) {
                             Text("+ File", style = MaterialTheme.typography.labelSmall)
                         }
                         // New folder
-                        TextButton(onClick = viewModel::showCreateFolderDialog, modifier = Modifier.height(32.dp)) {
+                        TextButton(
+                            onClick = viewModel::showCreateFolderDialog,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.height(32.dp),
+                        ) {
                             Text("+ Folder", style = MaterialTheme.typography.labelSmall)
                         }
                         // Upload
                         TextButton(
                             onClick = { uploadLauncher.launch(arrayOf("*/*")) },
                             enabled = !uiState.isUploading,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
                             modifier = Modifier.height(32.dp),
                         ) {
                             Text("Upload", style = MaterialTheme.typography.labelSmall)
@@ -191,7 +220,7 @@ fun WorkspaceScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -302,6 +331,7 @@ private fun DeleteFileDialog(
     val isFolder = dialog.isDirectory
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text(if (isFolder) "Delete folder ${dialog.targetName}?" else "Delete ${dialog.targetName}?") },
         text = {
             Column {
@@ -330,6 +360,11 @@ private fun DeleteFileDialog(
                         value = dialog.confirmationText,
                         onValueChange = { onConfirmationTextChange?.invoke(it) },
                         singleLine = true,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !dialog.isDeleting,
                         placeholder = { Text(dialog.targetName) },
@@ -349,6 +384,7 @@ private fun DeleteFileDialog(
             Button(
                 onClick = onConfirm,
                 enabled = dialog.confirmationTypedCorrectly && !dialog.isDeleting,
+                shape = RoundedCornerShape(HermexRadii.Cell),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError,
@@ -376,6 +412,7 @@ private fun RenameDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("Rename") },
         text = {
             Column {
@@ -389,6 +426,11 @@ private fun RenameDialog(
                     onValueChange = onNameChange,
                     label = { Text("New name") },
                     singleLine = true,
+                    shape = RoundedCornerShape(HermexRadii.Cell),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
                     enabled = !dialog.isRenaming,
                     modifier = Modifier.fillMaxWidth(),
                     isError = dialog.errorMessage != null,
@@ -402,6 +444,7 @@ private fun RenameDialog(
             Button(
                 onClick = onConfirm,
                 enabled = dialog.isValid && !dialog.isUnchanged && !dialog.isRenaming,
+                shape = RoundedCornerShape(HermexRadii.Cell),
             ) {
                 if (dialog.isRenaming) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -433,6 +476,7 @@ private fun CreateDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text(title) },
         text = {
             Column {
@@ -441,6 +485,11 @@ private fun CreateDialog(
                     onValueChange = onNameChange,
                     label = { Text(label) },
                     singleLine = true,
+                    shape = RoundedCornerShape(HermexRadii.Cell),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
                     enabled = !dialog.isCreating,
                     modifier = Modifier.fillMaxWidth(),
                     isError = dialog.errorMessage != null,
@@ -454,6 +503,7 @@ private fun CreateDialog(
             Button(
                 onClick = onConfirm,
                 enabled = dialog.isValid && !dialog.isCreating,
+                shape = RoundedCornerShape(HermexRadii.Cell),
             ) {
                 if (dialog.isCreating) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -482,7 +532,12 @@ private fun SearchBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         placeholder = { Text("Search files...") },
         leadingIcon = {
-            Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
         },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -492,11 +547,14 @@ private fun SearchBar(
             }
         },
         singleLine = true,
+        shape = RoundedCornerShape(percent = 50),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { /* filter is applied live */ }),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedBorderColor = Color.Transparent,
+            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
         ),
         textStyle = MaterialTheme.typography.bodySmall,
     )
@@ -536,6 +594,13 @@ private fun DirectoryContent(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         text = uiState.errorMessage,
                         color = MaterialTheme.colorScheme.error,
@@ -547,22 +612,51 @@ private fun DirectoryContent(
             }
 
             uiState.entries.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("This folder is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.List,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("This folder is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
 
             filteredEntries.isEmpty() && uiState.searchQuery.isNotBlank() -> Box(
                 Modifier.fillMaxSize().padding(24.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = "No files match \"${uiState.searchQuery}\".",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "No files match \"${uiState.searchQuery}\".",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
-            else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            ) {
                 items(filteredEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                    WorkspaceEntryRow(entry = entry, onClick = { onEntryClick(entry) }, onCopyPath = { onCopyPath(entry) }, onRename = { onRename(entry) }, onMove = { onMove(entry) }, onDelete = { onDelete(entry) })
+                    WorkspaceEntryRow(
+                        entry = entry,
+                        onClick = { onEntryClick(entry) },
+                        onCopyPath = { onCopyPath(entry) },
+                        onRename = { onRename(entry) },
+                        onMove = { onMove(entry) },
+                        onDelete = { onDelete(entry) },
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
                 }
             }
         }
@@ -570,12 +664,33 @@ private fun DirectoryContent(
         // A navigation failure that left the previous listing on screen
         if (uiState.errorMessage != null && uiState.entries.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(bottom = 8.dp),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
                 contentAlignment = Alignment.BottomCenter,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = uiState.errorMessage, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onRetry) { Text("Retry") }
+                Surface(
+                    shape = RoundedCornerShape(HermexRadii.Accessory),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = uiState.errorMessage,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = onRetry, modifier = Modifier.height(32.dp)) { Text("Retry") }
+                    }
                 }
             }
         }
@@ -594,65 +709,77 @@ private fun WorkspaceEntryRow(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    ListItem(
-        modifier = modifier.clickable(onClick = onClick),
-        headlineContent = {
-            Text(entry.name ?: entry.path ?: "Unnamed", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (entry.isFolder) {
-                    Text("Folder", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                } else {
-                    Text(
-                        text = entry.size?.let(::formatFileSize) ?: "File",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More actions",
-                            modifier = Modifier.size(20.dp))
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Copy path") },
-                            onClick = {
-                                showMenu = false
-                                onCopyPath()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
-                            onClick = {
-                                showMenu = false
-                                onRename()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Move") },
-                            onClick = {
-                                showMenu = false
-                                onMove()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                showMenu = false
-                                onDelete()
-                            },
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(HermexRadii.Cell),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        ListItem(
+            modifier = Modifier.clickable(onClick = onClick),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = {
+                Text(
+                    entry.name ?: entry.path ?: "Unnamed",
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (entry.isFolder) {
+                        Text("Folder", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text(
+                            text = entry.size?.let(::formatFileSize) ?: "File",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Spacer(Modifier.width(4.dp))
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More actions",
+                                modifier = Modifier.size(20.dp))
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Copy path") },
+                                onClick = {
+                                    showMenu = false
+                                    onCopyPath()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = {
+                                    showMenu = false
+                                    onRename()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Move") },
+                                onClick = {
+                                    showMenu = false
+                                    onMove()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    showMenu = false
+                                    onDelete()
+                                },
+                            )
+                        }
+                    }
                 }
-            }
-        },
-    )
+            },
+        )
+    }
 }
 
 @Composable
@@ -683,6 +810,7 @@ private fun FileViewerContent(
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Discard changes?") },
             text = { Text("You have unsaved changes to ${file.name}.") },
             confirmButton = {
@@ -708,6 +836,7 @@ private fun FileViewerContent(
                 if (file.isEditing) {
                     Button(
                         onClick = { handleClose() },
+                        shape = RoundedCornerShape(HermexRadii.Cell),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -717,10 +846,15 @@ private fun FileViewerContent(
                     Button(
                         onClick = onSave,
                         enabled = file.hasUnsavedChanges && !file.isSaving,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
                         modifier = Modifier.height(32.dp),
                     ) { Text("Save", style = MaterialTheme.typography.labelSmall) }
                 } else {
-                    TextButton(onClick = onStartEdit, modifier = Modifier.height(32.dp)) {
+                    TextButton(
+                        onClick = onStartEdit,
+                        shape = RoundedCornerShape(HermexRadii.Cell),
+                        modifier = Modifier.height(32.dp),
+                    ) {
                         Text("Edit", style = MaterialTheme.typography.labelSmall)
                     }
                 }
@@ -741,6 +875,13 @@ private fun FileViewerContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             text = file.errorMessage,
                             color = MaterialTheme.colorScheme.error,
@@ -755,11 +896,20 @@ private fun FileViewerContent(
                     Modifier.fillMaxSize().padding(24.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = file.content.message,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = file.content.message,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
 
                 file.content is WorkspaceFileContent.Text -> {
@@ -768,6 +918,11 @@ private fun FileViewerContent(
                         OutlinedTextField(
                             value = file.editedContent,
                             onValueChange = onUpdateEditedContent,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(12.dp),
@@ -781,12 +936,23 @@ private fun FileViewerContent(
                                 .padding(16.dp),
                         ) {
                             if (file.content.truncated) {
-                                Text(
-                                    text = "Showing partial content -- this file is too large to display in full.",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.error,
+                                Row(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                                )
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Showing partial content -- this file is too large to display in full.",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
                             Text(text = file.content.text, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -856,6 +1022,7 @@ private fun MoveDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text("Move ${dialog.targetName}") },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -866,7 +1033,11 @@ private fun MoveDialog(
                         modifier = Modifier.weight(1f),
                     )
                     if (dialog.destinationPath != WORKSPACE_ROOT_PATH) {
-                        TextButton(onClick = onNavigateUp, modifier = Modifier.height(28.dp)) {
+                        TextButton(
+                            onClick = onNavigateUp,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.height(28.dp),
+                        ) {
                             Text("Up", style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -881,16 +1052,25 @@ private fun MoveDialog(
                 } else if (dialog.destinationEntries.isEmpty()) {
                     Text("No subfolders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         items(dialog.destinationEntries, key = { it.path ?: it.name ?: it.hashCode() }) { entry ->
-                            Text(
-                                text = "📁  ${entry.name ?: entry.path ?: "?"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onNavigateInto(entry) }
-                                    .padding(vertical = 4.dp, horizontal = 4.dp),
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(HermexRadii.Accessory),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = "📁  ${entry.name ?: entry.path ?: "?"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onNavigateInto(entry) }
+                                        .padding(vertical = 8.dp, horizontal = 8.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -904,6 +1084,7 @@ private fun MoveDialog(
             Button(
                 onClick = onConfirm,
                 enabled = !dialog.isMoving && dialog.destinationPath.isNotEmpty(),
+                shape = RoundedCornerShape(HermexRadii.Cell),
             ) {
                 if (dialog.isMoving) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -938,13 +1119,12 @@ private fun GitStatusCard(
         return
     }
 
-    Card(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ),
+        shape = RoundedCornerShape(HermexRadii.SettingsCard),
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             when {
@@ -957,7 +1137,16 @@ private fun GitStatusCard(
                 }
 
                 gitState.errorMessage != null -> {
-                    Text(gitState.errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(gitState.errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
                     Spacer(Modifier.height(4.dp))
                     TextButton(onClick = onRetry, modifier = Modifier.height(28.dp)) { Text("Retry", style = MaterialTheme.typography.labelSmall) }
                 }
@@ -968,6 +1157,8 @@ private fun GitStatusCard(
                         Text(
                             text = "Git",
                             style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.width(8.dp))
@@ -1042,10 +1233,15 @@ private fun GitStatusCard(
                             Text(
                                 text = "${gitState.changedFileCount} changed file(s): +${gitState.additions}/-${gitState.deletions}",
                                 style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(4.dp))
-                            gitState.files.forEach { file ->
+                            val successColor = if (isSystemInDarkTheme()) HermexColors.SuccessDark else HermexColors.SuccessLight
+                            gitState.files.forEachIndexed { index, file ->
+                                if (index > 0) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                }
                                 val statusLabel = when (file.status) {
                                     "M" -> "modified"
                                     "A" -> "added"
@@ -1056,7 +1252,7 @@ private fun GitStatusCard(
                                 }
                                 val statusColor = when (file.status) {
                                     "M" -> MaterialTheme.colorScheme.primary
-                                    "A" -> MaterialTheme.colorScheme.tertiary
+                                    "A" -> successColor
                                     "D" -> MaterialTheme.colorScheme.error
                                     "?" -> MaterialTheme.colorScheme.onSurfaceVariant
                                     else -> MaterialTheme.colorScheme.onSurface
@@ -1091,14 +1287,23 @@ private fun GitStatusCard(
                                             text = "+$adds/-$dels",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontFamily = FontFamily.Monospace,
-                                            color = if (adds > dels) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                                            color = if (adds > dels) successColor else MaterialTheme.colorScheme.error,
                                         )
                                     }
                                 }
                             }
                         } else {
                             Spacer(Modifier.height(4.dp))
-                            Text("Clean working tree.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Clean working tree.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -1113,19 +1318,19 @@ private fun GitDiffViewer(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ),
+        shape = RoundedCornerShape(HermexRadii.SettingsCard),
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Diff: ${diff.path}",
                     style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
@@ -1143,21 +1348,46 @@ private fun GitDiffViewer(
                     }
                 }
                 diff.errorMessage != null -> {
-                    Text(diff.errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(diff.errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
                 }
                 diff.binary -> {
-                    Text("Binary file — diff not available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Binary file — diff not available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 else -> {
-                    Text(
-                        text = diff.diff,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .verticalScroll(rememberScrollState()),
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.Tool),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = diff.diff,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .horizontalScroll(rememberScrollState())
+                                .verticalScroll(rememberScrollState()),
+                        )
+                    }
                 }
             }
         }

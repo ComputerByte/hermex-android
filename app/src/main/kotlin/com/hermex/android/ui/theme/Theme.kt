@@ -91,8 +91,8 @@ fun HeaderLogoColor.toComposeColor(): Color = when (this) {
 }
 
 private val DarkColors = darkColorScheme(
-    // Primary actions in Hermex are inverted monochrome: white surface, black content.
-    primary = Color.White,
+    // Primary/accent actions use the brand gold, black content for contrast.
+    primary = HermexColors.HermesGold,
     onPrimary = Color.Black,
     primaryContainer = HermexColors.UserBubbleDark,
     onPrimaryContainer = HermexColors.DarkLabel,
@@ -119,8 +119,8 @@ private val DarkColors = darkColorScheme(
 )
 
 private val LightColors = lightColorScheme(
-    primary = Color.Black,
-    onPrimary = Color.White,
+    primary = HermexColors.HermesGold,
+    onPrimary = Color.Black,
     primaryContainer = Color(0xFFF2F2F7),
     onPrimaryContainer = Color.Black,
     secondary = HermexColors.AccentBlueLight,

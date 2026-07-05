@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,9 +36,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.storage.HermexServerConfig
+import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +58,7 @@ fun ServersScreen(
     uiState.serverPendingRemoval?.let { target ->
         AlertDialog(
             onDismissRequest = viewModel::cancelRemoval,
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Remove ${target.name}?") },
             text = {
                 Text(
@@ -82,14 +86,20 @@ fun ServersScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Servers") },
+                title = {
+                    Text(
+                        "Servers",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -117,7 +127,11 @@ fun ServersScreen(
                         )
                     }
                     item(key = "add-server") {
-                        OutlinedButton(onClick = viewModel::startAdding, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = viewModel::startAdding,
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
                             Icon(Icons.Filled.Add, contentDescription = null)
                             Text("  Add Server")
                         }
@@ -140,13 +154,13 @@ private fun ServerRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(HermexRadii.Cell))
             .clickable(enabled = !isActive && !isSwitching, onClick = onSwitch)
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(config.name, style = MaterialTheme.typography.titleMedium)
+                Text(config.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(config.baseUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             when {
@@ -164,8 +178,13 @@ private fun ServerRow(
 @Composable
 private fun ServerEditorDialog(uiState: ServersUiState, viewModel: ServersViewModel) {
     val isEditing = uiState.editingServerId != null
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    )
     AlertDialog(
         onDismissRequest = viewModel::dismissEditor,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
         title = { Text(if (isEditing) "Edit Server" else "Add Server") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -175,6 +194,8 @@ private fun ServerEditorDialog(uiState: ServersUiState, viewModel: ServersViewMo
                     label = { Text("Name") },
                     placeholder = { Text("e.g. Mac Mini") },
                     singleLine = true,
+                    shape = RoundedCornerShape(HermexRadii.Cell),
+                    colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -184,6 +205,8 @@ private fun ServerEditorDialog(uiState: ServersUiState, viewModel: ServersViewMo
                     placeholder = { Text("hermes.example.com") },
                     singleLine = true,
                     isError = uiState.editorError != null,
+                    shape = RoundedCornerShape(HermexRadii.Cell),
+                    colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 uiState.editorError?.let {

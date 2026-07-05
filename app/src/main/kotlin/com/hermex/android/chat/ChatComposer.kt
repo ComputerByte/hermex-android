@@ -4,22 +4,28 @@ import android.net.Uri
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -31,6 +37,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -47,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,6 +122,14 @@ data class ChatComposerAttachmentState(
     }
 }
 
+/**
+ * A two-tier composer dock (input row on top, a horizontally-scrollable control strip of
+ * Hermex-styled chips below), modeled on the Hermes WebUI/Desktop composer rather than a plain
+ * Material `TextField` row: the dock is edge-to-edge with only its top corners rounded (a real
+ * dock rising from the bottom of the screen, not a floating margin'd card), and Attach/Profile/
+ * Model render as small tonal chips -- with a label when the underlying data already carries one
+ * (profile name, model name) -- instead of bare icons.
+ */
 @Composable
 fun ChatComposer(
     composerState: ChatComposerState,
@@ -122,22 +138,23 @@ fun ChatComposer(
     attachmentState: ChatComposerAttachmentState,
     actions: ChatComposerActions,
     modifier: Modifier = Modifier,
+    currentWorkspace: String? = null,
 ) {
-    // enableEdgeToEdge() (MainActivity) draws the app behind the system navigation bar, so a
-    // bottom-docked bar like this one must explicitly reserve space for it -- otherwise the
-    // send button/text field render underneath the system's back/home/recents buttons.
-    // Deliberately NOT also adding imePadding() here: Scaffold's own default
-    // contentWindowInsets (WindowInsets.safeDrawing, which includes ime) already accounts for
-    // the keyboard once, so stacking an explicit imePadding() on top double-counted the
-    // keyboard height and left a large blank gap above it when the keyboard opened.
+    // enableEdgeToEdge() (MainActivity) draws the app behind the system navigation bar. The dock's
+    // tonal background is allowed to extend all the way to the physical bottom edge (behind
+    // gesture nav), matching a real bottom dock -- only the interactive content inside is padded
+    // clear of the nav bar via navigationBarsPadding() on the inner Column, not the outer Surface.
+    // Deliberately NOT also adding imePadding(): Scaffold's own default contentWindowInsets
+    // (WindowInsets.safeDrawing, which includes ime) already accounts for the keyboard once, so
+    // stacking an explicit imePadding() on top double-counted the keyboard height and left a large
+    // blank gap above it when the keyboard opened.
     // Logged only on change, not every recomposition -- lets `adb logcat -s Hermex/Composer`
     // confirm Scaffold's innerPadding is actually reserving this much space for the transcript
     // (see ChatScreen investigation notes on composer/content overlap).
     var lastLoggedHeightPx by remember { mutableStateOf(-1) }
     Surface(
         modifier = modifier
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .navigationBarsPadding()
+            .fillMaxWidth()
             .onGloballyPositioned { coordinates ->
                 val heightPx = coordinates.size.height
                 if (heightPx != lastLoggedHeightPx) {
@@ -146,95 +163,158 @@ fun ChatComposer(
                 }
             },
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(HermexRadii.Dialog),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(topStart = HermexRadii.SettingsCard, topEnd = HermexRadii.SettingsCard),
+        tonalElevation = 4.dp,
     ) {
-        Column {
+        Column(modifier = Modifier.navigationBarsPadding()) {
+            // Hairline separating the dock from the message list above -- the app-wide substitute
+            // for wrapping the whole (now asymmetrically-rounded) shape in a border.
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 1.dp)
+
             if (attachmentState.pendingAttachments.isNotEmpty()) {
                 PendingAttachmentStrip(
                     attachments = attachmentState.pendingAttachments,
                     onRemove = actions.onRemoveAttachment,
                 )
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Groups the utility actions into one tonal "dock" so they read as a single
-                // designed control cluster rather than three bare icons floating loose next to
-                // the text field -- the specific gap the composer redesign was asked to close.
-                Surface(
-                    shape = RoundedCornerShape(HermexRadii.Composer),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AttachFileButton(
-                            enabled = composerState.isAttachButtonEnabled,
-                            isUploading = composerState.isUploadingAttachment,
-                            onAttachFile = actions.onAttachFile,
-                        )
-                        ProfileSelectorButton(
-                            profileOptions = profileSelectorState.profileOptions,
-                            selectedProfileName = profileSelectorState.selectedProfileName,
-                            isSwitchingProfile = composerState.isProfileSelectorLoading,
-                            onSelectProfile = actions.onSelectProfile,
-                        )
-                        ModelSelectorButton(
-                            modelCatalogGroups = modelSelectorState.modelCatalogGroups,
-                            currentModel = modelSelectorState.currentModel,
-                            currentModelProvider = modelSelectorState.currentModelProvider,
-                            isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
-                            isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
-                            onOpenModelPicker = actions.onOpenModelPicker,
-                            onSelectModel = actions.onSelectModel,
-                        )
+
+            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = composerState.text,
+                        onValueChange = actions.onTextChanged,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Message Hermex…") },
+                        enabled = composerState.isTextFieldEnabled,
+                        maxLines = 5,
+                        shape = RoundedCornerShape(HermexRadii.Composer),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        ),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // Fixed-size slot for the trailing action -- Stop/Send (both IconButton-family,
+                    // 48dp by default) and the bare sending spinner previously had no shared box, so
+                    // the control visibly jumped size as the composer moved between states.
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        when {
+                            composerState.showStopButton -> FilledTonalIconButton(
+                                onClick = actions.onStop,
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = "Stop")
+                            }
+                            composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.width(6.dp))
-                OutlinedTextField(
-                    value = composerState.text,
-                    onValueChange = actions.onTextChanged,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message") },
-                    enabled = composerState.isTextFieldEnabled,
-                    maxLines = 5,
-                    shape = RoundedCornerShape(HermexRadii.Composer),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                    ),
-                )
-                Spacer(Modifier.width(6.dp))
-                // Fixed-size slot for the trailing action -- Stop/Send (both IconButton-family,
-                // 48dp by default) and the bare sending spinner previously had no shared box, so
-                // the control visibly jumped size as the composer moved between states.
-                Box(
-                    modifier = Modifier.size(48.dp),
-                    contentAlignment = Alignment.Center,
+                Spacer(Modifier.height(8.dp))
+                // The bottom control strip -- Hermex-styled chips for Attach/Profile/Model (and
+                // Workspace, when the session already carries one), scrollable so it never clips
+                // or wraps awkwardly on narrow phones.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    when {
-                        composerState.showStopButton -> FilledTonalIconButton(
-                            onClick = actions.onStop,
-                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Icon(Icons.Filled.Close, contentDescription = "Stop")
-                        }
-                        composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
-                        }
+                    AttachFileButton(
+                        enabled = composerState.isAttachButtonEnabled,
+                        isUploading = composerState.isUploadingAttachment,
+                        onAttachFile = actions.onAttachFile,
+                    )
+                    ProfileSelectorButton(
+                        profileOptions = profileSelectorState.profileOptions,
+                        selectedProfileName = profileSelectorState.selectedProfileName,
+                        isSwitchingProfile = composerState.isProfileSelectorLoading,
+                        onSelectProfile = actions.onSelectProfile,
+                    )
+                    ModelSelectorButton(
+                        modelCatalogGroups = modelSelectorState.modelCatalogGroups,
+                        currentModel = modelSelectorState.currentModel,
+                        currentModelProvider = modelSelectorState.currentModelProvider,
+                        isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
+                        isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
+                        onOpenModelPicker = actions.onOpenModelPicker,
+                        onSelectModel = actions.onSelectModel,
+                    )
+                    if (!currentWorkspace.isNullOrBlank()) {
+                        WorkspaceChip(currentWorkspace)
                     }
                 }
             }
         }
+    }
+}
+
+/** Shared visual container for the composer's bottom control strip -- a small tonal pill with an
+ * icon and an optional label, so Attach/Profile/Model/Workspace all read as one family of
+ * "Hermex chips" instead of bare icons. [onClick] is null for purely informational chips (e.g.
+ * [WorkspaceChip]), which then render without a ripple/click target. */
+@Composable
+private fun ComposerChip(
+    icon: ImageVector,
+    label: String?,
+    contentDescription: String,
+    onClick: (() -> Unit)?,
+    enabled: Boolean = true,
+    isLoading: Boolean = false,
+) {
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    }
+    val chipContent: @Composable RowScope.() -> Unit = {
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(
+                icon,
+                contentDescription = if (label == null) contentDescription else null,
+                modifier = Modifier.size(15.dp),
+                tint = contentColor,
+            )
+        }
+        if (label != null) {
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 96.dp),
+            )
+        }
+    }
+    Surface(
+        modifier = if (onClick != null) {
+            Modifier.clickable(enabled = enabled && !isLoading, onClick = onClick)
+        } else {
+            Modifier
+        },
+        shape = RoundedCornerShape(HermexRadii.Accessory),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = if (label != null) 10.dp else 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = chipContent,
+        )
     }
 }
 
@@ -253,14 +333,14 @@ private fun AttachFileButton(
         uri?.let(onAttachFile)
     }
 
-    if (isUploading) {
-        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-        return
-    }
-
-    IconButton(onClick = { launcher.launch(arrayOf("*/*")) }, enabled = enabled) {
-        Icon(Icons.Filled.Add, contentDescription = "Attach file")
-    }
+    ComposerChip(
+        icon = Icons.Filled.Add,
+        label = null,
+        contentDescription = "Attach file",
+        enabled = enabled,
+        isLoading = isUploading,
+        onClick = { launcher.launch(arrayOf("*/*")) },
+    )
 }
 
 @Composable
@@ -272,7 +352,7 @@ private fun PendingAttachmentStrip(
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(attachments, key = { it.id }) { attachment ->
@@ -316,30 +396,33 @@ private fun ProfileSelectorButton(
     onSelectProfile: (String) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val selectedLabel = profileOptions.firstOrNull { it.normalizedName == selectedProfileName }?.displayName
 
-    if (isSwitchingProfile) {
-        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-        return
-    }
-
-    IconButton(onClick = { menuExpanded = true }, enabled = profileOptions.isNotEmpty()) {
-        Icon(Icons.Filled.Person, contentDescription = "Profile: ${selectedProfileName ?: "none"}")
-    }
-    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-        profileOptions.forEach { profile ->
-            val name = profile.normalizedName ?: return@forEach
-            DropdownMenuItem(
-                text = { Text(profile.displayName) },
-                trailingIcon = {
-                    if (name == selectedProfileName) {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                onClick = {
-                    menuExpanded = false
-                    onSelectProfile(name)
-                },
-            )
+    Box {
+        ComposerChip(
+            icon = Icons.Filled.Person,
+            label = selectedLabel,
+            contentDescription = "Profile: ${selectedProfileName ?: "none"}",
+            enabled = profileOptions.isNotEmpty(),
+            isLoading = isSwitchingProfile,
+            onClick = { menuExpanded = true },
+        )
+        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+            profileOptions.forEach { profile ->
+                val name = profile.normalizedName ?: return@forEach
+                DropdownMenuItem(
+                    text = { Text(profile.displayName) },
+                    trailingIcon = {
+                        if (name == selectedProfileName) {
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onSelectProfile(name)
+                    },
+                )
+            }
         }
     }
 }
@@ -356,55 +439,70 @@ private fun ModelSelectorButton(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    if (isUpdatingComposerConfiguration) {
-        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-        return
-    }
-
-    IconButton(onClick = {
-        menuExpanded = true
-        onOpenModelPicker()
-    }) {
-        Icon(Icons.Filled.Settings, contentDescription = "Model: ${currentModel ?: "none"}")
-    }
-    DropdownMenu(
-        expanded = menuExpanded,
-        onDismissRequest = { menuExpanded = false },
-        modifier = Modifier.heightIn(max = 400.dp),
-    ) {
-        when {
-            isLoadingModelCatalog && modelCatalogGroups.isEmpty() -> DropdownMenuItem(
-                text = { Text("Loading models...") },
-                onClick = {},
-                enabled = false,
-            )
-            modelCatalogGroups.isEmpty() -> DropdownMenuItem(
-                text = { Text("No models available") },
-                onClick = {},
-                enabled = false,
-            )
-            else -> modelCatalogGroups.forEach { group ->
-                Text(
-                    text = group.name,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+    Box {
+        ComposerChip(
+            icon = Icons.Filled.Settings,
+            label = currentModel,
+            contentDescription = "Model: ${currentModel ?: "none"}",
+            isLoading = isUpdatingComposerConfiguration,
+            onClick = {
+                menuExpanded = true
+                onOpenModelPicker()
+            },
+        )
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            modifier = Modifier.heightIn(max = 400.dp),
+        ) {
+            when {
+                isLoadingModelCatalog && modelCatalogGroups.isEmpty() -> DropdownMenuItem(
+                    text = { Text("Loading models...") },
+                    onClick = {},
+                    enabled = false,
                 )
-                group.models.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.displayName) },
-                        trailingIcon = {
-                            if (option.matchesSelection(currentModel, currentModelProvider)) {
-                                Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onSelectModel(option)
-                        },
+                modelCatalogGroups.isEmpty() -> DropdownMenuItem(
+                    text = { Text("No models available") },
+                    onClick = {},
+                    enabled = false,
+                )
+                else -> modelCatalogGroups.forEach { group ->
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
+                    group.models.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.displayName) },
+                            trailingIcon = {
+                                if (option.matchesSelection(currentModel, currentModelProvider)) {
+                                    Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onSelectModel(option)
+                            },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** Informational only -- there is no existing action to wire a tap on this chip to (workspace
+ * browsing is opened from [ChatScreen]'s top bar), so it deliberately has no `onClick`. Shows just
+ * the trailing path segment (e.g. "/home/byte/workspace" -> "workspace") to stay chip-sized. */
+@Composable
+private fun WorkspaceChip(workspace: String) {
+    val label = workspace.trimEnd('/').substringAfterLast('/').ifBlank { workspace }
+    ComposerChip(
+        icon = Icons.AutoMirrored.Filled.List,
+        label = label,
+        contentDescription = "Workspace: $workspace",
+        onClick = null,
+    )
 }

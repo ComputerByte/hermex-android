@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -138,7 +137,6 @@ fun ChatComposer(
     attachmentState: ChatComposerAttachmentState,
     actions: ChatComposerActions,
     modifier: Modifier = Modifier,
-    currentWorkspace: String? = null,
 ) {
     // enableEdgeToEdge() (MainActivity) draws the app behind the system navigation bar. The dock's
     // tonal background is allowed to extend all the way to the physical bottom edge (behind
@@ -221,9 +219,9 @@ fun ChatComposer(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                // The bottom control strip -- Hermex-styled chips for Attach/Profile/Model (and
-                // Workspace, when the session already carries one), scrollable so it never clips
-                // or wraps awkwardly on narrow phones.
+                // The bottom control strip -- Hermex-styled chips for Attach/Profile/Model, each
+                // mapping to a real existing action, scrollable so it never clips or wraps
+                // awkwardly on narrow phones.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -251,9 +249,6 @@ fun ChatComposer(
                         onOpenModelPicker = actions.onOpenModelPicker,
                         onSelectModel = actions.onSelectModel,
                     )
-                    if (!currentWorkspace.isNullOrBlank()) {
-                        WorkspaceChip(currentWorkspace)
-                    }
                 }
             }
         }
@@ -261,15 +256,15 @@ fun ChatComposer(
 }
 
 /** Shared visual container for the composer's bottom control strip -- a small tonal pill with an
- * icon and an optional label, so Attach/Profile/Model/Workspace all read as one family of
- * "Hermex chips" instead of bare icons. [onClick] is null for purely informational chips (e.g.
- * [WorkspaceChip]), which then render without a ripple/click target. */
+ * icon and an optional label, so Attach/Profile/Model all read as one family of "Hermex chips"
+ * instead of bare icons. [onClick] is required: every chip here must map to a real, already-
+ * existing action -- a chip that looks tappable but does nothing is worse than no chip at all. */
 @Composable
 private fun ComposerChip(
     icon: ImageVector,
     label: String?,
     contentDescription: String,
-    onClick: (() -> Unit)?,
+    onClick: () -> Unit,
     enabled: Boolean = true,
     isLoading: Boolean = false,
 ) {
@@ -302,11 +297,7 @@ private fun ComposerChip(
         }
     }
     Surface(
-        modifier = if (onClick != null) {
-            Modifier.clickable(enabled = enabled && !isLoading, onClick = onClick)
-        } else {
-            Modifier
-        },
+        modifier = Modifier.clickable(enabled = enabled && !isLoading, onClick = onClick),
         shape = RoundedCornerShape(HermexRadii.Accessory),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
@@ -493,16 +484,3 @@ private fun ModelSelectorButton(
     }
 }
 
-/** Informational only -- there is no existing action to wire a tap on this chip to (workspace
- * browsing is opened from [ChatScreen]'s top bar), so it deliberately has no `onClick`. Shows just
- * the trailing path segment (e.g. "/home/byte/workspace" -> "workspace") to stay chip-sized. */
-@Composable
-private fun WorkspaceChip(workspace: String) {
-    val label = workspace.trimEnd('/').substringAfterLast('/').ifBlank { workspace }
-    ComposerChip(
-        icon = Icons.AutoMirrored.Filled.List,
-        label = label,
-        contentDescription = "Workspace: $workspace",
-        onClick = null,
-    )
-}

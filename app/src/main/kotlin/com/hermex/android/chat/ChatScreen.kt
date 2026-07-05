@@ -141,7 +141,6 @@ fun ChatScreen(
                     onAttachFile = viewModel::uploadAttachment,
                     onRemoveAttachment = viewModel::removePendingAttachment,
                 ),
-                currentWorkspace = uiState.currentWorkspace,
             )
         },
     ) { innerPadding ->

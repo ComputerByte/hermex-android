@@ -42,10 +42,12 @@ fun SessionRow(
 ) {
     val streamingColor = if (isSystemInDarkTheme()) HermexColors.SuccessDark else HermexColors.SuccessLight
 
+    val mutedLabel = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel
+
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(HermexRadii.Cell),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -62,7 +64,7 @@ fun SessionRow(
                     }
                     Text(
                         text = session.title?.takeIf { it.isNotBlank() } ?: "Untitled",
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -76,7 +78,7 @@ fun SessionRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = mutedLabel,
                     )
                 }
             },
@@ -86,7 +88,7 @@ fun SessionRow(
                         Text(
                             relativeTimeText(it),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = mutedLabel,
                         )
                     }
                     if (session.isStreaming == true) {

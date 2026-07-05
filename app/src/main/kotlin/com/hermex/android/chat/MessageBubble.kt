@@ -5,11 +5,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +21,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.ui.theme.HermexRadii
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** What "copy message" actually puts on the clipboard -- pulled out as its own function so the
  * null-content case (a tool/system message with no plain text) is unit-testable without needing
@@ -45,28 +50,41 @@ fun MessageBubble(
     )
     if (isUser) {
         Box(modifier = modifier.fillMaxWidth().padding(start = 32.dp)) {
-            Box(
+            Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .widthIn(max = 320.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(HermexRadii.Bubble),
-                    )
-                    // Long-press to copy -- a simple, discoverable single action rather than a
-                    // full context menu, matching the scope of this pass (see AGENTS.md/v0.3.0
-                    // spec).
-                    .then(copyOnLongClick)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .widthIn(max = 320.dp),
+                horizontalAlignment = Alignment.End,
             ) {
-                MarkdownText(
-                    markdown = message.content.orEmpty(),
-                    textColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(HermexRadii.Bubble),
+                        )
+                        // Long-press to copy -- a simple, discoverable single action rather than a
+                        // full context menu, matching the scope of this pass (see AGENTS.md/v0.3.0
+                        // spec).
+                        .then(copyOnLongClick)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    MarkdownText(
+                        markdown = message.content.orEmpty(),
+                        textColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                message.effectiveTimestamp?.let { timestamp ->
+                    Text(
+                        text = messageTimeText(timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 3.dp, end = 4.dp),
+                    )
+                }
             }
         }
     } else {
-        Box(
+        Column(
             modifier = modifier
                 .fillMaxWidth()
                 .then(copyOnLongClick)
@@ -76,9 +94,23 @@ fun MessageBubble(
                 markdown = message.content.orEmpty(),
                 textColor = MaterialTheme.colorScheme.onSurface,
             )
+            message.effectiveTimestamp?.let { timestamp ->
+                Text(
+                    text = messageTimeText(timestamp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
         }
     }
 }
+
+/** A short clock-time caption under each bubble, mirroring the design system's per-turn
+ * timestamp -- distinct from the session list's relative "Xh ago", which serves a different
+ * purpose (recency at a glance) rather than pinpointing when a specific message was sent. */
+private fun messageTimeText(epochSeconds: Double): String =
+    SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date((epochSeconds * 1000).toLong()))
 
 /** Bound to [ChatUiState.streamingText] -- rendered like an in-flight assistant reply, so it must
  * match [MessageBubble]'s plain (unbubbled) assistant styling exactly: otherwise the bubble

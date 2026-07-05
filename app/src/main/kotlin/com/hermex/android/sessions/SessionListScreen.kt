@@ -241,262 +241,295 @@ fun SessionListScreen(
             }
         },
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = viewModel::refresh,
+        SessionListBody(
+            viewModel = viewModel,
+            onOpenSession = onOpenSession,
+            onOpenSkills = onOpenSkills,
+            onOpenMemory = onOpenMemory,
+            onOpenTasks = onOpenTasks,
+            onOpenProfiles = onOpenProfiles,
+            onOpenProjects = onOpenProjects,
+            onOpenInsights = onOpenInsights,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+        )
+    }
+}
+
+/**
+ * The scrollable body of the session list screen (nav rows + session list + status/error
+ * banners), extracted from [SessionListScreen] so it can be reused as the persistent left-pane
+ * content once the adaptive two-pane shell lands, without duplicating this rendering logic.
+ * [SessionListScreen] retains ownership of the surrounding `Scaffold` (top bar, FAB/avatar row).
+ */
+@Composable
+fun SessionListBody(
+    viewModel: SessionListViewModel,
+    onOpenSession: (String) -> Unit,
+    onOpenSkills: () -> Unit,
+    onOpenMemory: () -> Unit,
+    onOpenTasks: () -> Unit,
+    onOpenProfiles: () -> Unit,
+    onOpenProjects: () -> Unit,
+    onOpenInsights: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    PullToRefreshBox(
+        isRefreshing = uiState.isRefreshing,
+        onRefresh = viewModel::refresh,
+        modifier = modifier,
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            // Bottom padding clears the FAB row (CTA + avatar), which floats over the list
+            // and isn't otherwise accounted for by Scaffold's innerPadding.
+            contentPadding = PaddingValues(bottom = 96.dp),
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                // Bottom padding clears the FAB row (CTA + avatar), which floats over the list
-                // and isn't otherwise accounted for by Scaffold's innerPadding.
-                contentPadding = PaddingValues(bottom = 96.dp),
-            ) {
-                uiState.cacheStatusMessage?.let { message ->
-                    item(key = "cache-status-banner") {
-                        Surface(
-                            shape = RoundedCornerShape(HermexRadii.Accessory),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    Icons.Filled.Info,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = message,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-                item(key = "nav-tasks") {
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = onOpenTasks).padding(vertical = HermexSpacing.XS),
-                        headlineContent = { NavItemLabel("Tasks") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Filled.DateRange,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-                item(key = "nav-skills") {
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = onOpenSkills).padding(vertical = HermexSpacing.XS),
-                        headlineContent = { NavItemLabel("Skills") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Filled.Build,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-                item(key = "nav-memory") {
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = onOpenMemory).padding(vertical = HermexSpacing.XS),
-                        headlineContent = { NavItemLabel("Memory") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Filled.Face,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-                item(key = "nav-insights") {
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = onOpenInsights).padding(vertical = HermexSpacing.XS),
-                        headlineContent = { NavItemLabel("Insights") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Filled.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-                item(key = "nav-profiles") {
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = onOpenProfiles).padding(vertical = HermexSpacing.XS),
-                        headlineContent = { NavItemLabel("Profiles") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Filled.Person,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-                item(key = "nav-projects") {
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = onOpenProjects).padding(vertical = HermexSpacing.XS),
-                        headlineContent = { NavItemLabel("Projects") },
-                        leadingContent = {
-                            Icon(
-                                Icons.AutoMirrored.Filled.List,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-                item(key = "sessions-header") {
-                    Text(
-                        text = "Sessions",
-                        style = MaterialTheme.typography.labelSmall,
-                        letterSpacing = 0.5.sp,
-                        color = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = HermexSpacing.LG, bottom = HermexSpacing.SM),
-                    )
-                }
-                when {
-                    uiState.isLoading -> item(key = "loading") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
-
-                    uiState.sessions.isEmpty() -> item(key = "empty") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(vertical = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.List,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text("No sessions yet", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                "Tap + to start one.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-
-                    uiState.filteredSessions.isEmpty() -> item(key = "no-search-matches") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Icon(
-                                Icons.Filled.Search,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text("No matching sessions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-
-                    else -> {
-                        // Groups by day bucket without touching sort order: the server's
-                        // existing ordering in filteredSessions is walked as-is, and a header
-                        // is inserted only when the bucket changes from the previous row.
-                        var previousBucket: String? = null
-                        uiState.filteredSessions.forEach { session ->
-                            val bucket = (session.lastMessageAt ?: session.createdAt)?.let(::sessionDateBucket)
-                            if (bucket != null && bucket != previousBucket) {
-                                item(key = "date-header-$bucket-${session.sessionId ?: session.hashCode()}") {
-                                    Text(
-                                        text = bucket,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                                    )
-                                }
-                                previousBucket = bucket
-                            }
-                            item(key = session.sessionId ?: session.hashCode()) {
-                                SessionRow(
-                                    session = session,
-                                    onClick = { session.sessionId?.let(onOpenSession) },
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            uiState.errorMessage?.let { message ->
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.BottomCenter,
-                ) {
+            uiState.cacheStatusMessage?.let { message ->
+                item(key = "cache-status-banner") {
                     Surface(
                         shape = RoundedCornerShape(HermexRadii.Accessory),
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                Icons.Filled.Warning,
+                                Icons.Filled.Info,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = message,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+            item(key = "nav-tasks") {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenTasks).padding(vertical = HermexSpacing.XS),
+                    headlineContent = { NavItemLabel("Tasks") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.DateRange,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            item(key = "nav-skills") {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenSkills).padding(vertical = HermexSpacing.XS),
+                    headlineContent = { NavItemLabel("Skills") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.Build,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            item(key = "nav-memory") {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenMemory).padding(vertical = HermexSpacing.XS),
+                    headlineContent = { NavItemLabel("Memory") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.Face,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            item(key = "nav-insights") {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenInsights).padding(vertical = HermexSpacing.XS),
+                    headlineContent = { NavItemLabel("Insights") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            item(key = "nav-profiles") {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenProfiles).padding(vertical = HermexSpacing.XS),
+                    headlineContent = { NavItemLabel("Profiles") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            item(key = "nav-projects") {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenProjects).padding(vertical = HermexSpacing.XS),
+                    headlineContent = { NavItemLabel("Projects") },
+                    leadingContent = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.List,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            item(key = "sessions-header") {
+                Text(
+                    text = "Sessions",
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 0.5.sp,
+                    color = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = HermexSpacing.LG, bottom = HermexSpacing.SM),
+                )
+            }
+            when {
+                uiState.isLoading -> item(key = "loading") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                uiState.sessions.isEmpty() -> item(key = "empty") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(vertical = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.List,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text("No sessions yet", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Tap + to start one.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                uiState.filteredSessions.isEmpty() -> item(key = "no-search-matches") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text("No matching sessions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                else -> {
+                    // Groups by day bucket without touching sort order: the server's
+                    // existing ordering in filteredSessions is walked as-is, and a header
+                    // is inserted only when the bucket changes from the previous row.
+                    var previousBucket: String? = null
+                    uiState.filteredSessions.forEach { session ->
+                        val bucket = (session.lastMessageAt ?: session.createdAt)?.let(::sessionDateBucket)
+                        if (bucket != null && bucket != previousBucket) {
+                            item(key = "date-header-$bucket-${session.sessionId ?: session.hashCode()}") {
+                                Text(
+                                    text = bucket,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                                )
+                            }
+                            previousBucket = bucket
+                        }
+                        item(key = session.sessionId ?: session.hashCode()) {
+                            SessionRow(
+                                session = session,
+                                onClick = { session.sessionId?.let(onOpenSession) },
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        uiState.errorMessage?.let { message ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(HermexRadii.Accessory),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }

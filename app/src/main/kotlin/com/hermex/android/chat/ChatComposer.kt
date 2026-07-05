@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -159,29 +160,40 @@ fun ChatComposer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AttachFileButton(
-                    enabled = composerState.isAttachButtonEnabled,
-                    isUploading = composerState.isUploadingAttachment,
-                    onAttachFile = actions.onAttachFile,
-                )
-                ProfileSelectorButton(
-                    profileOptions = profileSelectorState.profileOptions,
-                    selectedProfileName = profileSelectorState.selectedProfileName,
-                    isSwitchingProfile = composerState.isProfileSelectorLoading,
-                    onSelectProfile = actions.onSelectProfile,
-                )
-                ModelSelectorButton(
-                    modelCatalogGroups = modelSelectorState.modelCatalogGroups,
-                    currentModel = modelSelectorState.currentModel,
-                    currentModelProvider = modelSelectorState.currentModelProvider,
-                    isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
-                    isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
-                    onOpenModelPicker = actions.onOpenModelPicker,
-                    onSelectModel = actions.onSelectModel,
-                )
+                // Groups the utility actions into one tonal "dock" so they read as a single
+                // designed control cluster rather than three bare icons floating loose next to
+                // the text field -- the specific gap the composer redesign was asked to close.
+                Surface(
+                    shape = RoundedCornerShape(HermexRadii.Composer),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AttachFileButton(
+                            enabled = composerState.isAttachButtonEnabled,
+                            isUploading = composerState.isUploadingAttachment,
+                            onAttachFile = actions.onAttachFile,
+                        )
+                        ProfileSelectorButton(
+                            profileOptions = profileSelectorState.profileOptions,
+                            selectedProfileName = profileSelectorState.selectedProfileName,
+                            isSwitchingProfile = composerState.isProfileSelectorLoading,
+                            onSelectProfile = actions.onSelectProfile,
+                        )
+                        ModelSelectorButton(
+                            modelCatalogGroups = modelSelectorState.modelCatalogGroups,
+                            currentModel = modelSelectorState.currentModel,
+                            currentModelProvider = modelSelectorState.currentModelProvider,
+                            isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
+                            isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
+                            onOpenModelPicker = actions.onOpenModelPicker,
+                            onSelectModel = actions.onSelectModel,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
                 OutlinedTextField(
                     value = composerState.text,
                     onValueChange = actions.onTextChanged,
@@ -197,20 +209,28 @@ fun ChatComposer(
                         focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                     ),
                 )
-                Spacer(Modifier.width(4.dp))
-                when {
-                    composerState.showStopButton -> FilledTonalIconButton(
-                        onClick = actions.onStop,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) {
-                        Icon(Icons.Filled.Close, contentDescription = "Stop")
-                    }
-                    composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                Spacer(Modifier.width(6.dp))
+                // Fixed-size slot for the trailing action -- Stop/Send (both IconButton-family,
+                // 48dp by default) and the bare sending spinner previously had no shared box, so
+                // the control visibly jumped size as the composer moved between states.
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        composerState.showStopButton -> FilledTonalIconButton(
+                            onClick = actions.onStop,
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = "Stop")
+                        }
+                        composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                        }
                     }
                 }
             }

@@ -64,7 +64,7 @@ fun ProfilesScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Active Profile",
+                        "Profiles",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge,
                     )

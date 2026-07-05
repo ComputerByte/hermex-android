@@ -62,7 +62,7 @@ fun SessionRow(
                     }
                     Text(
                         text = session.title?.takeIf { it.isNotBlank() } ?: "Untitled",
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )

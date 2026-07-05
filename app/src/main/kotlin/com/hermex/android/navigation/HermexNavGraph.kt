@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -129,6 +130,15 @@ fun HermexNavGraph(
     externalIntentDestination: StateFlow<HermexIntentDestination?>? = null,
     onExternalIntentConsumed: () -> Unit = {},
 ) {
+    // Reactive width-class signal for the upcoming adaptive two-pane shell (Slice C). Reading
+    // LocalConfiguration recomposes this on rotation/resize/multi-window, unlike a value computed
+    // once at launch. 600dp matches Material's compact/medium width-class boundary. Not wired to
+    // any rendering decision yet -- this only proves the breakpoint flips correctly on-device.
+    val isWideLayout = LocalConfiguration.current.screenWidthDp >= 600
+    LaunchedEffect(isWideLayout) {
+        android.util.Log.d("HermexNavGraph", "isWideLayout=$isWideLayout (Slice C.1 breakpoint check)")
+    }
+
     val isRestoring by appContainer.authRepository.isRestoring.collectAsStateWithLifecycle()
     val authState by appContainer.authRepository.state.collectAsStateWithLifecycle()
     val requestedDestination by externalIntentDestination?.collectAsStateWithLifecycle()

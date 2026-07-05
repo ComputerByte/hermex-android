@@ -78,6 +78,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
+ * Identifies one of the leading nav rows for selected-state highlighting in the wide-layout left
+ * pane. Deliberately nav-graph-agnostic -- callers (e.g. HermexNavGraph) map their own route
+ * constants onto this rather than this file knowing route strings.
+ */
+enum class SessionListNavItem { TASKS, SKILLS, MEMORY, INSIGHTS, PROFILES, PROJECTS }
+
+/**
  * The nav destinations that live above the session list (Skills, and -- as each phase lands --
  * Memory/Tasks/Profiles/Projects/Insights) render as leading rows in one continuous scrollable
  * list here, mirroring the iOS app's single-screen layout rather than hiding them behind a
@@ -96,6 +103,11 @@ fun SessionListScreen(
     onOpenInsights: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    // Only meaningful in the wide-layout left pane, where this screen stays resident while the
+    // right pane's route changes -- compact callers never pass these, so nothing here is ever
+    // "selected" there, matching today's behavior exactly.
+    selectedNavItem: SessionListNavItem? = null,
+    selectedSessionId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var isSearchActive by remember { mutableStateOf(false) }
@@ -253,6 +265,8 @@ fun SessionListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+            selectedNavItem = selectedNavItem,
+            selectedSessionId = selectedSessionId,
         )
     }
 }
@@ -274,6 +288,8 @@ fun SessionListBody(
     onOpenProjects: () -> Unit,
     onOpenInsights: () -> Unit,
     modifier: Modifier = Modifier,
+    selectedNavItem: SessionListNavItem? = null,
+    selectedSessionId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -319,93 +335,111 @@ fun SessionListBody(
                 }
             }
             item(key = "nav-tasks") {
+                val isSelected = selectedNavItem == SessionListNavItem.TASKS
                 ListItem(
                     modifier = Modifier.clickable(onClick = onOpenTasks).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Tasks") },
+                    headlineContent = { NavItemLabel("Tasks", isSelected = isSelected) },
                     leadingContent = {
                         Icon(
                             Icons.Filled.DateRange,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    ),
                 )
             }
             item(key = "nav-skills") {
+                val isSelected = selectedNavItem == SessionListNavItem.SKILLS
                 ListItem(
                     modifier = Modifier.clickable(onClick = onOpenSkills).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Skills") },
+                    headlineContent = { NavItemLabel("Skills", isSelected = isSelected) },
                     leadingContent = {
                         Icon(
                             Icons.Filled.Build,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    ),
                 )
             }
             item(key = "nav-memory") {
+                val isSelected = selectedNavItem == SessionListNavItem.MEMORY
                 ListItem(
                     modifier = Modifier.clickable(onClick = onOpenMemory).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Memory") },
+                    headlineContent = { NavItemLabel("Memory", isSelected = isSelected) },
                     leadingContent = {
                         Icon(
                             Icons.Filled.Face,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    ),
                 )
             }
             item(key = "nav-insights") {
+                val isSelected = selectedNavItem == SessionListNavItem.INSIGHTS
                 ListItem(
                     modifier = Modifier.clickable(onClick = onOpenInsights).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Insights") },
+                    headlineContent = { NavItemLabel("Insights", isSelected = isSelected) },
                     leadingContent = {
                         Icon(
                             Icons.Filled.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    ),
                 )
             }
             item(key = "nav-profiles") {
+                val isSelected = selectedNavItem == SessionListNavItem.PROFILES
                 ListItem(
                     modifier = Modifier.clickable(onClick = onOpenProfiles).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Profiles") },
+                    headlineContent = { NavItemLabel("Profiles", isSelected = isSelected) },
                     leadingContent = {
                         Icon(
                             Icons.Filled.Person,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    ),
                 )
             }
             item(key = "nav-projects") {
+                val isSelected = selectedNavItem == SessionListNavItem.PROJECTS
                 ListItem(
                     modifier = Modifier.clickable(onClick = onOpenProjects).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Projects") },
+                    headlineContent = { NavItemLabel("Projects", isSelected = isSelected) },
                     leadingContent = {
                         Icon(
                             Icons.AutoMirrored.Filled.List,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    ),
                 )
             }
             item(key = "sessions-header") {
@@ -495,6 +529,7 @@ fun SessionListBody(
                                 session = session,
                                 onClick = { session.sessionId?.let(onOpenSession) },
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                isSelected = session.sessionId != null && session.sessionId == selectedSessionId,
                             )
                         }
                     }
@@ -539,12 +574,13 @@ fun SessionListBody(
 
 /** A slightly bolder, more spaced nav-row label than plain body text, without going oversized. */
 @Composable
-private fun NavItemLabel(text: String) {
+private fun NavItemLabel(text: String, isSelected: Boolean = false) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.2.sp,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified,
     )
 }
 

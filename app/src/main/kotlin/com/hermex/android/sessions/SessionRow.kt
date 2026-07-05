@@ -39,6 +39,7 @@ fun SessionRow(
     session: SessionSummary,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
 ) {
     val streamingColor = if (isSystemInDarkTheme()) HermexColors.SuccessDark else HermexColors.SuccessLight
 
@@ -47,7 +48,13 @@ fun SessionRow(
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(HermexRadii.Cell),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        // Selected state (wide-layout left pane only) stays quiet: a soft primary tint over the
+        // existing low-contrast background, no border/elevation change.
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
     ) {
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -64,6 +71,7 @@ fun SessionRow(
                     }
                     Text(
                         text = session.title?.takeIf { it.isNotBlank() } ?: "Untitled",
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,

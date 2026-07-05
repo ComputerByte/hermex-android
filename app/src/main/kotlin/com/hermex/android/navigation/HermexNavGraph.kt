@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.createGraph
 import androidx.navigation.navArgument
@@ -48,6 +49,7 @@ import com.hermex.android.profiles.ProfilesScreen
 import com.hermex.android.profiles.ProfilesViewModel
 import com.hermex.android.projects.ProjectsScreen
 import com.hermex.android.projects.ProjectsViewModel
+import com.hermex.android.sessions.SessionListNavItem
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
 import com.hermex.android.sessions.ShareDestinationPicker
@@ -550,6 +552,32 @@ fun HermexNavGraph(
                         viewModelStoreOwner = sessionListEntry,
                         factory = appContainer.sessionListViewModelFactory(),
                     )
+
+                    // Drives the left pane's selected-state highlighting. Read here (after NavHost
+                    // above has already composed/bootstrapped) rather than before it, for the same
+                    // ordering reason spelled out above -- currentBackStackEntryAsState() itself is
+                    // unlikely to need the bootstrap, but keeping every navController read in this
+                    // block after NavHost avoids reopening that class of hazard for a future reader.
+                    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = currentBackStackEntry?.destination?.route
+                    val selectedNavItem = when (currentRoute) {
+                        Routes.TASKS -> SessionListNavItem.TASKS
+                        Routes.SKILLS -> SessionListNavItem.SKILLS
+                        Routes.MEMORY -> SessionListNavItem.MEMORY
+                        Routes.INSIGHTS -> SessionListNavItem.INSIGHTS
+                        Routes.PROFILES -> SessionListNavItem.PROFILES
+                        Routes.PROJECTS -> SessionListNavItem.PROJECTS
+                        else -> null
+                    }
+                    // destination.route is the route *pattern* ("chat/{sessionId}?..."), not the
+                    // resolved path, so comparing against CHAT_PATTERN is reliable regardless of
+                    // which session is open. The argument is decoded the same way the CHAT_PATTERN
+                    // composable below decodes it, so it compares equal to SessionSummary.sessionId.
+                    val selectedSessionId = currentBackStackEntry
+                        ?.takeIf { currentRoute == Routes.CHAT_PATTERN }
+                        ?.arguments?.getString("sessionId")
+                        ?.let { URLDecoder.decode(it, "UTF-8") }
+
                     SessionListScreen(
                         viewModel = leftPaneViewModel,
                         onOpenSession = onOpenSession,
@@ -563,6 +591,8 @@ fun HermexNavGraph(
                         modifier = Modifier
                             .width(400.dp)
                             .fillMaxHeight(),
+                        selectedNavItem = selectedNavItem,
+                        selectedSessionId = selectedSessionId,
                     )
                 }
             }

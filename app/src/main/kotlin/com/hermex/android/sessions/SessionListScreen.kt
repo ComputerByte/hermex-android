@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -105,82 +105,101 @@ fun SessionListScreen(
         if (isSearchActive) searchFocusRequester.requestFocus()
     }
 
-    // Wrapped in a Box so a small circular avatar affordance can float at bottom-start,
-    // independent of (and without touching) the Scaffold's own FAB slot below.
-    Box(modifier = modifier) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            topBar = {
-                TopAppBar(
-                    title = {
-                        if (isSearchActive) {
-                            TextField(
-                                value = uiState.searchQuery,
-                                onValueChange = viewModel::onSearchQueryChanged,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(searchFocusRequester),
-                                placeholder = { Text("Search sessions") },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Filled.Search,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(percent = 50),
-                                colors = TextFieldDefaults.colors(
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                ),
-                            )
-                        } else {
-                            Text(
-                                text = "Hermex",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = uiState.headerLogoColor.toComposeColor(),
-                            )
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = {
+                    if (isSearchActive) {
+                        TextField(
+                            value = uiState.searchQuery,
+                            onValueChange = viewModel::onSearchQueryChanged,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester),
+                            placeholder = { Text("Search sessions") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(percent = 50),
+                            colors = TextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                            ),
+                        )
+                    } else {
+                        Text(
+                            text = "Hermex",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = uiState.headerLogoColor.toComposeColor(),
+                        )
+                    }
+                },
+                actions = {
+                    if (isSearchActive) {
+                        IconButton(onClick = {
+                            isSearchActive = false
+                            viewModel.onSearchQueryChanged("")
+                        }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close search")
                         }
-                    },
-                    actions = {
-                        if (isSearchActive) {
-                            IconButton(onClick = {
-                                isSearchActive = false
-                                viewModel.onSearchQueryChanged("")
-                            }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Close search")
-                            }
-                        } else {
-                            // Reuses the existing refresh() call that already backs pull-to-refresh
-                            // below -- no new ViewModel/API surface needed for this action.
-                            IconButton(onClick = viewModel::refresh) {
-                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh sessions")
-                            }
-                            IconButton(onClick = { isSearchActive = true }) {
-                                Icon(Icons.Filled.Search, contentDescription = "Search sessions")
-                            }
-                            IconButton(onClick = onOpenSettings) {
-                                Icon(Icons.Filled.AccountCircle, contentDescription = "Settings")
-                            }
+                    } else {
+                        // Reuses the existing refresh() call that already backs pull-to-refresh
+                        // below -- no new ViewModel/API surface needed for this action.
+                        IconButton(onClick = viewModel::refresh) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh sessions")
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                )
-            },
-            floatingActionButton = {
-                // BoxWithConstraints reports the width Scaffold gives this slot (effectively the
-                // screen width), so narrow devices fall back to an icon-only pill rather than
-                // clipping or crowding an "New Chat" label.
-                BoxWithConstraints {
-                    val useCompactFab = maxWidth < 360.dp
-                    val onNewChat = { viewModel.createSession(onOpenSession) }
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search sessions")
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.AccountCircle, contentDescription = "Settings")
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            )
+        },
+        floatingActionButton = {
+            // BoxWithConstraints reports the width Scaffold gives this slot (effectively the
+            // screen width), so narrow devices fall back to an icon-only pill rather than
+            // clipping or crowding an "New Chat" label. Sharing this single slot (rather than a
+            // second independent overlay) means the avatar and the CTA share the same Scaffold-
+            // computed placement/inset handling.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val useCompactFab = maxWidth < 360.dp
+                val onNewChat = { viewModel.createSession(onOpenSession) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    ) {
+                        Icon(
+                            Icons.Filled.AccountCircle,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (useCompactFab) {
                         FloatingActionButton(
                             onClick = onNewChat,
@@ -219,288 +238,268 @@ fun SessionListScreen(
                         )
                     }
                 }
-            },
-        ) { innerPadding ->
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
-                onRefresh = viewModel::refresh,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+            }
+        },
+    ) { innerPadding ->
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                // Bottom padding clears the FAB row (CTA + avatar), which floats over the list
+                // and isn't otherwise accounted for by Scaffold's innerPadding.
+                contentPadding = PaddingValues(bottom = 96.dp),
             ) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    // Bottom padding clears the FAB, which floats over the list and isn't
-                    // otherwise accounted for by Scaffold's innerPadding.
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                ) {
-                    uiState.cacheStatusMessage?.let { message ->
-                        item(key = "cache-status-banner") {
-                            Surface(
-                                shape = RoundedCornerShape(HermexRadii.Accessory),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = message,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    item(key = "nav-tasks") {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onOpenTasks).padding(vertical = HermexSpacing.XS),
-                            headlineContent = { NavItemLabel("Tasks") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Filled.DateRange,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                    item(key = "nav-skills") {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onOpenSkills).padding(vertical = HermexSpacing.XS),
-                            headlineContent = { NavItemLabel("Skills") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Filled.Build,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                    item(key = "nav-memory") {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onOpenMemory).padding(vertical = HermexSpacing.XS),
-                            headlineContent = { NavItemLabel("Memory") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Filled.Face,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                    item(key = "nav-insights") {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onOpenInsights).padding(vertical = HermexSpacing.XS),
-                            headlineContent = { NavItemLabel("Insights") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Filled.Info,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                    item(key = "nav-profiles") {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onOpenProfiles).padding(vertical = HermexSpacing.XS),
-                            headlineContent = { NavItemLabel("Profiles") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Filled.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                    item(key = "nav-projects") {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onOpenProjects).padding(vertical = HermexSpacing.XS),
-                            headlineContent = { NavItemLabel("Projects") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.List,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                    item(key = "sessions-header") {
-                        Text(
-                            text = "Sessions",
-                            style = MaterialTheme.typography.labelSmall,
-                            letterSpacing = 0.5.sp,
-                            color = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = HermexSpacing.LG, bottom = HermexSpacing.SM),
-                        )
-                    }
-                    when {
-                        uiState.isLoading -> item(key = "loading") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(vertical = 32.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator()
-                            }
-                        }
-
-                        uiState.sessions.isEmpty() -> item(key = "empty") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(vertical = 32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.List,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(32.dp),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text("No sessions yet", style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "Tap + to start one.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        uiState.filteredSessions.isEmpty() -> item(key = "no-search-matches") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Icon(
-                                    Icons.Filled.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(32.dp),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text("No matching sessions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-
-                        else -> {
-                            // Groups by day bucket without touching sort order: the server's
-                            // existing ordering in filteredSessions is walked as-is, and a header
-                            // is inserted only when the bucket changes from the previous row.
-                            var previousBucket: String? = null
-                            uiState.filteredSessions.forEach { session ->
-                                val bucket = (session.lastMessageAt ?: session.createdAt)?.let(::sessionDateBucket)
-                                if (bucket != null && bucket != previousBucket) {
-                                    item(key = "date-header-$bucket-${session.sessionId ?: session.hashCode()}") {
-                                        Text(
-                                            text = bucket,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                                        )
-                                    }
-                                    previousBucket = bucket
-                                }
-                                item(key = session.sessionId ?: session.hashCode()) {
-                                    SessionRow(
-                                        session = session,
-                                        onClick = { session.sessionId?.let(onOpenSession) },
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                uiState.errorMessage?.let { message ->
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.BottomCenter,
-                    ) {
+                uiState.cacheStatusMessage?.let { message ->
+                    item(key = "cache-status-banner") {
                         Surface(
                             shape = RoundedCornerShape(HermexRadii.Accessory),
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    Icons.Filled.Warning,
+                                    Icons.Filled.Info,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text = message,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
                                     style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                item(key = "nav-tasks") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenTasks).padding(vertical = HermexSpacing.XS),
+                        headlineContent = { NavItemLabel("Tasks") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Filled.DateRange,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+                item(key = "nav-skills") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenSkills).padding(vertical = HermexSpacing.XS),
+                        headlineContent = { NavItemLabel("Skills") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Filled.Build,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+                item(key = "nav-memory") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenMemory).padding(vertical = HermexSpacing.XS),
+                        headlineContent = { NavItemLabel("Memory") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Filled.Face,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+                item(key = "nav-insights") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenInsights).padding(vertical = HermexSpacing.XS),
+                        headlineContent = { NavItemLabel("Insights") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Filled.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+                item(key = "nav-profiles") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenProfiles).padding(vertical = HermexSpacing.XS),
+                        headlineContent = { NavItemLabel("Profiles") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Filled.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+                item(key = "nav-projects") {
+                    ListItem(
+                        modifier = Modifier.clickable(onClick = onOpenProjects).padding(vertical = HermexSpacing.XS),
+                        headlineContent = { NavItemLabel("Projects") },
+                        leadingContent = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.List,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+                item(key = "sessions-header") {
+                    Text(
+                        text = "Sessions",
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 0.5.sp,
+                        color = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = HermexSpacing.LG, bottom = HermexSpacing.SM),
+                    )
+                }
+                when {
+                    uiState.isLoading -> item(key = "loading") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+
+                    uiState.sessions.isEmpty() -> item(key = "empty") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.List,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text("No sessions yet", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Tap + to start one.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    uiState.filteredSessions.isEmpty() -> item(key = "no-search-matches") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                Icons.Filled.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text("No matching sessions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    else -> {
+                        // Groups by day bucket without touching sort order: the server's
+                        // existing ordering in filteredSessions is walked as-is, and a header
+                        // is inserted only when the bucket changes from the previous row.
+                        var previousBucket: String? = null
+                        uiState.filteredSessions.forEach { session ->
+                            val bucket = (session.lastMessageAt ?: session.createdAt)?.let(::sessionDateBucket)
+                            if (bucket != null && bucket != previousBucket) {
+                                item(key = "date-header-$bucket-${session.sessionId ?: session.hashCode()}") {
+                                    Text(
+                                        text = bucket,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                                    )
+                                }
+                                previousBucket = bucket
+                            }
+                            item(key = session.sessionId ?: session.hashCode()) {
+                                SessionRow(
+                                    session = session,
+                                    onClick = { session.sessionId?.let(onOpenSession) },
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                 )
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Small circular avatar affordance near the bottom, mirroring the reference layout.
-        // Purely additive: it invokes the same onOpenSettings callback as the top-bar icon
-        // rather than adding a new capability, and doesn't touch the FAB above in any way.
-        IconButton(
-            onClick = onOpenSettings,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp)
-                .navigationBarsPadding()
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        ) {
-            Icon(
-                Icons.Filled.AccountCircle,
-                contentDescription = "Settings",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            uiState.errorMessage?.let { message ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.Accessory),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -304,6 +304,17 @@ fun HermexNavGraph(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        composable(Routes.DEFAULT_MODEL) {
+            val viewModel: DefaultModelViewModel = viewModel(factory = appContainer.defaultModelViewModelFactory())
+            DefaultModelScreen(
+                viewModel = viewModel,
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
+                    navController.popBackStack()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         composable(Routes.INSIGHTS) {
             val viewModel: InsightsViewModel = viewModel(factory = appContainer.insightsViewModelFactory())
             InsightsScreen(

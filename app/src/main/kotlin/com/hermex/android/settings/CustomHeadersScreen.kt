@@ -1,5 +1,6 @@
 package com.hermex.android.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -22,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,10 +34,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.storage.CustomHttpHeader
+import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,7 +54,13 @@ fun CustomHeadersScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Connection Headers") },
+                title = {
+                    Text(
+                        "Connection Headers",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -63,7 +74,7 @@ fun CustomHeadersScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -93,7 +104,11 @@ fun CustomHeadersScreen(
                         )
                     }
                     item(key = "add-header") {
-                        OutlinedButton(onClick = { viewModel.addRow() }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { viewModel.addRow() },
+                            shape = RoundedCornerShape(HermexRadii.Cell),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
                             Icon(Icons.Filled.Add, contentDescription = null)
                             Text("  Add Header")
                         }
@@ -120,7 +135,17 @@ private fun HeaderRow(
     onValueChanged: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(HermexRadii.Cell))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -131,6 +156,8 @@ private fun HeaderRow(
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Header name") },
                 singleLine = true,
+                shape = RoundedCornerShape(HermexRadii.Cell),
+                colors = fieldColors,
             )
             IconButton(onClick = onRemove) {
                 Icon(Icons.Filled.Delete, contentDescription = "Remove header", tint = MaterialTheme.colorScheme.error)
@@ -143,6 +170,8 @@ private fun HeaderRow(
             placeholder = { Text("Value") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
+            shape = RoundedCornerShape(HermexRadii.Cell),
+            colors = fieldColors,
         )
     }
 }

@@ -508,14 +508,25 @@ fun HermexNavGraph(
     }
 
     if (isWideLayout && authState is AuthState.LoggedIn) {
-        // NavHost performs its own internal bootstrap when it composes -- attaching the graph,
-        // the ViewModelStore, back-press handling -- none of which this file replicates. The left
-        // pane below needs that bootstrap to have already happened, since it calls
-        // navController.getBackStackEntry(SESSION_LIST), which requires it. Composing NavHost as
-        // the *first* child of the Row guarantees that ordering; the CompositionLocalProvider
-        // pair flips layout direction just for the Row's own child placement so NavHost (declared
-        // first) still lands visually on the right and the left pane (declared second) on the
-        // left, while each child's own content renders normally left-to-right.
+        // Composition order vs. visual order, and why they're deliberately decoupled here:
+        //
+        // 1. NavHost MUST be the first thing composed in this Row. It performs its own internal
+        //    bootstrap on composition -- attaching the graph to navController, attaching the
+        //    ViewModelStore, wiring back-press handling -- and none of that is replicated in this
+        //    file. The left pane below depends on that bootstrap having already happened, since
+        //    it calls navController.getBackStackEntry(SESSION_LIST), which throws if the back
+        //    stack has no entries yet. (Confirmed the hard way: composing the left pane before
+        //    NavHost crashed twice, once for the missing back stack entry and once for the
+        //    missing ViewModelStore -- two separate pieces of NavHost's own setup.)
+        // 2. Visually, the left pane must still appear on the LEFT and NavHost (the right content
+        //    pane) on the RIGHT -- the opposite of the composition order required by point 1.
+        // 3. The CompositionLocalProvider(LayoutDirection.Rtl) / .Ltr pair below resolves that
+        //    conflict by decoupling composition order from visual order: Row lays out children
+        //    left-to-right in RTL context, which means "first-declared" maps to "rightmost". So
+        //    NavHost is declared (and composed) first, satisfying point 1, but renders visually on
+        //    the right, satisfying point 2. Each child is wrapped back in its own Ltr provider so
+        //    its own content (text, icons) still reads normally -- only the Row's own child
+        //    placement is mirrored, not the panes' internal layout.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             Row(modifier = Modifier.fillMaxSize()) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {

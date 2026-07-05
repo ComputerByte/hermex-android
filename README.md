@@ -6,7 +6,7 @@ Hermex app.
 
 ## Status
 
-**Active development / UI preview build — current version: v0.9.3-ui-preview.**
+**Active development / UI preview build — current version: v0.9.4-ui-preview.**
 
 This is not a final Play Store release yet, but the app is already running on real Android
 hardware against a real Hermes server. A recent pass refreshed the app's home/session-list visual

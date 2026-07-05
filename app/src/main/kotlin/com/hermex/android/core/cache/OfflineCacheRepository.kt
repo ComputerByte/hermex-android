@@ -8,9 +8,9 @@ import com.hermex.android.core.network.dto.SessionSummary
  * [CachedSessionEntity]/[CachedMessageEntity]). [com.hermex.android.auth.AuthRepository.forgetServer]
  * calls [clearServer] so removing a server deletes its cache along with its cookies/custom headers.
  *
- * TODO: no pruning policy yet -- cached data lives until its server is removed ([clearServer]) or
- * overwritten by a newer [saveSessions]/[cacheSessionDetail] call. Fine for MVP data volumes;
- * revisit with a max-age or max-row cap if that changes.
+ * [pruneServerCache] bounds unbounded growth (see [sessionIdsToPrune] for the actual policy); it's
+ * a separate, explicitly-scoped operation from [clearServer] and is never invoked as a side effect
+ * of login/logout/server removal -- only ever called from an app-startup hook.
  */
 interface OfflineCacheRepository {
     suspend fun cachedSessions(serverId: String): List<SessionSummary>
@@ -30,6 +30,12 @@ interface OfflineCacheRepository {
 
     /** Clears every cached session *and* every cached message for [serverId]. */
     suspend fun clearServer(serverId: String)
+
+    /** Prunes [serverId]'s cached sessions (and sweeps any now-orphaned cached messages) under a
+     * conservative retention policy -- see [sessionIdsToPrune] for exactly how [maxSessions]/
+     * [maxAgeDays]/[sessionIdToPreserve] combine. Scoped entirely to [serverId]; never touches
+     * another server's cache. A no-op (never throws) if [serverId] has no cached sessions. */
+    suspend fun pruneServerCache(serverId: String, maxSessions: Int, maxAgeDays: Int, sessionIdToPreserve: String?)
 }
 
 /** Default used wherever no real cache is wired in -- mirrors [com.hermex.android.core.storage.NoOpCustomHeadersStore].
@@ -41,6 +47,7 @@ object NoOpOfflineCacheRepository : OfflineCacheRepository {
     override suspend fun cacheSessionDetail(serverId: String, sessionId: String, detail: SessionDetail) = Unit
     override suspend fun clearSession(serverId: String, sessionId: String) = Unit
     override suspend fun clearServer(serverId: String) = Unit
+    override suspend fun pruneServerCache(serverId: String, maxSessions: Int, maxAgeDays: Int, sessionIdToPreserve: String?) = Unit
 }
 
 class RoomOfflineCacheRepository(private val dao: CachedSessionDao) : OfflineCacheRepository {
@@ -74,5 +81,11 @@ class RoomOfflineCacheRepository(private val dao: CachedSessionDao) : OfflineCac
     override suspend fun clearServer(serverId: String) {
         dao.deleteSessionsForServer(serverId)
         dao.deleteMessagesForServer(serverId)
+    }
+
+    override suspend fun pruneServerCache(serverId: String, maxSessions: Int, maxAgeDays: Int, sessionIdToPreserve: String?) {
+        val sessions = dao.getSessions(serverId)
+        val idsToPrune = sessionIdsToPrune(sessions, maxSessions, maxAgeDays, System.currentTimeMillis(), sessionIdToPreserve)
+        dao.pruneSessions(serverId, idsToPrune.toList())
     }
 }

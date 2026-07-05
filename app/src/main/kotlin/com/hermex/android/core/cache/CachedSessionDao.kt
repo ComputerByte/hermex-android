@@ -51,4 +51,27 @@ interface CachedSessionDao {
         deleteMessagesForSession(session.serverId, session.sessionId)
         insertMessages(messages)
     }
+
+    @Query("DELETE FROM cached_sessions WHERE serverId = :serverId AND sessionId IN (:sessionIds)")
+    suspend fun deleteSessionsByIds(serverId: String, sessionIds: List<String>)
+
+    /** Sweeps any cached message whose session no longer has a row in `cached_sessions` for the
+     * same server -- covers messages [pruneSessions] itself just orphaned, as well as any
+     * pre-existing orphan left behind by [replaceSessions] dropping a session from the list
+     * (that call only ever touches `cached_sessions`, never `cached_messages`). */
+    @Query(
+        "DELETE FROM cached_messages WHERE serverId = :serverId AND sessionId NOT IN " +
+            "(SELECT sessionId FROM cached_sessions WHERE serverId = :serverId)",
+    )
+    suspend fun deleteOrphanedMessagesForServer(serverId: String)
+
+    /** Applies a prune decision (see [sessionIdsToPrune]) in one transaction: removes the given
+     * session rows, then always sweeps orphaned messages for [serverId] -- even when
+     * [sessionIdsToDelete] is empty, since orphans can also predate this call (see
+     * [deleteOrphanedMessagesForServer]). */
+    @Transaction
+    suspend fun pruneSessions(serverId: String, sessionIdsToDelete: List<String>) {
+        if (sessionIdsToDelete.isNotEmpty()) deleteSessionsByIds(serverId, sessionIdsToDelete)
+        deleteOrphanedMessagesForServer(serverId)
+    }
 }

@@ -19,5 +19,6 @@ class HermexApplication : Application() {
         appContainer = AppContainer(this)
         applicationScope.launch { appContainer.authRepository.restoreSavedServer() }
         applicationScope.launch { appContainer.reconcileAppIcon() }
+        applicationScope.launch { appContainer.pruneOfflineCaches() }
     }
 }

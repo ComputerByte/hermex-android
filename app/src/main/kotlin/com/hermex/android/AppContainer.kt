@@ -231,4 +231,16 @@ class AppContainer(context: Context) {
     suspend fun reconcileAppIcon() {
         appIconSwitcher.applyVariant(appearancePreferencesStore.loadAppIconVariant())
     }
+
+    /** Bounds every configured server's offline cache under a conservative retention policy (see
+     * [com.hermex.android.core.cache.sessionIdsToPrune]) once per app process start (see
+     * [HermexApplication]) -- never tied to a session-list refresh, a chat send, or any other
+     * per-action path. Scoped to [com.hermex.android.core.storage.ServerStore]'s own server list,
+     * so a server the user never configured (or already removed) is never touched. No session is
+     * known to be "active" this early in the app's lifecycle -- no chat screen has loaded yet --
+     * so nothing is passed as the session to preserve; see [pruneAllServerCaches] (kept as a
+     * standalone, plain-JVM-unit-testable function) for the actual per-server loop. */
+    suspend fun pruneOfflineCaches() {
+        pruneAllServerCaches(serverStore.load().servers, offlineCacheRepository)
+    }
 }

@@ -1,5 +1,6 @@
 package com.hermex.android.tasks
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +11,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -25,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,11 +41,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.chat.MarkdownText
 import com.hermex.android.core.network.dto.CronJobStatus
 import com.hermex.android.sessions.relativeTimeText
+import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +65,7 @@ fun TaskDetailScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
             title = { Text("Delete task?") },
             text = { Text("\"${uiState.job?.displayName}\" will be permanently deleted from the server.") },
             confirmButton = {
@@ -78,7 +86,13 @@ fun TaskDetailScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(uiState.job?.displayName ?: "Task") },
+                title = {
+                    Text(
+                        uiState.job?.displayName ?: "Task",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -108,7 +122,7 @@ fun TaskDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -132,35 +146,51 @@ fun TaskDetailScreen(
                         .padding(16.dp),
                 ) {
                     if (uiState.isRunning == true) {
-                        Text(
-                            text = "Running" + (uiState.elapsedSeconds?.let { " (${it.toInt()}s elapsed)" } ?: ""),
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        ) {
+                            Text(
+                                text = "Running" + (uiState.elapsedSeconds?.let { " (${it.toInt()}s elapsed)" } ?: ""),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
                         Spacer(Modifier.height(12.dp))
                     }
 
-                    job.effectiveScheduleText?.let { schedule ->
-                        DetailField(label = "Schedule", value = schedule)
-                    }
-                    job.prompt?.takeIf { it.isNotBlank() }?.let { prompt ->
-                        DetailFieldMarkdown(label = "Prompt", value = prompt)
-                    }
-                    job.lastRunAt?.let { lastRunAt ->
-                        DetailField(label = "Last run", value = relativeTimeText(lastRunAt))
-                    }
-                    job.nextRunAt?.let { nextRunAt ->
-                        DetailField(label = "Next run", value = relativeTimeText(nextRunAt))
-                    }
-                    job.lastError?.takeIf { it.isNotBlank() }?.let { error ->
-                        DetailField(label = "Last error", value = error, valueColor = MaterialTheme.colorScheme.error)
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.SettingsCard),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            job.effectiveScheduleText?.let { schedule ->
+                                DetailField(label = "Schedule", value = schedule)
+                            }
+                            job.prompt?.takeIf { it.isNotBlank() }?.let { prompt ->
+                                DetailFieldMarkdown(label = "Prompt", value = prompt)
+                            }
+                            job.lastRunAt?.let { lastRunAt ->
+                                DetailField(label = "Last run", value = relativeTimeText(lastRunAt))
+                            }
+                            job.nextRunAt?.let { nextRunAt ->
+                                DetailField(label = "Next run", value = relativeTimeText(nextRunAt))
+                            }
+                            job.lastError?.takeIf { it.isNotBlank() }?.let { error ->
+                                DetailField(label = "Last error", value = error, valueColor = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
 
                     if (uiState.outputs.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(20.dp))
                         Text(
                             text = "Recent output",
                             style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -168,11 +198,11 @@ fun TaskDetailScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(HermexRadii.Cell))
                                     .padding(12.dp),
                             ) {
                                 output.filename?.let {
-                                    Text(it, style = MaterialTheme.typography.labelMedium)
+                                    Text(it, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                                 }
                                 val outputContent = output.content?.takeIf { it.isNotBlank() } ?: "No content."
                                 if (outputContent == "No content.") {
@@ -198,10 +228,32 @@ fun TaskDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 8.dp),
+                        .padding(16.dp),
                     contentAlignment = Alignment.BottomCenter,
                 ) {
-                    Text(text = message, color = MaterialTheme.colorScheme.error)
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.Accessory),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }

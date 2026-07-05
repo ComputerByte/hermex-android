@@ -1,26 +1,39 @@
 package com.hermex.android.profiles
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -29,9 +42,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.ProfileSummary
+import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +62,13 @@ fun ProfilesScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Active Profile") },
+                title = {
+                    Text(
+                        "Active Profile",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -58,7 +80,7 @@ fun ProfilesScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
@@ -75,10 +97,19 @@ fun ProfilesScreen(
                 }
 
                 uiState.profiles.isEmpty() && uiState.filteredProfiles.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No profiles configured on this server.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "No profiles configured on this server.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 else -> PullToRefreshBox(
@@ -86,53 +117,93 @@ fun ProfilesScreen(
                     onRefresh = viewModel::load,
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item(key = "search") {
-                        OutlinedTextField(
-                            value = uiState.searchQuery,
-                            onValueChange = viewModel::onSearchQueryChanged,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            placeholder = { Text("Search profiles...") },
-                            singleLine = true,
-                        )
-                    }
-
-                    if (uiState.filteredProfiles.isEmpty()) {
-                        item(key = "no-matches") {
-                            Box(
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        item(key = "search") {
+                            OutlinedTextField(
+                                value = uiState.searchQuery,
+                                onValueChange = viewModel::onSearchQueryChanged,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 32.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text("No matching profiles.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                                placeholder = { Text("Search profiles...") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(percent = 50),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                ),
+                            )
+                        }
+
+                        if (uiState.filteredProfiles.isEmpty()) {
+                            item(key = "no-matches") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 32.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text("No matching profiles.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
-                    }
 
-                    items(uiState.filteredProfiles, key = { it.normalizedName ?: it.hashCode() }) { profile ->
-                        ProfileRow(
-                            profile = profile,
-                            isActive = profile.normalizedName != null && profile.normalizedName == uiState.activeName,
-                            isSwitching = profile.normalizedName != null && profile.normalizedName == uiState.switchingTo,
-                            enabled = uiState.switchingTo == null,
-                            onClick = { profile.normalizedName?.let(viewModel::switchTo) },
-                        )
+                        items(uiState.filteredProfiles, key = { it.normalizedName ?: it.hashCode() }) { profile ->
+                            ProfileRow(
+                                profile = profile,
+                                isActive = profile.normalizedName != null && profile.normalizedName == uiState.activeName,
+                                isSwitching = profile.normalizedName != null && profile.normalizedName == uiState.switchingTo,
+                                enabled = uiState.switchingTo == null,
+                                onClick = { profile.normalizedName?.let(viewModel::switchTo) },
+                                modifier = Modifier.padding(vertical = 4.dp),
+                            )
+                        }
                     }
                 }
-            }
             }
 
             uiState.errorMessage?.let { message ->
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 8.dp),
+                        .padding(16.dp),
                     contentAlignment = Alignment.BottomCenter,
                 ) {
-                    Text(text = message, color = MaterialTheme.colorScheme.error)
+                    Surface(
+                        shape = RoundedCornerShape(HermexRadii.Accessory),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -148,31 +219,38 @@ private fun ProfileRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListItem(
-        modifier = modifier.clickable(enabled = enabled && profile.normalizedName != null, onClick = onClick),
-        headlineContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(profile.displayName)
-                val badge = when {
-                    isActive -> "Selected"
-                    profile.isDefault == true -> "Server Default"
-                    else -> null
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(HermexRadii.Cell),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        ListItem(
+            modifier = Modifier.clickable(enabled = enabled && profile.normalizedName != null, onClick = onClick),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(profile.displayName, fontWeight = FontWeight.SemiBold)
+                    val badge = when {
+                        isActive -> "Selected"
+                        profile.isDefault == true -> "Server Default"
+                        else -> null
+                    }
+                    badge?.let {
+                        Text(
+                            text = "  $it",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                badge?.let {
-                    Text(
-                        text = "  $it",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            },
+            supportingContent = profile.subtitle?.let { subtitle -> { Text(subtitle) } },
+            trailingContent = {
+                when {
+                    isSwitching -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    isActive -> Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
                 }
-            }
-        },
-        supportingContent = profile.subtitle?.let { subtitle -> { Text(subtitle) } },
-        trailingContent = {
-            when {
-                isSwitching -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                isActive -> Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
-            }
-        },
-    )
+            },
+        )
+    }
 }

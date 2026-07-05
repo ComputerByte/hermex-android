@@ -4,14 +4,17 @@ import android.net.Uri
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,10 +28,14 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -127,6 +135,7 @@ fun ChatComposer(
     var lastLoggedHeightPx by remember { mutableStateOf(-1) }
     Surface(
         modifier = modifier
+            .padding(horizontal = 8.dp, vertical = 6.dp)
             .navigationBarsPadding()
             .onGloballyPositioned { coordinates ->
                 val heightPx = coordinates.size.height
@@ -135,7 +144,10 @@ fun ChatComposer(
                     HermexLog.d("Composer", "measured height=${heightPx}px")
                 }
             },
-        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(HermexRadii.Dialog),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        tonalElevation = 3.dp,
     ) {
         Column {
             if (attachmentState.pendingAttachments.isNotEmpty()) {
@@ -147,7 +159,7 @@ fun ChatComposer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AttachFileButton(
@@ -178,13 +190,26 @@ fun ChatComposer(
                     enabled = composerState.isTextFieldEnabled,
                     maxLines = 5,
                     shape = RoundedCornerShape(HermexRadii.Composer),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    ),
                 )
+                Spacer(Modifier.width(4.dp))
                 when {
-                    composerState.showStopButton -> IconButton(onClick = actions.onStop) {
+                    composerState.showStopButton -> FilledTonalIconButton(
+                        onClick = actions.onStop,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
                         Icon(Icons.Filled.Close, contentDescription = "Stop")
                     }
                     composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    else -> IconButton(onClick = actions.onSend, enabled = composerState.canSend) {
+                    else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                     }
                 }
@@ -232,8 +257,8 @@ private fun PendingAttachmentStrip(
     ) {
         items(attachments, key = { it.id }) { attachment ->
             Surface(
-                tonalElevation = 4.dp,
-                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = RoundedCornerShape(HermexRadii.Accessory),
             ) {
                 Row(
                     modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp),

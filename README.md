@@ -33,6 +33,8 @@ this app targets.
   bubbles and the composer field styled from those tokens
 - Room-based offline cache for the session list, with per-server cache isolation
 - Room-based offline cache for chat/message history, with cache-first load and fallback banners
+- Offline cache retention: pruned once per app startup, per server, to the 50 most recently
+  active sessions or 90 days old (whichever is stricter); orphaned cached messages are swept too
 - Session-scoped read-only workspace browser with folder navigation and text file preview
 - Android share target support for shared text, single files, and multiple files
 - Deep link entry routes for `hermex://` and `hermes-agent://`
@@ -43,7 +45,6 @@ this app targets.
 
 - Workspace actions polish: copy path, refresh, search, and raw/open/download support
 - Git status/diff panels pending backend endpoint discovery
-- Offline cache retention/pruning policy — the cache currently grows unbounded per server
 - Full chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons,
   translucent field architecture) — v0.9.0-preview only aligned the composer field's existing
   shape/radius to design tokens, not the wider component architecture

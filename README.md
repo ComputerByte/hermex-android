@@ -9,10 +9,10 @@ Hermex app.
 **Active development / UI preview build — current version: v0.10.0-ui-rebuild.**
 
 This is not a final Play Store release yet, but the app is already running on real Android
-hardware against a real Hermes server. A recent pass refreshed the app's home/session-list visual
-hierarchy (Hermex wordmark branding, session date grouping, refined navigation) — see the
-Screenshots section below for the current look. See `API_CONTRACT.md` for the verified server API
-contract this app targets.
+hardware against a real Hermes server. The v0.10.0 release introduced a slide-out navigation
+drawer with hamburger menu access from every screen, replacing the previous inline nav
+layout. See the Screenshots section below for the current look. See `API_CONTRACT.md` for the
+verified server API contract this app targets.
 
 ## Current Features
 

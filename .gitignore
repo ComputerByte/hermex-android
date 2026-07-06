@@ -12,7 +12,7 @@ local.properties
 /.hermes/
 .kotlin/
 *.apk
-release-artifacts/
+release-artifacts/*.apk
 *-recon.md
 *-recone.md
 *-prompt*.md

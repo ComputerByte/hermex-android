@@ -488,6 +488,7 @@ fun HermexNavGraph(
                     modifier = Modifier.fillMaxSize(),
                     initialComposerDraft = initialDraft,
                     pendingFileUploadUris = pendingUploadUris,
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(

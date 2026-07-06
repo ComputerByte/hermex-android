@@ -22,5 +22,6 @@ data class SettingsUiState(
     val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
     val appIconVariant: AppIconVariant = AppIconVariant.SYSTEM,
     val notificationsEnabled: Boolean = false,
+    val showSubagentSessions: Boolean = true,
     val userInitials: String = "BD",
 )

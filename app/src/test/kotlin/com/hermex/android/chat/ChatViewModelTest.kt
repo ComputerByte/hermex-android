@@ -58,6 +58,8 @@ private class FakeChatPreferencesStore(
     override suspend fun setExpandToolCallsByDefault(value: Boolean) { expandToolCallsByDefault = value }
     override suspend fun loadNotificationsEnabled(): Boolean = notificationsEnabled
     override suspend fun setNotificationsEnabled(value: Boolean) { notificationsEnabled = value }
+    override suspend fun loadShowSubagentSessions(): Boolean = true
+    override suspend fun setShowSubagentSessions(value: Boolean) {}
 }
 
 /** See [com.hermex.android.sessions.SessionListViewModelTest] for why this pattern (Turbine +

@@ -1,7 +1,6 @@
 package com.hermex.android.sessions
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +45,7 @@ fun SessionRow(
     val mutedLabel = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel
 
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier,
         shape = RoundedCornerShape(HermexRadii.Cell),
         // Selected state (wide-layout left pane only) stays quiet: a soft primary tint over the
         // existing low-contrast background, no border/elevation change.
@@ -99,7 +98,7 @@ fun SessionRow(
                             color = mutedLabel,
                         )
                     }
-                    if (session.isStreaming == true) {
+                    if (session.activeStreamId != null) {
                         Spacer(Modifier.width(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -109,7 +108,7 @@ fun SessionRow(
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                "Live",
+                                if (session.isStreaming == true) "Live" else "Streaming",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = streamingColor,
                             )

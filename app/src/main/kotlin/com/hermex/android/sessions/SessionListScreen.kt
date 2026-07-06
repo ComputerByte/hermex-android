@@ -1,8 +1,12 @@
 package com.hermex.android.sessions
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,18 +25,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,11 +65,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.core.network.dto.SessionSummary
 import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.ui.theme.HermexColors
 import com.hermex.android.ui.theme.HermexErrorBanner
@@ -261,6 +273,7 @@ fun SessionListScreen(
  * adaptive two-pane shell lands. Nav items now live in the slide-out drawer owned by
  * [SessionListScreen].
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SessionListBody(
     viewModel: SessionListViewModel,
@@ -269,6 +282,42 @@ fun SessionListBody(
     selectedSessionId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var pendingRenameSession by remember { mutableStateOf<SessionSummary?>(null) }
+    var pendingDeleteSession by remember { mutableStateOf<SessionSummary?>(null) }
+    var pendingMoveSession by remember { mutableStateOf<SessionSummary?>(null) }
+
+    pendingRenameSession?.let { session ->
+        RenameSessionDialog(
+            currentName = session.title ?: "",
+            onConfirm = { newTitle ->
+                session.sessionId?.let { viewModel.renameSession(it, newTitle) }
+                pendingRenameSession = null
+            },
+            onDismiss = { pendingRenameSession = null },
+        )
+    }
+    pendingDeleteSession?.let { session ->
+        DeleteSessionDialog(
+            sessionTitle = session.title ?: "this session",
+            onConfirm = {
+                session.sessionId?.let { viewModel.deleteSession(it) }
+                pendingDeleteSession = null
+            },
+            onDismiss = { pendingDeleteSession = null },
+        )
+    }
+    pendingMoveSession?.let { session ->
+        MoveToProjectDialog(
+            projects = emptyList(),
+            currentProjectId = session.projectId,
+            onConfirm = { projectId ->
+                session.sessionId?.let { viewModel.moveSessionToProject(it, projectId) }
+                pendingMoveSession = null
+            },
+            onDismiss = { pendingMoveSession = null },
+        )
+    }
 
     PullToRefreshBox(
         isRefreshing = uiState.isRefreshing,
@@ -391,12 +440,46 @@ fun SessionListBody(
                             previousBucket = bucket
                         }
                         item(key = session.sessionId ?: session.hashCode()) {
-                            SessionRow(
-                                session = session,
-                                onClick = { session.sessionId?.let(onOpenSession) },
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                isSelected = session.sessionId != null && session.sessionId == selectedSessionId,
-                            )
+                            Box {
+                                var showMenu by remember { mutableStateOf(false) }
+                                SessionRow(
+                                    session = session,
+                                    onClick = { session.sessionId?.let(onOpenSession) },
+                                    modifier = Modifier
+                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                        .combinedClickable(
+                                            onClick = { session.sessionId?.let(onOpenSession) },
+                                            onLongClick = { showMenu = true },
+                                        ),
+                                    isSelected = session.sessionId != null && session.sessionId == selectedSessionId,
+                                )
+                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = { showMenu = false; pendingRenameSession = session },
+                                        leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Move to Project") },
+                                        onClick = { showMenu = false; pendingMoveSession = session },
+                                        leadingIcon = { Icon(Icons.Filled.Folder, null) },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Share") },
+                                        onClick = {
+                                            showMenu = false
+                                            session.sessionId?.let { shareSession(context, it, session.title ?: "Session") }
+                                        },
+                                        leadingIcon = { Icon(Icons.Filled.Share, null) },
+                                    )
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                        onClick = { showMenu = false; pendingDeleteSession = session },
+                                        leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -426,6 +509,16 @@ fun SessionListBody(
             }
         }
     }
+}
+
+private fun shareSession(context: Context, sessionId: String, sessionTitle: String) {
+    val uri = "hermex://session/$sessionId"
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, uri)
+        putExtra(Intent.EXTRA_SUBJECT, sessionTitle)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share Session"))
 }
 
 /** Buckets a session's most-recent-activity timestamp into "TODAY" / "YESTERDAY" / a short date

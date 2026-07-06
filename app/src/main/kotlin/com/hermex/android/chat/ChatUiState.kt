@@ -70,6 +70,9 @@ data class ChatUiState(
     val pendingClarification: PendingClarificationUi? = null,
     val isRespondingToClarification: Boolean = false,
     val clarificationErrorMessage: String? = null,
+    val hasDisconnectedStream: Boolean = false,
+    val isReattaching: Boolean = false,
+    val disconnectedStreamId: String? = null,
 )
 
 /** Computed hint shown above the composer when a send failed and the text is preserved for retry. */
@@ -118,6 +121,7 @@ data class ToolCallUi(
     val isComplete: Boolean = false,
     val isError: Boolean = false,
     val durationSeconds: Double? = null,
+    val rawArgs: String? = null,
     /** `messages.size` at the moment this tool call started -- i.e. the index the eventual
      * finalized assistant reply will occupy once the turn completes. Lets the transcript render
      * this card immediately before that message instead of always after every message,

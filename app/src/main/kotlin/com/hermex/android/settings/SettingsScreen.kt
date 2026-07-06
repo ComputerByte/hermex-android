@@ -312,6 +312,18 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(24.dp))
+                SectionLabel("Session List")
+                Card {
+                    SettingsSwitchRow(
+                        label = "Subagent Sessions",
+                        description = "Show sessions created by subagents in the session list.",
+                        checked = uiState.showSubagentSessions,
+                        onCheckedChange = viewModel::setShowSubagentSessions,
+                        showDivider = false,
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
                 SectionLabel("Appearance")
                 Card {
                     SettingsRow(

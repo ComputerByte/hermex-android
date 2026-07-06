@@ -93,3 +93,18 @@ data class UpdateSessionRequest(
     val model: String? = null,
     val modelProvider: String? = null,
 )
+
+@Serializable
+data class GenericResponse(
+    val ok: Boolean? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class SessionRenameRequest(val session_id: String, val title: String)
+
+@Serializable
+data class SessionIdRequest(val session_id: String)
+
+@Serializable
+data class SessionProjectRequest(val session_id: String, val project_id: String?)

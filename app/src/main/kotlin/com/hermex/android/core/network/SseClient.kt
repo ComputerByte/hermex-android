@@ -77,7 +77,7 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
             val dataLines = StringBuilder()
             while (isActive) {
                 val line = try {
-                    withTimeout(30_000L) {
+                    withTimeout(120_000L) {  // 120s — long responses can have multi-minute gaps
                         source.readUtf8Line()
                     }
                 } catch (e: IOException) {
@@ -97,7 +97,7 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
                             // Logged per-event (not the raw text) so logcat timestamps show
                             // arrival timing -- e.g. confirming tokens arrive incrementally
                             // rather than in one late burst, or that a heartbeat kept a quiet
-                            // stream alive without a real event for 30+ seconds.
+                            // stream alive without a real event for 120+ seconds.
                             HermexLog.d("Sse", "event: $eventName -> ${event::class.simpleName}")
                             trySend(event)
                         }

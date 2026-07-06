@@ -506,6 +506,9 @@ fun HermexNavGraph(
                 ChatScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
+                    onRenameSession = { newTitle ->
+                        viewModel.renameSession(sessionId, newTitle)
+                    },
                     onSwitchedSession = { newSessionId ->
                         navController.navigate(Routes.chat(newSessionId)) {
                             popUpTo(Routes.chat(sessionId)) { inclusive = true }

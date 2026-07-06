@@ -10,4 +10,6 @@ interface ChatPreferencesStore {
     suspend fun setExpandToolCallsByDefault(value: Boolean)
     suspend fun loadNotificationsEnabled(): Boolean
     suspend fun setNotificationsEnabled(value: Boolean)
+    suspend fun loadShowSubagentSessions(): Boolean
+    suspend fun setShowSubagentSessions(value: Boolean)
 }

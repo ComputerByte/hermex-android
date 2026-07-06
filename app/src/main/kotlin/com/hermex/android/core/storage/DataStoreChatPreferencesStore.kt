@@ -12,6 +12,7 @@ class DataStoreChatPreferencesStore(private val context: Context) : ChatPreferen
     private val expandThinkingKey = booleanPreferencesKey("expand_thinking_by_default")
     private val expandToolCallsKey = booleanPreferencesKey("expand_tool_calls_by_default")
     private val notificationsEnabledKey = booleanPreferencesKey("notifications_enabled")
+    private val showSubagentSessionsKey = booleanPreferencesKey("show_subagent_sessions")
 
     override suspend fun loadExpandThinkingByDefault(): Boolean =
         context.chatPreferencesDataStore.data.firstOrNull()?.get(expandThinkingKey) ?: false
@@ -32,5 +33,12 @@ class DataStoreChatPreferencesStore(private val context: Context) : ChatPreferen
 
     override suspend fun setNotificationsEnabled(value: Boolean) {
         context.chatPreferencesDataStore.edit { prefs -> prefs[notificationsEnabledKey] = value }
+    }
+
+    override suspend fun loadShowSubagentSessions(): Boolean =
+        context.chatPreferencesDataStore.data.firstOrNull()?.get(showSubagentSessionsKey) ?: true
+
+    override suspend fun setShowSubagentSessions(value: Boolean) {
+        context.chatPreferencesDataStore.edit { prefs -> prefs[showSubagentSessionsKey] = value }
     }
 }

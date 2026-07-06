@@ -31,6 +31,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardVoice
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,6 +43,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -63,6 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ProfileSummary
@@ -160,7 +164,29 @@ fun ChatComposer(
     // Logged only on change, not every recomposition -- lets `adb logcat -s Hermex/Composer`
     // confirm Scaffold's innerPadding is actually reserving this much space for the transcript
     // (see ChatScreen investigation notes on composer/content overlap).
+    val context = LocalContext.current
     var lastLoggedHeightPx by remember { mutableStateOf(-1) }
+    var showCommandPicker by remember { mutableStateOf(false) }
+    var commandQuery by remember { mutableStateOf("") }
+    var isRecording by remember { mutableStateOf(false) }
+    val voiceHandler = remember { VoiceInputHandler(context) }
+    val recordAudioPermission = android.Manifest.permission.RECORD_AUDIO
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            voiceHandler.startListening(
+                onResult = { text ->
+                    actions.onTextChanged(composerState.text + text)
+                    isRecording = false
+                },
+                onError = {
+                    isRecording = false
+                },
+            )
+            isRecording = true
+        }
+    }
     // Capped and centered rather than left plain fillMaxWidth(), so the dock doesn't stretch to an
     // awkward, hard-to-type-in width on a large tablet's wide-layout right pane. On any phone-scale
     // width (compact or the adaptive shell's ~400dp right pane) the cap never binds, so this Box is
@@ -196,11 +222,46 @@ fun ChatComposer(
                     )
                 }
 
+                if (showCommandPicker) {
+                    val suggestions = CommandRegistry.filter(commandQuery)
+                    if (suggestions.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(HermexRadii.Accessory),
+                            shadowElevation = 4.dp,
+                        ) {
+                            Column {
+                                suggestions.forEach { suggestion ->
+                                    ListItem(
+                                        headlineContent = { Text(suggestion.command) },
+                                        supportingContent = { Text(suggestion.description) },
+                                        leadingContent = {
+                                            Icon(suggestion.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        },
+                                        modifier = Modifier.clickable {
+                                            actions.onTextChanged(suggestion.command + " ")
+                                            showCommandPicker = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = composerState.text,
-                            onValueChange = actions.onTextChanged,
+                            onValueChange = { newValue ->
+                                actions.onTextChanged(newValue)
+                                if (newValue.startsWith("/")) {
+                                    showCommandPicker = true
+                                    commandQuery = newValue
+                                } else {
+                                    showCommandPicker = false
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                             placeholder = { Text("Message Hermex…") },
                             enabled = composerState.isTextFieldEnabled,
@@ -281,6 +342,36 @@ fun ChatComposer(
                             onOpenModelPicker = actions.onOpenModelPicker,
                             onSelectModel = actions.onSelectModel,
                         )
+                        IconButton(
+                            onClick = {
+                                if (isRecording) {
+                                    voiceHandler.stopListening()
+                                    isRecording = false
+                                } else {
+                                    val permissionState = ContextCompat.checkSelfPermission(context, recordAudioPermission)
+                                    if (permissionState == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                        voiceHandler.startListening(
+                                            onResult = { text ->
+                                                actions.onTextChanged(composerState.text + text)
+                                                isRecording = false
+                                            },
+                                            onError = {
+                                                isRecording = false
+                                            },
+                                        )
+                                        isRecording = true
+                                    } else {
+                                        permissionLauncher.launch(recordAudioPermission)
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                if (isRecording) Icons.Filled.Mic else Icons.Filled.KeyboardVoice,
+                                contentDescription = if (isRecording) "Stop recording" else "Voice input",
+                                tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

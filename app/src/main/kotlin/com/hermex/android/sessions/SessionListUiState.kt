@@ -8,8 +8,10 @@ data class SessionListUiState(
     val isRefreshing: Boolean = false,
     val sessions: List<SessionSummary> = emptyList(),
     val isCreatingSession: Boolean = false,
+    val isMutating: Boolean = false,
     val errorMessage: String? = null,
     val searchQuery: String = "",
+    val showSubagentSessions: Boolean = true,
     val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
     val userInitials: String = "BD",
     /** True when [sessions] came from the offline cache rather than a successful network
@@ -25,7 +27,9 @@ data class SessionListUiState(
     val filteredSessions: List<SessionSummary>
         get() {
             val query = searchQuery.trim()
-            if (query.isEmpty()) return sessions
-            return sessions.filter { it.title?.contains(query, ignoreCase = true) == true }
+            val filtered = if (showSubagentSessions) sessions
+                else sessions.filter { it.sourceTag != "subagent" }
+            if (query.isEmpty()) return filtered
+            return filtered.filter { it.title?.contains(query, ignoreCase = true) == true }
         }
 }

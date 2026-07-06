@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.update
 import com.hermex.android.core.network.dto.ApprovalRespondRequest
 import com.hermex.android.core.network.dto.ClarificationRespondRequest
 import com.hermex.android.core.network.dto.SessionYoloRequest
+import com.hermex.android.core.network.dto.SessionRenameRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -176,6 +177,8 @@ class ChatViewModel(
                         isShowingCachedData = false,
                         cacheStatusMessage = null,
                         errorMessage = null,
+                        hasDisconnectedStream = session?.activeStreamId != null && activeStreamId == null,
+                        disconnectedStreamId = if (session?.activeStreamId != null && activeStreamId == null) session.activeStreamId else null,
                     )
                 }
                 if (serverId != null && session != null) {
@@ -575,6 +578,7 @@ class ChatViewModel(
                 )
             }
 
+            _uiState.update { it.copy(hasDisconnectedStream = false, disconnectedStreamId = null) }
             activeStreamId = streamId
             observeStream(serverBaseUrl, streamId)
         }
@@ -629,6 +633,7 @@ class ChatViewModel(
                     isComplete = completed,
                     isError = payload.isError ?: existing.isError,
                     durationSeconds = payload.duration ?: existing.durationSeconds,
+                    rawArgs = payload.args?.let { kotlinx.serialization.json.Json { prettyPrint = true }.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), it) } ?: existing.rawArgs,
                 )
             } else {
                 ToolCallUi(
@@ -638,6 +643,7 @@ class ChatViewModel(
                     isComplete = completed,
                     isError = payload.isError ?: false,
                     durationSeconds = payload.duration,
+                    rawArgs = payload.args?.let { kotlinx.serialization.json.Json { prettyPrint = true }.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), it) },
                     anchorMessageCount = state.messages.size,
                 )
             }
@@ -863,6 +869,17 @@ class ChatViewModel(
         _uiState.update { it.copy(errorMessage = null) }
     }
 
+    fun renameSession(sessionId: String, newTitle: String) {
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                safeApiCall { api.renameSession(SessionRenameRequest(sessionId, newTitle)) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not rename session.") }
+            }
+        }
+    }
+
     /** Stop button. Fires a cancel request to the server, and finalizes locally immediately
      * rather than waiting for a `cancel` event to arrive on the stream, so the UI feels instant.
      * The local finalize happens either way (matching iOS -- a stuck "stop" button that keeps
@@ -870,6 +887,15 @@ class ChatViewModel(
      * no longer see); a failed cancel just surfaces an error afterward without reopening the
      * stream or touching [ChatUiState.messages]. No-ops with a "reconnect" error instead of
      * calling the server at all when showing cached data offline -- see [ChatUiState.isShowingCachedData]. */
+    fun reattachStream() {
+        val streamId = _uiState.value.disconnectedStreamId ?: return
+        val serverBaseUrl = authRepository.activeServerBaseUrl() ?: return
+        _uiState.update { it.copy(isReattaching = true, hasDisconnectedStream = false) }
+        activeStreamId = streamId
+        observeStream(serverBaseUrl, streamId)
+        _uiState.update { it.copy(isReattaching = false) }
+    }
+
     fun cancelStream() {
         if (_uiState.value.isShowingCachedData) {
             _uiState.update { it.copy(errorMessage = "Reconnect to control this run.") }

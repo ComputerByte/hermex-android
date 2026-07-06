@@ -58,6 +58,10 @@ import com.hermex.android.core.network.dto.SkillDetailResponse
 import com.hermex.android.core.network.dto.SkillsResponse
 import com.hermex.android.core.network.dto.UpdateSessionRequest
 import com.hermex.android.core.network.dto.UploadResponse
+import com.hermex.android.core.network.dto.GenericResponse
+import com.hermex.android.core.network.dto.SessionRenameRequest
+import com.hermex.android.core.network.dto.SessionIdRequest
+import com.hermex.android.core.network.dto.SessionProjectRequest
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
@@ -102,6 +106,15 @@ interface HermexApi {
 
     @POST("/api/session/update")
     suspend fun updateSession(@Body body: UpdateSessionRequest): SessionResponse
+
+    @POST("api/session/rename")
+    suspend fun renameSession(@Body request: SessionRenameRequest): GenericResponse
+
+    @POST("api/session/delete")
+    suspend fun deleteSession(@Body request: SessionIdRequest): GenericResponse
+
+    @POST("api/session/project")
+    suspend fun moveSessionToProject(@Body request: SessionProjectRequest): GenericResponse
 
     @POST("/api/chat/start")
     suspend fun chatStart(@Body body: ChatStartRequest): ChatStartResponse

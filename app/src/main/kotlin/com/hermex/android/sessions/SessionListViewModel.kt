@@ -7,6 +7,9 @@ import com.hermex.android.core.cache.NoOpOfflineCacheRepository
 import com.hermex.android.core.cache.OfflineCacheRepository
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.dto.NewSessionRequest
+import com.hermex.android.core.network.dto.SessionIdRequest
+import com.hermex.android.core.network.dto.SessionProjectRequest
+import com.hermex.android.core.network.dto.SessionRenameRequest
 import com.hermex.android.core.network.dto.SessionSummary
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.AppearancePreferencesStore
@@ -102,6 +105,51 @@ class SessionListViewModel(
 
     fun onSearchQueryChanged(value: String) {
         _uiState.update { it.copy(searchQuery = value) }
+    }
+
+    fun renameSession(sessionId: String, newTitle: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMutating = true, errorMessage = null) }
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                safeApiCall { api.renameSession(SessionRenameRequest(sessionId, newTitle)) }
+                load()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not rename session.") }
+            } finally {
+                _uiState.update { it.copy(isMutating = false) }
+            }
+        }
+    }
+
+    fun deleteSession(sessionId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMutating = true, errorMessage = null) }
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                safeApiCall { api.deleteSession(SessionIdRequest(sessionId)) }
+                load()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not delete session.") }
+            } finally {
+                _uiState.update { it.copy(isMutating = false) }
+            }
+        }
+    }
+
+    fun moveSessionToProject(sessionId: String, projectId: String?) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMutating = true, errorMessage = null) }
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                safeApiCall { api.moveSessionToProject(SessionProjectRequest(sessionId, projectId)) }
+                load()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not move session.") }
+            } finally {
+                _uiState.update { it.copy(isMutating = false) }
+            }
+        }
     }
 
     /** Pull-to-refresh: unlike [load], never (re-)shows the cache first -- something is already on

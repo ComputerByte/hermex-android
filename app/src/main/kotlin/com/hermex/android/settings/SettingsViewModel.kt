@@ -52,6 +52,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(expandThinkingByDefault = chatPreferencesStore.loadExpandThinkingByDefault()) }
             _uiState.update { it.copy(expandToolCallsByDefault = chatPreferencesStore.loadExpandToolCallsByDefault()) }
             _uiState.update { it.copy(notificationsEnabled = chatPreferencesStore.loadNotificationsEnabled()) }
+            _uiState.update { it.copy(showSubagentSessions = chatPreferencesStore.loadShowSubagentSessions()) }
             _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
             _uiState.update { it.copy(appIconVariant = appearancePreferencesStore.loadAppIconVariant()) }
             val initials = appearancePreferencesStore.loadUserInitials()
@@ -111,6 +112,11 @@ class SettingsViewModel(
             appearancePreferencesStore.setUserInitials(initials)
             _uiState.update { it.copy(userInitials = initials) }
         }
+    }
+
+    fun setShowSubagentSessions(value: Boolean) {
+        _uiState.update { it.copy(showSubagentSessions = value) }
+        viewModelScope.launch { chatPreferencesStore.setShowSubagentSessions(value) }
     }
 
     fun setNotificationsEnabled(value: Boolean) {

@@ -1,5 +1,7 @@
 package com.hermex.android.chat
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -19,14 +21,22 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,17 +49,24 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.core.network.dto.ProjectSummary
 import com.hermex.android.core.util.HermexLog
 import com.hermex.android.navigation.LocalHermexDrawerOpener
+import com.hermex.android.sessions.DeleteSessionDialog
+import com.hermex.android.sessions.MoveToProjectDialog
+import com.hermex.android.sessions.RenameSessionDialog
+import com.hermex.android.ui.theme.HermexErrorBanner
 import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,9 +83,21 @@ fun ChatScreen(
     // session is open -- the top bar's own "Chat" label adds nothing there, so it's dropped rather
     // than shown redundantly. Back/Files/Refresh stay exactly as they are either way.
     isPaneMode: Boolean = false,
+    sessionId: String? = null,
+    sessionTitle: String? = null,
+    sessionProjectId: String? = null,
+    projects: List<ProjectSummary> = emptyList(),
+    onRenameSession: ((String) -> Unit)? = null,
+    onDeleteSession: (() -> Unit)? = null,
+    onMoveSession: ((String?) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val openDrawer = LocalHermexDrawerOpener.current
+    val context = LocalContext.current
+    var showSessionMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showMoveDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialComposerDraft) {
         initialComposerDraft?.let(viewModel::stageDraftIfComposerEmpty)
@@ -127,6 +156,37 @@ fun ChatScreen(
                     }
                     IconButton(onClick = viewModel::loadSession) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    }
+                    Box {
+                        IconButton(onClick = { showSessionMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = showSessionMenu, onDismissRequest = { showSessionMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = { showSessionMenu = false; showRenameDialog = true },
+                                leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Move to Project") },
+                                onClick = { showSessionMenu = false; showMoveDialog = true },
+                                leadingIcon = { Icon(Icons.Filled.Folder, null) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share") },
+                                onClick = {
+                                    showSessionMenu = false
+                                    sessionId?.let { chatShareSession(context, it, sessionTitle ?: "Session") }
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Share, null) },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = { showSessionMenu = false; showDeleteDialog = true },
+                                leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -228,29 +288,40 @@ fun ChatScreen(
                         }
                     }
 
-                    // A freshly started turn always re-pins -- matches the composer jumping the
-                    // user to their own just-sent message and the reply that follows, even if
-                    // they'd scrolled away reading history in an earlier turn.
+                    // A freshly started turn re-pins only if the user is already near the bottom --
+                    // if they'd scrolled away reading history, don't yank them back.
                     LaunchedEffect(uiState.isStreaming) {
-                        if (uiState.isStreaming) stickToBottom = true
+                        if (uiState.isStreaming && !listState.canScrollForward) {
+                            stickToBottom = true
+                        }
                     }
 
                     LaunchedEffect(stickToBottom) {
                         HermexLog.d("ChatScroll", "stickToBottom=$stickToBottom")
                     }
 
-                    // Plain (non-animated) scroll: streamingText changes on every token, so an
-                    // animated scroll here would re-trigger dozens of times a second and stutter.
-                    // A discrete new message/tool card is rare enough that the instant jump still
-                    // reads as smooth. scrollToItem alone only aligns the last item's *top* edge
-                    // with the viewport -- for a streaming bubble taller than one screen that
-                    // leaves its growing tail permanently out of reach, so scrollBy(Float.MAX_VALUE)
-                    // (clamped by the framework to however much scrollable distance actually
-                    // remains) follows up to reach the true end.
-                    LaunchedEffect(totalItems, uiState.streamingText, uiState.streamingReasoning, stickToBottom) {
+                    // Debounced scroll: during active streaming, throttle to ~100ms intervals
+                    // so we don't scroll on every single token (the main cause of jittery video).
+                    // On discrete content changes (new message, new tool call, stickToBottom toggle)
+                    // scroll immediately without delay.
+                    LaunchedEffect(totalItems, stickToBottom) {
                         if (totalItems > 0 && stickToBottom) {
                             listState.scrollToItem(totalItems - 1)
                             listState.scrollBy(Float.MAX_VALUE)
+                        }
+                    }
+
+                    // During active streaming, debounce the scroll so we don't re-scroll
+                    // on every token. 100ms matches typical token inter-arrival time.
+                    var lastScrollMs by remember { mutableLongStateOf(0L) }
+                    LaunchedEffect(uiState.streamingText) {
+                        if (stickToBottom && uiState.isStreaming) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastScrollMs > 100) {
+                                lastScrollMs = now
+                                listState.scrollToItem(totalItems - 1)
+                                listState.scrollBy(Float.MAX_VALUE)
+                            }
                         }
                     }
 
@@ -352,6 +423,19 @@ fun ChatScreen(
                         }
                     }
                 }
+
+                // Reattach banner (disconnected stream)
+                if (uiState.hasDisconnectedStream && !uiState.isStreaming) {
+                    Box(
+                        Modifier.fillMaxSize().padding(16.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        HermexErrorBanner(
+                            message = "Response interrupted — reconnect to resume streaming",
+                            onRetry = { viewModel.reattachStream() },
+                        )
+                    }
+                }
             }
         }
     }
@@ -374,5 +458,47 @@ fun ChatScreen(
             onSubmit = { response -> viewModel.respondToClarification(response) },
         )
     }
+
+    if (showRenameDialog) {
+        RenameSessionDialog(
+            currentName = sessionTitle ?: "",
+            onConfirm = { newTitle ->
+                onRenameSession?.invoke(newTitle)
+                showRenameDialog = false
+            },
+            onDismiss = { showRenameDialog = false },
+        )
+    }
+    if (showDeleteDialog) {
+        DeleteSessionDialog(
+            sessionTitle = sessionTitle ?: "this session",
+            onConfirm = {
+                onDeleteSession?.invoke()
+                showDeleteDialog = false
+            },
+            onDismiss = { showDeleteDialog = false },
+        )
+    }
+    if (showMoveDialog) {
+        MoveToProjectDialog(
+            projects = projects,
+            currentProjectId = sessionProjectId,
+            onConfirm = { projectId ->
+                onMoveSession?.invoke(projectId)
+                showMoveDialog = false
+            },
+            onDismiss = { showMoveDialog = false },
+        )
+    }
     } // end outer Box
+}
+
+private fun chatShareSession(context: Context, sessionId: String, sessionTitle: String) {
+    val uri = "hermex://session/$sessionId"
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, uri)
+        putExtra(Intent.EXTRA_SUBJECT, sessionTitle)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share Session"))
 }

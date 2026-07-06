@@ -249,6 +249,10 @@ fun StreamingBubble(
             .fillMaxWidth()
             .padding(end = 48.dp, top = 2.dp, bottom = 2.dp),
     ) {
-        MarkdownText(markdown = text, textColor = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }

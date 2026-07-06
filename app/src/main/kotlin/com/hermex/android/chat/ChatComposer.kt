@@ -159,10 +159,12 @@ fun ChatComposer(
     // width (compact or the adaptive shell's ~400dp right pane) the cap never binds, so this Box is
     // a no-op there -- outer width stays fillMaxWidth() exactly as before, just with the (possibly
     // narrower) dock centered inside it.
+    // Deliberately no fillMaxWidth() before widthIn(max=...) below: fillMaxWidth() pins both min
+    // and max width to the full available space, so a subsequent widthIn(max) below that pinned
+    // min gets silently overridden back up to full width, defeating the cap on wide panes.
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
                 .widthIn(max = ComposerMaxWidth)
                 .onGloballyPositioned { coordinates ->
                     val heightPx = coordinates.size.height

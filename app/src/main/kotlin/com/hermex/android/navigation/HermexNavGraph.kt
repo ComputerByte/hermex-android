@@ -310,6 +310,7 @@ fun HermexNavGraph(
                     onOpenCustomHeaders = { navController.navigate(Routes.CUSTOM_HEADERS) },
                     onOpenServers = { navController.navigate(Routes.SERVERS) },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(Routes.NEW_CHAT) {
@@ -335,6 +336,7 @@ fun HermexNavGraph(
                         navController.popBackStack()
                     },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(Routes.CUSTOM_HEADERS) {
@@ -357,6 +359,7 @@ fun HermexNavGraph(
                         navController.popBackStack()
                     },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(Routes.INSIGHTS) {
@@ -373,6 +376,7 @@ fun HermexNavGraph(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(Routes.PROJECTS) {
@@ -402,6 +406,7 @@ fun HermexNavGraph(
                     onOpenTask = { jobId -> navController.navigate(Routes.taskDetail(jobId)) },
                     onBack = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(
@@ -430,6 +435,7 @@ fun HermexNavGraph(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(Routes.SKILLS) {
@@ -439,6 +445,7 @@ fun HermexNavGraph(
                     onOpenSkill = { name -> navController.navigate(Routes.skillDetail(name)) },
                     onBack = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
+                    isPaneMode = isWideLayout,
                 )
             }
             composable(

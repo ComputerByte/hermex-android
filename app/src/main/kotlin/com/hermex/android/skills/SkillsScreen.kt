@@ -53,6 +53,10 @@ fun SkillsScreen(
     onOpenSkill: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // True only in the wide-layout right pane, where the persistent left pane already shows
+    // "Skills" is the open section -- the top bar's own literal title adds nothing there, so it's
+    // dropped rather than shown redundantly. Back/Refresh stay exactly as they are either way.
+    isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -61,11 +65,13 @@ fun SkillsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Skills",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    if (!isPaneMode) {
+                        Text(
+                            "Skills",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

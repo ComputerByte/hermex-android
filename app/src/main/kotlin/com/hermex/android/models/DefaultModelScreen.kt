@@ -51,6 +51,10 @@ fun DefaultModelScreen(
     viewModel: DefaultModelViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // True only in the wide-layout right pane, where the persistent left pane already shows
+    // which section is open -- the top bar's own literal title adds nothing there, so it's
+    // dropped rather than shown redundantly. Back/Refresh stay exactly as they are either way.
+    isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -59,11 +63,13 @@ fun DefaultModelScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Default Model",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    if (!isPaneMode) {
+                        Text(
+                            "Default Model",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

@@ -55,6 +55,10 @@ fun TasksScreen(
     onOpenTask: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // True only in the wide-layout right pane, where the persistent left pane already shows
+    // "Tasks" is the open section -- the top bar's own literal title adds nothing there, so it's
+    // dropped rather than shown redundantly. Back/Refresh stay exactly as they are either way.
+    isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -63,11 +67,13 @@ fun TasksScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Tasks",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    if (!isPaneMode) {
+                        Text(
+                            "Tasks",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

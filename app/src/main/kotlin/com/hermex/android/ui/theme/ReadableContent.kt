@@ -31,7 +31,11 @@ fun HermexReadableContent(
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        Box(modifier = Modifier.fillMaxWidth().widthIn(max = maxWidth)) {
+        // fillMaxWidth() must NOT precede widthIn(max=...) here: fillMaxWidth() pins both min and
+        // max width to the full available space, and widthIn's max can only narrow within the
+        // incoming range -- so a max below an already-pinned min gets silently overridden back up
+        // to full width, defeating the cap entirely on any pane wider than `maxWidth`.
+        Box(modifier = Modifier.widthIn(max = maxWidth)) {
             content()
         }
     }

@@ -48,6 +48,10 @@ fun MemoryScreen(
     viewModel: MemoryViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // True only in the wide-layout right pane, where the persistent left pane already shows
+    // "Memory" is the open section -- the top bar's own literal title adds nothing there, so it's
+    // dropped rather than shown redundantly. Back/Refresh stay exactly as they are either way.
+    isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -56,11 +60,13 @@ fun MemoryScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Memory",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    if (!isPaneMode) {
+                        Text(
+                            "Memory",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

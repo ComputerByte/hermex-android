@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -83,6 +83,10 @@ import java.util.Locale
  * constants onto this rather than this file knowing route strings.
  */
 enum class SessionListNavItem { TASKS, SKILLS, MEMORY, INSIGHTS, PROFILES, PROJECTS }
+
+/** Clears the floating New Chat + avatar row at the bottom of the list, independent of the
+ * system navigation bar inset (added separately via `navigationBarsPadding()` where this is used). */
+private val SessionListBottomControlsHeight = 96.dp
 
 /**
  * The nav destinations that live above the session list (Skills, and -- as each phase lands --
@@ -300,9 +304,6 @@ fun SessionListBody(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            // Bottom padding clears the FAB row (CTA + avatar), which floats over the list
-            // and isn't otherwise accounted for by Scaffold's innerPadding.
-            contentPadding = PaddingValues(bottom = 96.dp),
         ) {
             uiState.cacheStatusMessage?.let { message ->
                 item(key = "cache-status-banner") {
@@ -534,6 +535,20 @@ fun SessionListBody(
                         }
                     }
                 }
+            }
+            item(key = "bottom-controls-clearance") {
+                // The FAB row (New Chat + avatar) floats over this list and isn't otherwise
+                // accounted for by Scaffold's innerPadding, so the last session row would
+                // otherwise be permanently stuck behind it. navigationBarsPadding() stacks the
+                // system nav bar inset on top of that fixed clearance -- both compact and wide
+                // layouts draw edge-to-edge (see ChatComposer's own navigationBarsPadding() use),
+                // so on-screen nav bar height must be cleared in addition to the FAB/avatar row.
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .height(SessionListBottomControlsHeight),
+                )
             }
         }
 

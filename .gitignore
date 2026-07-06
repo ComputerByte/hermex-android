@@ -10,3 +10,8 @@
 local.properties
 /app/build
 /.hermes/
+.kotlin/
+*.apk
+release-artifacts/
+*-recon.md
+*-recone.md

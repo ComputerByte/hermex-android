@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.InsightsDailyToken
 import com.hermex.android.core.network.dto.InsightsModelBreakdown
 import com.hermex.android.core.network.dto.SessionSummary
+import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 import java.util.Locale
 
@@ -88,7 +89,7 @@ fun InsightsScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        HermexReadableContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),

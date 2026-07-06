@@ -64,6 +64,7 @@ import com.hermex.android.BuildConfig
 import com.hermex.android.R
 import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
+import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 import com.hermex.android.ui.theme.toComposeColor
 
@@ -193,7 +194,7 @@ fun SettingsScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        HermexReadableContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),

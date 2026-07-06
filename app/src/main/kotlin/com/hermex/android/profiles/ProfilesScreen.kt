@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.ProfileSummary
+import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,7 +87,7 @@ fun ProfilesScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        HermexReadableContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),

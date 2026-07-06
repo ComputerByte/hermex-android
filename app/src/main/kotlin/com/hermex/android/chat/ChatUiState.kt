@@ -59,7 +59,25 @@ data class ChatUiState(
     /** True while a single attachment's upload is in flight -- drives the composer's uploading
      * indicator; see [ChatViewModel.uploadAttachment] / [ChatViewModel.performAttachmentUpload]. */
     val isUploadingAttachment: Boolean = false,
+
+    /** Non-null when the server is waiting for approval to execute a tool. */
+    val pendingApproval: PendingApprovalUi? = null,
+    val isRespondingToApproval: Boolean = false,
+    val approvalErrorMessage: String? = null,
+    val isSessionApprovalBypassEnabled: Boolean = false,
+
+    /** Non-null when the server needs a clarifying answer before proceeding. */
+    val pendingClarification: PendingClarificationUi? = null,
+    val isRespondingToClarification: Boolean = false,
+    val clarificationErrorMessage: String? = null,
 )
+
+/** Computed hint shown above the composer when a send failed and the text is preserved for retry. */
+val ChatUiState.showRetryHint: String?
+    get() = when {
+        errorMessage != null && composerText.isNotBlank() && !isSending && !isStreaming -> "Tap Send to retry"
+        else -> null
+    }
 
 /** A file already uploaded via `HermexApi.uploadAttachment` and staged to go out with the next
  * sent message -- the local, UI-facing mirror of a [com.hermex.android.core.network.dto.MessageAttachment].
@@ -73,6 +91,24 @@ data class PendingAttachmentUi(
     val mime: String? = null,
     val size: Long? = null,
     val isImage: Boolean? = null,
+)
+
+data class PendingApprovalUi(
+    val approvalId: String?,
+    val command: String?,
+    val description: String?,
+    val patternKeys: List<String>,
+    val pendingCount: Int,
+)
+
+data class PendingClarificationUi(
+    val clarifyId: String?,
+    val question: String,
+    val choices: List<String>,
+    val sessionId: String?,
+    val timeoutSeconds: Int?,
+    val expiresAt: Double?,
+    val pendingCount: Int,
 )
 
 data class ToolCallUi(

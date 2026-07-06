@@ -13,8 +13,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.10.0-ui-rebuild"
+        versionCode = 16
+        versionName = "0.10.2-chat-hardening"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

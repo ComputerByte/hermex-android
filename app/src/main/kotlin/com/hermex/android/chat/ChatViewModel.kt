@@ -36,6 +36,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import com.hermex.android.core.network.dto.ApprovalRespondRequest
+import com.hermex.android.core.network.dto.ClarificationRespondRequest
+import com.hermex.android.core.network.dto.SessionYoloRequest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -74,6 +79,10 @@ class ChatViewModel(
 
     private var streamJob: Job? = null
     private var activeStreamId: String? = null
+    private var approvalPollingJob: Job? = null
+    private var clarificationPollingJob: Job? = null
+
+    private val currentSessionId: String get() = sessionId
 
     /** Explicit reason for stream termination -- avoids conflating normal completion
      * (should notify) with user-cancellation or errors (should not notify). */
@@ -651,6 +660,10 @@ class ChatViewModel(
         streamJob?.cancel()
         streamJob = null
         activeStreamId = null
+        approvalPollingJob?.cancel()
+        approvalPollingJob = null
+        clarificationPollingJob?.cancel()
+        clarificationPollingJob = null
         _uiState.update { state ->
             val hasPartialReply = state.streamingText.isNotEmpty() || state.streamingReasoning.isNotEmpty()
             val finalizedMessages = if (hasPartialReply) {
@@ -669,6 +682,12 @@ class ChatViewModel(
                 streamingReasoning = "",
                 isStreaming = false,
                 errorMessage = errorMessage ?: state.errorMessage,
+                pendingApproval = null,
+                isRespondingToApproval = false,
+                approvalErrorMessage = null,
+                pendingClarification = null,
+                isRespondingToClarification = false,
+                clarificationErrorMessage = null,
             )
         }
         HermexLog.d("Chat", "isRunning=false messages=${_uiState.value.messages.size}")
@@ -691,6 +710,157 @@ class ChatViewModel(
                 .getOrNull()?.session ?: return@launch
             offlineCacheRepository.cacheSessionDetail(serverId, sessionId, session)
         }
+    }
+
+    fun startApprovalPolling(sessionId: String) {
+        approvalPollingJob?.cancel()
+        approvalPollingJob = viewModelScope.launch {
+            while (isActive) {
+                delay(2000L)
+                try {
+                    val api = authRepository.apiForActiveServer() ?: break
+                    val response = safeApiCall { api.approvalPending(sessionId) }
+                    val pending = response.pending
+                    if (pending != null && !pending.approvalId.isNullOrBlank()) {
+                        _uiState.update { it.copy(
+                            pendingApproval = PendingApprovalUi(
+                                approvalId = pending.approvalId,
+                                command = pending.command,
+                                description = pending.description,
+                                patternKeys = (pending.patternKeys ?: pending.patternKey?.let { listOf(it) } ?: emptyList()),
+                                pendingCount = response.pendingCount,
+                            ),
+                            approvalErrorMessage = null,
+                        )}
+                    } else {
+                        _uiState.update { it.copy(pendingApproval = null) }
+                    }
+                } catch (_: Exception) {
+                    // Polling failures are non-fatal.
+                }
+            }
+        }
+    }
+
+    fun startClarificationPolling(sessionId: String) {
+        clarificationPollingJob?.cancel()
+        clarificationPollingJob = viewModelScope.launch {
+            while (isActive) {
+                delay(2000L)
+                try {
+                    val api = authRepository.apiForActiveServer() ?: break
+                    val response = safeApiCall { api.clarifyPending(sessionId) }
+                    val pending = response.pending
+                    if (pending != null && !pending.clarifyId.isNullOrBlank()) {
+                        _uiState.update { it.copy(
+                            pendingClarification = PendingClarificationUi(
+                                clarifyId = pending.clarifyId,
+                                question = pending.question ?: "The agent needs more information.",
+                                choices = pending.choicesOffered?.filter { it.isNotBlank() } ?: emptyList(),
+                                sessionId = pending.sessionId,
+                                timeoutSeconds = pending.timeoutSeconds,
+                                expiresAt = pending.expiresAt,
+                                pendingCount = response.pendingCount ?: 1,
+                            ),
+                            clarificationErrorMessage = null,
+                        )}
+                    } else {
+                        _uiState.update { it.copy(pendingClarification = null) }
+                    }
+                } catch (_: Exception) {
+                    // Non-fatal.
+                }
+            }
+        }
+    }
+
+    fun respondToApproval(choice: String) {
+        val approval = _uiState.value.pendingApproval ?: return
+        val sessionId = currentSessionId
+        _uiState.update { it.copy(isRespondingToApproval = true, approvalErrorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer()
+                if (api == null) {
+                    _uiState.update { it.copy(isRespondingToApproval = false, approvalErrorMessage = "Not signed in.") }
+                    return@launch
+                }
+                safeApiCall {
+                    api.approvalRespond(ApprovalRespondRequest(
+                        sessionId = sessionId,
+                        choice = choice,
+                        approvalId = approval.approvalId,
+                    ))
+                }
+                _uiState.update { it.copy(pendingApproval = null, isRespondingToApproval = false) }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(
+                    isRespondingToApproval = false,
+                    approvalErrorMessage = e.message ?: "Could not respond.",
+                )}
+            }
+        }
+    }
+
+    fun skipAllApprovals() {
+        val sessionId = currentSessionId
+        _uiState.update { it.copy(isRespondingToApproval = true, approvalErrorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer()
+                if (api == null) {
+                    _uiState.update { it.copy(isRespondingToApproval = false, approvalErrorMessage = "Not signed in.") }
+                    return@launch
+                }
+                safeApiCall {
+                    api.sessionYoloSet(SessionYoloRequest(sessionId = sessionId, enabled = true))
+                }
+                _uiState.update { it.copy(
+                    pendingApproval = null,
+                    isRespondingToApproval = false,
+                    isSessionApprovalBypassEnabled = true,
+                )}
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(
+                    isRespondingToApproval = false,
+                    approvalErrorMessage = e.message ?: "Could not skip approvals.",
+                )}
+            }
+        }
+    }
+
+    fun respondToClarification(response: String) {
+        val clarification = _uiState.value.pendingClarification ?: return
+        val sessionId = currentSessionId
+        val trimmed = response.trim()
+        if (trimmed.isEmpty()) return
+        _uiState.update { it.copy(isRespondingToClarification = true, clarificationErrorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer()
+                if (api == null) {
+                    _uiState.update { it.copy(isRespondingToClarification = false, clarificationErrorMessage = "Not signed in.") }
+                    return@launch
+                }
+                safeApiCall {
+                    api.clarifyRespond(ClarificationRespondRequest(
+                        sessionId = sessionId,
+                        response = trimmed,
+                        clarifyId = clarification.clarifyId,
+                    ))
+                }
+                _uiState.update { it.copy(pendingClarification = null, isRespondingToClarification = false) }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(
+                    isRespondingToClarification = false,
+                    clarificationErrorMessage = e.message ?: "Could not respond.",
+                )}
+            }
+        }
+    }
+
+    fun dismissError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     /** Stop button. Fires a cancel request to the server, and finalizes locally immediately

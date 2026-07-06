@@ -7,7 +7,9 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeout
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -75,10 +77,16 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
             val dataLines = StringBuilder()
             while (isActive) {
                 val line = try {
-                    source.readUtf8Line()
+                    withTimeout(30_000L) {
+                        source.readUtf8Line()
+                    }
                 } catch (e: IOException) {
                     HermexLog.w("Sse", "read error", e)
                     trySend(SseEvent.TransportError(e.message ?: "Stream read error"))
+                    null
+                } catch (e: TimeoutCancellationException) {
+                    HermexLog.w("Sse", "read timeout — no data for 30s")
+                    trySend(SseEvent.TransportError("Stream timeout — no data received for 30s"))
                     null
                 } ?: break
 

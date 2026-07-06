@@ -1,9 +1,15 @@
 package com.hermex.android.core.network
 
+import com.hermex.android.core.network.dto.ApprovalPendingResponse
+import com.hermex.android.core.network.dto.ApprovalRespondRequest
+import com.hermex.android.core.network.dto.ApprovalRespondResponse
 import com.hermex.android.core.network.dto.AuthStatusResponse
 import com.hermex.android.core.network.dto.ChatCancelResponse
 import com.hermex.android.core.network.dto.ChatStartRequest
 import com.hermex.android.core.network.dto.ChatStartResponse
+import com.hermex.android.core.network.dto.ClarificationPendingResponse
+import com.hermex.android.core.network.dto.ClarificationRespondRequest
+import com.hermex.android.core.network.dto.ClarificationRespondResponse
 import com.hermex.android.core.network.dto.CronJobIdRequest
 import com.hermex.android.core.network.dto.CronJobsResponse
 import com.hermex.android.core.network.dto.CronMutationResponse
@@ -45,6 +51,8 @@ import com.hermex.android.core.network.dto.ProjectsResponse
 import com.hermex.android.core.network.dto.RenameProjectRequest
 import com.hermex.android.core.network.dto.ServerSettingsResponse
 import com.hermex.android.core.network.dto.SessionResponse
+import com.hermex.android.core.network.dto.SessionYoloRequest
+import com.hermex.android.core.network.dto.SessionYoloResponse
 import com.hermex.android.core.network.dto.SessionsResponse
 import com.hermex.android.core.network.dto.SkillDetailResponse
 import com.hermex.android.core.network.dto.SkillsResponse
@@ -252,4 +260,22 @@ interface HermexApi {
         @Query("session_id") sessionId: String,
         @Query("path") path: String? = null,
     ): GitBranchesWrapper
+
+    @GET("/api/approval/pending")
+    suspend fun approvalPending(@Query("session_id") sessionId: String): ApprovalPendingResponse
+
+    @POST("/api/approval/respond")
+    suspend fun approvalRespond(@Body request: ApprovalRespondRequest): ApprovalRespondResponse
+
+    @GET("/api/session/yolo")
+    suspend fun sessionYolo(@Query("session_id") sessionId: String): SessionYoloResponse
+
+    @POST("/api/session/yolo")
+    suspend fun sessionYoloSet(@Body request: SessionYoloRequest): SessionYoloResponse
+
+    @GET("/api/clarify/pending")
+    suspend fun clarifyPending(@Query("session_id") sessionId: String): ClarificationPendingResponse
+
+    @POST("/api/clarify/respond")
+    suspend fun clarifyRespond(@Body request: ClarificationRespondRequest): ClarificationRespondResponse
 }

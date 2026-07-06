@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,7 +50,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.util.HermexLog
 import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.ui.theme.HermexRadii
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,8 +101,9 @@ fun ChatScreen(
         )
     }
 
+    Box(modifier = modifier.fillMaxSize()) {
     Scaffold(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {
@@ -134,6 +135,14 @@ fun ChatScreen(
             )
         },
         bottomBar = {
+            uiState.showRetryHint?.let { hint ->
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
+                )
+            }
             ChatComposer(
                 composerState = ChatComposerState.from(uiState),
                 profileSelectorState = ChatComposerProfileSelectorState.from(uiState),
@@ -244,18 +253,6 @@ fun ChatScreen(
                         }
                     }
 
-                    // Distinguishes "tokens are actively arriving" from the quiet tail between the
-                    // last visible token and the real terminal SSE event -- restarts (and cancels
-                    // its own delayed flip) on every content change, so it only reads true once
-                    // content has actually gone quiet for a bit while the run is still active.
-                    var isFinalizing by remember { mutableStateOf(false) }
-                    LaunchedEffect(uiState.isStreaming, uiState.streamingText, uiState.streamingReasoning) {
-                        isFinalizing = false
-                        if (!uiState.isStreaming) return@LaunchedEffect
-                        delay(3_000)
-                        isFinalizing = true
-                    }
-
                     // Tool cards don't live in `messages` -- each one is anchored to the message
                     // index it will precede (see ToolCallUi.anchorMessageCount), so group them here
                     // and interleave rather than always rendering every tool call after every
@@ -291,16 +288,13 @@ fun ChatScreen(
                         if (uiState.streamingText.isNotEmpty()) {
                             item(key = "streaming-text") { StreamingBubble(uiState.streamingText) }
                         }
-                        // Fills the quiet gap between "visible text looks done" and the real
-                        // terminal SSE event -- without this the run can look frozen even though
-                        // it's still generating (see ChatScreen investigation notes).
                         if (uiState.isStreaming) {
                             item(key = "streaming-status") {
                                 Text(
-                                    text = if (isFinalizing) "Finalizing…" else "Generating…",
+                                    text = "Generating…",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                                 )
                             }
                         }
@@ -315,6 +309,7 @@ fun ChatScreen(
                         contentAlignment = Alignment.BottomCenter,
                     ) {
                         Surface(
+                            onClick = { viewModel.dismissError() },
                             shape = RoundedCornerShape(HermexRadii.Accessory),
                             color = MaterialTheme.colorScheme.errorContainer,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
@@ -334,7 +329,17 @@ fun ChatScreen(
                                     text = message,
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f),
                                 )
+                                Spacer(Modifier.width(4.dp))
+                                IconButton(onClick = { viewModel.dismissError() }, modifier = Modifier.size(24.dp)) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        "Dismiss",
+                                        tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -342,4 +347,24 @@ fun ChatScreen(
             }
         }
     }
+
+    uiState.pendingApproval?.let { pending ->
+        ApprovalRequestOverlay(
+            pending = pending,
+            isResponding = uiState.isRespondingToApproval,
+            errorMessage = uiState.approvalErrorMessage,
+            onChoice = { choice -> viewModel.respondToApproval(choice) },
+            onSkipAll = { viewModel.skipAllApprovals() },
+        )
+    }
+
+    uiState.pendingClarification?.let { pending ->
+        ClarificationRequestOverlay(
+            pending = pending,
+            isResponding = uiState.isRespondingToClarification,
+            errorMessage = uiState.clarificationErrorMessage,
+            onSubmit = { response -> viewModel.respondToClarification(response) },
+        )
+    }
+    } // end outer Box
 }

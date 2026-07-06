@@ -6,9 +6,9 @@ Hermex app.
 
 ## Status
 
-**Current version: v0.10.6-preview — full-device regression checkpoint.** The v0.10.x release
+**Current version: v0.11.0-streaming-bugfixes.** The v0.10.x release
 train (v0.10.0 through v0.10.6) delivered 7 releases spanning approximately 3,200 lines of
-changes with zero regressions:
+changes with zero regressions, followed by v0.11.0 with streaming bugfixes and feature polish:
 
 - **v0.10.0** — Navigation drawer, hamburger navigation, compact New Chat
 - **v0.10.1** — Approval and clarification request overlays mid-stream
@@ -17,6 +17,8 @@ changes with zero regressions:
 - **v0.10.4** — Auth/offline/error hardening (test connection, session expiry, friendly errors)
 - **v0.10.5** — Control-plane consistency (shared error banner, refresh buttons, empty states)
 - **v0.10.6** — Full device regression verification (12 scenarios on real hardware)
+- **v0.11.0** — Session actions, slash commands, voice input, stream reattach, smooth streaming,
+  subagent toggle, chat replay bugfixes
 
 See the Screenshots section below for the current look. See `API_CONTRACT.md` for the verified
 server API contract this app targets.

@@ -13,8 +13,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.10.2-chat-hardening"
+        versionCode = 17
+        versionName = "0.10.3-attachment-ux-complete"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -71,6 +71,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("io.coil-kt.coil3:coil-compose:3.0.4")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.12.0")

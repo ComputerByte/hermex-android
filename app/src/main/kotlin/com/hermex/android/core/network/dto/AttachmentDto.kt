@@ -1,5 +1,12 @@
 package com.hermex.android.core.network.dto
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -107,4 +114,34 @@ fun List<MessageAttachment>.capAtChatStartLimit(): List<MessageAttachment> = tak
 fun buildAttachedFilesMarker(references: List<String>): String {
     if (references.isEmpty()) return ""
     return "\n\n[Attached files: ${references.joinToString(", ")}]"
+}
+
+/**
+ * Strips the `[Attached files: ...]` suffix (with leading blank line) from a message's display
+ * text. The marker is appended client-side before send; the server echoes it back on reload.
+ * Matching iOS behavior: the annotation is hidden from the user and only the attachment chips
+ * (rendered separately from [ChatMessage.attachments]) are shown.
+ */
+fun stripAttachedFilesMarker(content: String?): String? {
+    if (content == null) return null
+    val markerRegex = Regex("\n\n\\[Attached files: ?.*?]", RegexOption.DOT_MATCHES_ALL)
+    return content.replace(markerRegex, "")
+}
+
+/**
+ * Returns a Material icon for the given MIME type. Used in both the composer's pending
+ * attachment strip and in message-history attachment chips. Falls back to a generic file icon.
+ */
+fun fileTypeIcon(mime: String?): ImageVector {
+    if (mime == null) return Icons.Filled.InsertDriveFile
+    return when {
+        mime.startsWith("image/") -> Icons.Filled.Image
+        mime.startsWith("video/") -> Icons.Filled.Videocam
+        mime.startsWith("text/") -> Icons.Filled.Description
+        mime == "application/pdf" -> Icons.Filled.PictureAsPdf
+        mime.startsWith("application/vnd.openxmlformats-officedocument") ||
+        mime.startsWith("application/vnd.oasis.opendocument") ||
+        mime.startsWith("application/msword") -> Icons.Filled.Description
+        else -> Icons.Filled.InsertDriveFile
+    }
 }

@@ -77,6 +77,10 @@ fun SettingsScreen(
     onOpenCustomHeaders: () -> Unit,
     onOpenServers: () -> Unit,
     modifier: Modifier = Modifier,
+    // True only in the wide-layout right pane, where the persistent left pane already shows
+    // "Settings" is the open section -- the top bar's own literal title adds nothing there, so
+    // it's dropped rather than shown redundantly. The back button stays exactly as it is either way.
+    isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showSignOutConfirm by remember { mutableStateOf(false) }
@@ -176,11 +180,13 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Settings",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    if (!isPaneMode) {
+                        Text(
+                            "Settings",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

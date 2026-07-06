@@ -2,23 +2,36 @@ package com.hermex.android.navigation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.createGraph
 import androidx.navigation.navArgument
 import com.hermex.android.AppContainer
 import com.hermex.android.auth.AuthState
@@ -36,6 +49,7 @@ import com.hermex.android.profiles.ProfilesScreen
 import com.hermex.android.profiles.ProfilesViewModel
 import com.hermex.android.projects.ProjectsScreen
 import com.hermex.android.projects.ProjectsViewModel
+import com.hermex.android.sessions.SessionListNavItem
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
 import com.hermex.android.sessions.ShareDestinationPicker
@@ -129,6 +143,11 @@ fun HermexNavGraph(
     externalIntentDestination: StateFlow<HermexIntentDestination?>? = null,
     onExternalIntentConsumed: () -> Unit = {},
 ) {
+    // Reactive width-class signal for the adaptive two-pane shell. Reading LocalConfiguration
+    // recomposes this on rotation/resize/multi-window, unlike a value computed once at launch.
+    // 600dp matches Material's compact/medium width-class boundary.
+    val isWideLayout = LocalConfiguration.current.screenWidthDp >= 600
+
     val isRestoring by appContainer.authRepository.isRestoring.collectAsStateWithLifecycle()
     val authState by appContainer.authRepository.state.collectAsStateWithLifecycle()
     val requestedDestination by externalIntentDestination?.collectAsStateWithLifecycle()
@@ -171,77 +190,89 @@ fun HermexNavGraph(
         onExternalIntentConsumed()
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = if (authState is AuthState.LoggedIn) Routes.SESSION_LIST else Routes.ONBOARDING,
-    ) {
-        composable(Routes.ONBOARDING) {
-            val viewModel: OnboardingViewModel = viewModel(factory = appContainer.onboardingViewModelFactory())
-            OnboardingScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
-        }
-        composable(Routes.SESSION_LIST) { backStackEntry ->
-            val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
-            // SessionListViewModel's instance persists across a push-to-Settings-and-back trip,
-            // since this back stack entry never leaves the graph -- so a header color change made
-            // there won't otherwise be reflected here without an explicit signal. Only reloads the
-            // color preference (fast, local), not a full session refetch.
-            val shouldRefreshHeaderColor by backStackEntry.savedStateHandle
-                .getStateFlow("refreshHeaderLogoColor", false)
-                .collectAsStateWithLifecycle()
-            LaunchedEffect(shouldRefreshHeaderColor) {
-                if (shouldRefreshHeaderColor) {
-                    viewModel.loadHeaderLogoColor()
-                    backStackEntry.savedStateHandle["refreshHeaderLogoColor"] = false
+    // Hoisted once so the exact same callbacks back both the compact SessionListScreen (rendered
+    // by the SESSION_LIST destination below) and the wide-layout left pane further down -- the two
+    // must navigate identically, so there's a single source of truth for them.
+    val onOpenSession: (String) -> Unit = { sessionId -> navController.navigate(Routes.chat(sessionId)) }
+    val onOpenSkills: () -> Unit = { navController.navigate(Routes.SKILLS) }
+    val onOpenMemory: () -> Unit = { navController.navigate(Routes.MEMORY) }
+    val onOpenTasks: () -> Unit = { navController.navigate(Routes.TASKS) }
+    val onOpenProfiles: () -> Unit = { navController.navigate(Routes.PROFILES) }
+    val onOpenProjects: () -> Unit = { navController.navigate(Routes.PROJECTS) }
+    val onOpenInsights: () -> Unit = { navController.navigate(Routes.INSIGHTS) }
+    val onOpenSettings: () -> Unit = { navController.navigate(Routes.SETTINGS) }
+
+    val startDestination = if (authState is AuthState.LoggedIn) Routes.SESSION_LIST else Routes.ONBOARDING
+
+    // Graph construction is hoisted out of NavHost (via the same createGraph() call NavHost uses
+    // internally) purely so the identical NavGraph value can be reused by whichever branch below
+    // renders NavHost, rather than rebuilding the builder lambda twice. NavHost itself still does
+    // all of its own internal bootstrap (attaching the graph, the ViewModelStore, back-press
+    // handling) when it composes -- see the wide-layout branch below for why composition order
+    // still matters despite that.
+    val navGraph = remember(navController, startDestination) {
+        navController.createGraph(startDestination = startDestination) {
+            composable(Routes.ONBOARDING) {
+                val viewModel: OnboardingViewModel = viewModel(factory = appContainer.onboardingViewModelFactory())
+                OnboardingScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
+            }
+            composable(Routes.SESSION_LIST) { backStackEntry ->
+                val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+                // SessionListViewModel's instance persists across a push-to-Settings-and-back trip,
+                // since this back stack entry never leaves the graph -- so a header color change made
+                // there won't otherwise be reflected here without an explicit signal. Only reloads the
+                // color preference (fast, local), not a full session refetch.
+                val shouldRefreshHeaderColor by backStackEntry.savedStateHandle
+                    .getStateFlow("refreshHeaderLogoColor", false)
+                    .collectAsStateWithLifecycle()
+                LaunchedEffect(shouldRefreshHeaderColor) {
+                    if (shouldRefreshHeaderColor) {
+                        viewModel.loadHeaderLogoColor()
+                        backStackEntry.savedStateHandle["refreshHeaderLogoColor"] = false
+                    }
+                }
+                // In wide layout the left pane already shows this exact content, so this
+                // destination becomes a quiet "nothing selected" placeholder instead of a second
+                // copy of the session list.
+                if (isWideLayout) {
+                    SessionListPlaceholder(modifier = Modifier.fillMaxSize())
+                } else {
+                    SessionListScreen(
+                        viewModel = viewModel,
+                        onOpenSession = onOpenSession,
+                        onOpenSkills = onOpenSkills,
+                        onOpenMemory = onOpenMemory,
+                        onOpenTasks = onOpenTasks,
+                        onOpenProfiles = onOpenProfiles,
+                        onOpenProjects = onOpenProjects,
+                        onOpenInsights = onOpenInsights,
+                        onOpenSettings = onOpenSettings,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
-            SessionListScreen(
-                viewModel = viewModel,
-                onOpenSession = { sessionId -> navController.navigate(Routes.chat(sessionId)) },
-                onOpenSkills = { navController.navigate(Routes.SKILLS) },
-                onOpenMemory = { navController.navigate(Routes.MEMORY) },
-                onOpenTasks = { navController.navigate(Routes.TASKS) },
-                onOpenProfiles = { navController.navigate(Routes.PROFILES) },
-                onOpenProjects = { navController.navigate(Routes.PROJECTS) },
-                onOpenInsights = { navController.navigate(Routes.INSIGHTS) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(
-            route = Routes.SHARE_PATTERN,
-            arguments = listOf(
-                navArgument("text") { type = NavType.StringType },
-                navArgument("fileUris") { type = NavType.StringType; nullable = true; defaultValue = null },
-            ),
-        ) { backStackEntry ->
-            val encodedText = backStackEntry.arguments?.getString("text").orEmpty()
-            val sharedText = URLDecoder.decode(encodedText, "UTF-8")
-            val rawFileUris = backStackEntry.arguments?.getString("fileUris")
-            val fileUris = rawFileUris?.takeIf { it.isNotEmpty() }
-                ?.let { decodeUriList(it) }
-                ?.ifEmpty { null }
+            composable(
+                route = Routes.SHARE_PATTERN,
+                arguments = listOf(
+                    navArgument("text") { type = NavType.StringType },
+                    navArgument("fileUris") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { backStackEntry ->
+                val encodedText = backStackEntry.arguments?.getString("text").orEmpty()
+                val sharedText = URLDecoder.decode(encodedText, "UTF-8")
+                val rawFileUris = backStackEntry.arguments?.getString("fileUris")
+                val fileUris = rawFileUris?.takeIf { it.isNotEmpty() }
+                    ?.let { decodeUriList(it) }
+                    ?.ifEmpty { null }
 
-            val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+                val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
 
-            ShareDestinationPicker(
-                viewModel = viewModel,
-                onSelectSession = { sessionId ->
-                    navController.navigate(
-                        Routes.chat(
-                            sessionId = sessionId,
-                            draft = sharedText.takeIf { it.isNotEmpty() },
-                            uploadUris = fileUris,
-                        ),
-                    ) {
-                        popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                },
-                onNewSession = {
-                    viewModel.createSession { newSessionId ->
+                ShareDestinationPicker(
+                    viewModel = viewModel,
+                    onSelectSession = { sessionId ->
                         navController.navigate(
                             Routes.chat(
-                                sessionId = newSessionId,
+                                sessionId = sessionId,
                                 draft = sharedText.takeIf { it.isNotEmpty() },
                                 uploadUris = fileUris,
                             ),
@@ -249,217 +280,352 @@ fun HermexNavGraph(
                             popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
                             launchSingleTop = true
                         }
-                    }
-                },
-                onBack = { navController.popBackStack() },
-            )
-        }
-        composable(Routes.SETTINGS) { backStackEntry ->
-            val viewModel: SettingsViewModel = viewModel(factory = appContainer.settingsViewModelFactory())
-            SettingsScreen(
-                viewModel = viewModel,
-                onBack = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshHeaderLogoColor", true)
-                    navController.popBackStack()
-                },
-                onOpenDefaultModel = { navController.navigate(Routes.DEFAULT_MODEL) },
-                onOpenCustomHeaders = { navController.navigate(Routes.CUSTOM_HEADERS) },
-                onOpenServers = { navController.navigate(Routes.SERVERS) },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.NEW_CHAT) {
-            val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
-            LaunchedEffect(Unit) {
-                viewModel.createSession { newSessionId ->
-                    navController.navigate(Routes.chat(newSessionId)) {
-                        popUpTo(Routes.NEW_CHAT) { inclusive = true }
-                        launchSingleTop = true
+                    },
+                    onNewSession = {
+                        viewModel.createSession { newSessionId ->
+                            navController.navigate(
+                                Routes.chat(
+                                    sessionId = newSessionId,
+                                    draft = sharedText.takeIf { it.isNotEmpty() },
+                                    uploadUris = fileUris,
+                                ),
+                            ) {
+                                popUpTo(Routes.SHARE_PATTERN) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SETTINGS) { backStackEntry ->
+                val viewModel: SettingsViewModel = viewModel(factory = appContainer.settingsViewModelFactory())
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshHeaderLogoColor", true)
+                        navController.popBackStack()
+                    },
+                    onOpenDefaultModel = { navController.navigate(Routes.DEFAULT_MODEL) },
+                    onOpenCustomHeaders = { navController.navigate(Routes.CUSTOM_HEADERS) },
+                    onOpenServers = { navController.navigate(Routes.SERVERS) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.NEW_CHAT) {
+                val viewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+                LaunchedEffect(Unit) {
+                    viewModel.createSession { newSessionId ->
+                        navController.navigate(Routes.chat(newSessionId)) {
+                            popUpTo(Routes.NEW_CHAT) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        composable(Routes.SERVERS) {
+            composable(Routes.SERVERS) {
                 val viewModel: ServersViewModel = viewModel(factory = appContainer.serversViewModelFactory())
                 ServersScreen(
-                viewModel = viewModel,
-                onBack = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.CUSTOM_HEADERS) {
+                val viewModel: CustomHeadersViewModel = viewModel(factory = appContainer.customHeadersViewModelFactory())
+                CustomHeadersScreen(
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.DEFAULT_MODEL) {
+                val viewModel: DefaultModelViewModel = viewModel(factory = appContainer.defaultModelViewModelFactory())
+                DefaultModelScreen(
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.INSIGHTS) {
+                val viewModel: InsightsViewModel = viewModel(factory = appContainer.insightsViewModelFactory())
+                InsightsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.PROFILES) {
+                val viewModel: ProfilesViewModel = viewModel(factory = appContainer.profilesViewModelFactory())
+                ProfilesScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.PROJECTS) {
+                val viewModel: ProjectsViewModel = viewModel(factory = appContainer.projectsViewModelFactory())
+                ProjectsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.TASKS) { backStackEntry ->
+                val viewModel: TasksViewModel = viewModel(factory = appContainer.tasksViewModelFactory())
+                // TasksViewModel's instance (and its list state) persists across a push-to-detail-
+                // and-back trip, since this back stack entry never leaves the graph -- so a delete
+                // on the detail screen won't otherwise be reflected here without an explicit signal.
+                val shouldRefresh by backStackEntry.savedStateHandle
+                    .getStateFlow("refreshTasks", false)
+                    .collectAsStateWithLifecycle()
+                LaunchedEffect(shouldRefresh) {
+                    if (shouldRefresh) {
+                        viewModel.load()
+                        backStackEntry.savedStateHandle["refreshTasks"] = false
+                    }
+                }
+                TasksScreen(
+                    viewModel = viewModel,
+                    onOpenTask = { jobId -> navController.navigate(Routes.taskDetail(jobId)) },
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(
+                route = Routes.TASK_DETAIL_PATTERN,
+                arguments = listOf(navArgument("jobId") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val encodedJobId = backStackEntry.arguments?.getString("jobId").orEmpty()
+                val jobId = URLDecoder.decode(encodedJobId, "UTF-8")
+                val viewModel: TaskDetailViewModel = viewModel(
+                    key = jobId,
+                    factory = appContainer.taskDetailViewModelFactory(jobId),
+                )
+                TaskDetailScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onDeleted = {
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshTasks", true)
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.MEMORY) {
+                val viewModel: MemoryViewModel = viewModel(factory = appContainer.memoryViewModelFactory())
+                MemoryScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.SKILLS) {
+                val viewModel: SkillsViewModel = viewModel(factory = appContainer.skillsViewModelFactory())
+                SkillsScreen(
+                    viewModel = viewModel,
+                    onOpenSkill = { name -> navController.navigate(Routes.skillDetail(name)) },
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(
+                route = Routes.SKILL_DETAIL_PATTERN,
+                arguments = listOf(navArgument("name") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val encodedName = backStackEntry.arguments?.getString("name").orEmpty()
+                val skillName = URLDecoder.decode(encodedName, "UTF-8")
+                val viewModel: SkillDetailViewModel = viewModel(
+                    key = skillName,
+                    factory = appContainer.skillDetailViewModelFactory(skillName),
+                )
+                SkillDetailScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(
+                route = Routes.CHAT_PATTERN,
+                arguments = listOf(
+                    navArgument("sessionId") { type = NavType.StringType },
+                    navArgument("draft") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("uploadUris") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { backStackEntry ->
+                val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+                val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
+                val initialDraft = backStackEntry.arguments?.getString("draft")?.let { URLDecoder.decode(it, "UTF-8") }
+                val rawUploadUris = backStackEntry.arguments?.getString("uploadUris")
+                val pendingUploadUris = rawUploadUris?.takeIf { it.isNotEmpty() }
+                    ?.let { decodeUriList(it) }
+                    ?.ifEmpty { null }
+                val viewModel: ChatViewModel = viewModel(
+                    key = sessionId,
+                    factory = appContainer.chatViewModelFactory(sessionId),
+                )
+                ChatScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onSwitchedSession = { newSessionId ->
+                        navController.navigate(Routes.chat(newSessionId)) {
+                            popUpTo(Routes.chat(sessionId)) { inclusive = true }
+                        }
+                    },
+                    onOpenWorkspace = { navController.navigate(Routes.files(sessionId)) },
+                    modifier = Modifier.fillMaxSize(),
+                    initialComposerDraft = initialDraft,
+                    pendingFileUploadUris = pendingUploadUris,
+                    isPaneMode = isWideLayout,
+                )
+            }
+            composable(
+                route = Routes.FILES_PATTERN,
+                arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+                val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
+                val viewModel: WorkspaceViewModel = viewModel(
+                    key = sessionId,
+                    factory = appContainer.workspaceViewModelFactory(sessionId),
+                )
+                WorkspaceScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
-        composable(Routes.CUSTOM_HEADERS) {
-            val viewModel: CustomHeadersViewModel = viewModel(factory = appContainer.customHeadersViewModelFactory())
-            CustomHeadersScreen(
-                viewModel = viewModel,
-                onBack = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.DEFAULT_MODEL) {
-            val viewModel: DefaultModelViewModel = viewModel(factory = appContainer.defaultModelViewModelFactory())
-            DefaultModelScreen(
-                viewModel = viewModel,
-                onBack = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshSettings", true)
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.INSIGHTS) {
-            val viewModel: InsightsViewModel = viewModel(factory = appContainer.insightsViewModelFactory())
-            InsightsScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.PROFILES) {
-            val viewModel: ProfilesViewModel = viewModel(factory = appContainer.profilesViewModelFactory())
-            ProfilesScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.PROJECTS) {
-            val viewModel: ProjectsViewModel = viewModel(factory = appContainer.projectsViewModelFactory())
-            ProjectsScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.TASKS) { backStackEntry ->
-            val viewModel: TasksViewModel = viewModel(factory = appContainer.tasksViewModelFactory())
-            // TasksViewModel's instance (and its list state) persists across a push-to-detail-
-            // and-back trip, since this back stack entry never leaves the graph -- so a delete
-            // on the detail screen won't otherwise be reflected here without an explicit signal.
-            val shouldRefresh by backStackEntry.savedStateHandle
-                .getStateFlow("refreshTasks", false)
-                .collectAsStateWithLifecycle()
-            LaunchedEffect(shouldRefresh) {
-                if (shouldRefresh) {
-                    viewModel.load()
-                    backStackEntry.savedStateHandle["refreshTasks"] = false
+    }
+
+    if (isWideLayout && authState is AuthState.LoggedIn) {
+        // Composition order vs. visual order, and why they're deliberately decoupled here:
+        //
+        // 1. NavHost MUST be the first thing composed in this Row. It performs its own internal
+        //    bootstrap on composition -- attaching the graph to navController, attaching the
+        //    ViewModelStore, wiring back-press handling -- and none of that is replicated in this
+        //    file. The left pane below depends on that bootstrap having already happened, since
+        //    it calls navController.getBackStackEntry(SESSION_LIST), which throws if the back
+        //    stack has no entries yet. (Confirmed the hard way: composing the left pane before
+        //    NavHost crashed twice, once for the missing back stack entry and once for the
+        //    missing ViewModelStore -- two separate pieces of NavHost's own setup.)
+        // 2. Visually, the left pane must still appear on the LEFT and NavHost (the right content
+        //    pane) on the RIGHT -- the opposite of the composition order required by point 1.
+        // 3. The CompositionLocalProvider(LayoutDirection.Rtl) / .Ltr pair below resolves that
+        //    conflict by decoupling composition order from visual order: Row lays out children
+        //    left-to-right in RTL context, which means "first-declared" maps to "rightmost". So
+        //    NavHost is declared (and composed) first, satisfying point 1, but renders visually on
+        //    the right, satisfying point 2. Each child is wrapped back in its own Ltr provider so
+        //    its own content (text, icons) still reads normally -- only the Row's own child
+        //    placement is mirrored, not the panes' internal layout.
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    NavHost(
+                        navController = navController,
+                        graph = navGraph,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    // Shares the SESSION_LIST destination's own ViewModel (rather than creating a
+                    // second, independent instance) by explicitly using its back stack entry as
+                    // the store owner -- outside a composable() block, viewModel() would otherwise
+                    // resolve to the Activity's ViewModelStoreOwner instead.
+                    val sessionListEntry = remember(navController) {
+                        navController.getBackStackEntry(Routes.SESSION_LIST)
+                    }
+                    val leftPaneViewModel: SessionListViewModel = viewModel(
+                        viewModelStoreOwner = sessionListEntry,
+                        factory = appContainer.sessionListViewModelFactory(),
+                    )
+
+                    // Drives the left pane's selected-state highlighting. Read here (after NavHost
+                    // above has already composed/bootstrapped) rather than before it, for the same
+                    // ordering reason spelled out above -- currentBackStackEntryAsState() itself is
+                    // unlikely to need the bootstrap, but keeping every navController read in this
+                    // block after NavHost avoids reopening that class of hazard for a future reader.
+                    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = currentBackStackEntry?.destination?.route
+                    val selectedNavItem = when (currentRoute) {
+                        Routes.TASKS -> SessionListNavItem.TASKS
+                        Routes.SKILLS -> SessionListNavItem.SKILLS
+                        Routes.MEMORY -> SessionListNavItem.MEMORY
+                        Routes.INSIGHTS -> SessionListNavItem.INSIGHTS
+                        Routes.PROFILES -> SessionListNavItem.PROFILES
+                        Routes.PROJECTS -> SessionListNavItem.PROJECTS
+                        else -> null
+                    }
+                    // destination.route is the route *pattern* ("chat/{sessionId}?..."), not the
+                    // resolved path, so comparing against CHAT_PATTERN is reliable regardless of
+                    // which session is open. The argument is decoded the same way the CHAT_PATTERN
+                    // composable below decodes it, so it compares equal to SessionSummary.sessionId.
+                    val selectedSessionId = currentBackStackEntry
+                        ?.takeIf { currentRoute == Routes.CHAT_PATTERN }
+                        ?.arguments?.getString("sessionId")
+                        ?.let { URLDecoder.decode(it, "UTF-8") }
+
+                    SessionListScreen(
+                        viewModel = leftPaneViewModel,
+                        onOpenSession = onOpenSession,
+                        onOpenSkills = onOpenSkills,
+                        onOpenMemory = onOpenMemory,
+                        onOpenTasks = onOpenTasks,
+                        onOpenProfiles = onOpenProfiles,
+                        onOpenProjects = onOpenProjects,
+                        onOpenInsights = onOpenInsights,
+                        onOpenSettings = onOpenSettings,
+                        modifier = Modifier
+                            .width(400.dp)
+                            .fillMaxHeight(),
+                        selectedNavItem = selectedNavItem,
+                        selectedSessionId = selectedSessionId,
+                    )
                 }
             }
-            TasksScreen(
-                viewModel = viewModel,
-                onOpenTask = { jobId -> navController.navigate(Routes.taskDetail(jobId)) },
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
         }
-        composable(
-            route = Routes.TASK_DETAIL_PATTERN,
-            arguments = listOf(navArgument("jobId") { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val encodedJobId = backStackEntry.arguments?.getString("jobId").orEmpty()
-            val jobId = URLDecoder.decode(encodedJobId, "UTF-8")
-            val viewModel: TaskDetailViewModel = viewModel(
-                key = jobId,
-                factory = appContainer.taskDetailViewModelFactory(jobId),
+    } else {
+        NavHost(
+            navController = navController,
+            graph = navGraph,
+        )
+    }
+}
+
+/**
+ * Quiet "nothing selected" landing state for the right pane in wide layout, shown while the
+ * current destination is SESSION_LIST (i.e. the persistent left pane already covers everything
+ * this destination would otherwise render). Deliberately undecorated -- this is a first wiring
+ * pass, not a polish pass.
+ */
+@Composable
+private fun SessionListPlaceholder(modifier: Modifier = Modifier) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Hermex",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
             )
-            TaskDetailScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                onDeleted = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("refreshTasks", true)
-                    navController.popBackStack()
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.MEMORY) {
-            val viewModel: MemoryViewModel = viewModel(factory = appContainer.memoryViewModelFactory())
-            MemoryScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(Routes.SKILLS) {
-            val viewModel: SkillsViewModel = viewModel(factory = appContainer.skillsViewModelFactory())
-            SkillsScreen(
-                viewModel = viewModel,
-                onOpenSkill = { name -> navController.navigate(Routes.skillDetail(name)) },
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(
-            route = Routes.SKILL_DETAIL_PATTERN,
-            arguments = listOf(navArgument("name") { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val encodedName = backStackEntry.arguments?.getString("name").orEmpty()
-            val skillName = URLDecoder.decode(encodedName, "UTF-8")
-            val viewModel: SkillDetailViewModel = viewModel(
-                key = skillName,
-                factory = appContainer.skillDetailViewModelFactory(skillName),
-            )
-            SkillDetailScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        composable(
-            route = Routes.CHAT_PATTERN,
-            arguments = listOf(
-                navArgument("sessionId") { type = NavType.StringType },
-                navArgument("draft") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("uploadUris") { type = NavType.StringType; nullable = true; defaultValue = null },
-            ),
-        ) { backStackEntry ->
-            val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
-            val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
-            val initialDraft = backStackEntry.arguments?.getString("draft")?.let { URLDecoder.decode(it, "UTF-8") }
-            val rawUploadUris = backStackEntry.arguments?.getString("uploadUris")
-            val pendingUploadUris = rawUploadUris?.takeIf { it.isNotEmpty() }
-                ?.let { decodeUriList(it) }
-                ?.ifEmpty { null }
-            val viewModel: ChatViewModel = viewModel(
-                key = sessionId,
-                factory = appContainer.chatViewModelFactory(sessionId),
-            )
-            ChatScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                onSwitchedSession = { newSessionId ->
-                    navController.navigate(Routes.chat(newSessionId)) {
-                        popUpTo(Routes.chat(sessionId)) { inclusive = true }
-                    }
-                },
-                onOpenWorkspace = { navController.navigate(Routes.files(sessionId)) },
-                modifier = Modifier.fillMaxSize(),
-                initialComposerDraft = initialDraft,
-                pendingFileUploadUris = pendingUploadUris,
-            )
-        }
-        composable(
-            route = Routes.FILES_PATTERN,
-            arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val encodedSessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
-            val sessionId = URLDecoder.decode(encodedSessionId, "UTF-8")
-            val viewModel: WorkspaceViewModel = viewModel(
-                key = sessionId,
-                factory = appContainer.workspaceViewModelFactory(sessionId),
-            )
-            WorkspaceScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Choose a session or tool from the left.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

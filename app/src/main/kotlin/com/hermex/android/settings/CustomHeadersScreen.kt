@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.storage.CustomHttpHeader
+import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +81,7 @@ fun CustomHeadersScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        HermexReadableContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),

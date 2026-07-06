@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.ModelCatalogOption
+import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,7 +82,7 @@ fun DefaultModelScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        HermexReadableContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),

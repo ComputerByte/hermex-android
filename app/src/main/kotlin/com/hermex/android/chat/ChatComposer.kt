@@ -121,6 +121,10 @@ data class ChatComposerAttachmentState(
     }
 }
 
+/** Caps how wide the composer dock ever gets, so a large tablet's wide-layout right pane doesn't
+ * stretch it into an uncomfortably wide, hard-to-scan input. Never binds on phone-scale widths. */
+private val ComposerMaxWidth = 840.dp
+
 /**
  * A two-tier composer dock (input row on top, a horizontally-scrollable control strip of
  * Hermex-styled chips below), modeled on the Hermes WebUI/Desktop composer rather than a plain
@@ -150,105 +154,114 @@ fun ChatComposer(
     // confirm Scaffold's innerPadding is actually reserving this much space for the transcript
     // (see ChatScreen investigation notes on composer/content overlap).
     var lastLoggedHeightPx by remember { mutableStateOf(-1) }
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { coordinates ->
-                val heightPx = coordinates.size.height
-                if (heightPx != lastLoggedHeightPx) {
-                    lastLoggedHeightPx = heightPx
-                    HermexLog.d("Composer", "measured height=${heightPx}px")
-                }
-            },
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(topStart = HermexRadii.SettingsCard, topEnd = HermexRadii.SettingsCard),
-        tonalElevation = 4.dp,
-    ) {
-        Column(modifier = Modifier.navigationBarsPadding()) {
-            // Hairline separating the dock from the message list above -- the app-wide substitute
-            // for wrapping the whole (now asymmetrically-rounded) shape in a border.
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 1.dp)
+    // Capped and centered rather than left plain fillMaxWidth(), so the dock doesn't stretch to an
+    // awkward, hard-to-type-in width on a large tablet's wide-layout right pane. On any phone-scale
+    // width (compact or the adaptive shell's ~400dp right pane) the cap never binds, so this Box is
+    // a no-op there -- outer width stays fillMaxWidth() exactly as before, just with the (possibly
+    // narrower) dock centered inside it.
+    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = ComposerMaxWidth)
+                .onGloballyPositioned { coordinates ->
+                    val heightPx = coordinates.size.height
+                    if (heightPx != lastLoggedHeightPx) {
+                        lastLoggedHeightPx = heightPx
+                        HermexLog.d("Composer", "measured height=${heightPx}px")
+                    }
+                },
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(topStart = HermexRadii.SettingsCard, topEnd = HermexRadii.SettingsCard),
+            tonalElevation = 4.dp,
+        ) {
+            Column(modifier = Modifier.navigationBarsPadding()) {
+                // Hairline separating the dock from the message list above -- the app-wide
+                // substitute for wrapping the whole (now asymmetrically-rounded) shape in a border.
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 1.dp)
 
-            if (attachmentState.pendingAttachments.isNotEmpty()) {
-                PendingAttachmentStrip(
-                    attachments = attachmentState.pendingAttachments,
-                    onRemove = actions.onRemoveAttachment,
-                )
-            }
-
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = composerState.text,
-                        onValueChange = actions.onTextChanged,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message Hermex…") },
-                        enabled = composerState.isTextFieldEnabled,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(HermexRadii.Composer),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                        ),
+                if (attachmentState.pendingAttachments.isNotEmpty()) {
+                    PendingAttachmentStrip(
+                        attachments = attachmentState.pendingAttachments,
+                        onRemove = actions.onRemoveAttachment,
                     )
-                    Spacer(Modifier.width(8.dp))
-                    // Fixed-size slot for the trailing action -- Stop/Send (both IconButton-family,
-                    // 48dp by default) and the bare sending spinner previously had no shared box, so
-                    // the control visibly jumped size as the composer moved between states.
-                    Box(
-                        modifier = Modifier.size(48.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        when {
-                            composerState.showStopButton -> FilledTonalIconButton(
-                                onClick = actions.onStop,
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    contentColor = MaterialTheme.colorScheme.error,
-                                ),
-                            ) {
-                                Icon(Icons.Filled.Close, contentDescription = "Stop")
-                            }
-                            composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                }
+
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = composerState.text,
+                            onValueChange = actions.onTextChanged,
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Message Hermex…") },
+                            enabled = composerState.isTextFieldEnabled,
+                            maxLines = 5,
+                            shape = RoundedCornerShape(HermexRadii.Composer),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            ),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        // Fixed-size slot for the trailing action -- Stop/Send (both IconButton-
+                        // family, 48dp by default) and the bare sending spinner previously had no
+                        // shared box, so the control visibly jumped size as the composer moved
+                        // between states.
+                        Box(
+                            modifier = Modifier.size(48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            when {
+                                composerState.showStopButton -> FilledTonalIconButton(
+                                    onClick = actions.onStop,
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.error,
+                                    ),
+                                ) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Stop")
+                                }
+                                composerState.showSendingSpinner -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                else -> FilledIconButton(onClick = actions.onSend, enabled = composerState.canSend) {
+                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                                }
                             }
                         }
                     }
-                }
-                Spacer(Modifier.height(8.dp))
-                // The bottom control strip -- Hermex-styled chips for Attach/Profile/Model, each
-                // mapping to a real existing action, scrollable so it never clips or wraps
-                // awkwardly on narrow phones.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AttachFileButton(
-                        enabled = composerState.isAttachButtonEnabled,
-                        isUploading = composerState.isUploadingAttachment,
-                        onAttachFile = actions.onAttachFile,
-                    )
-                    ProfileSelectorButton(
-                        profileOptions = profileSelectorState.profileOptions,
-                        selectedProfileName = profileSelectorState.selectedProfileName,
-                        isSwitchingProfile = composerState.isProfileSelectorLoading,
-                        onSelectProfile = actions.onSelectProfile,
-                    )
-                    ModelSelectorButton(
-                        modelCatalogGroups = modelSelectorState.modelCatalogGroups,
-                        currentModel = modelSelectorState.currentModel,
-                        currentModelProvider = modelSelectorState.currentModelProvider,
-                        isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
-                        isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
-                        onOpenModelPicker = actions.onOpenModelPicker,
-                        onSelectModel = actions.onSelectModel,
-                    )
+                    Spacer(Modifier.height(8.dp))
+                    // The bottom control strip -- Hermex-styled chips for Attach/Profile/Model,
+                    // each mapping to a real existing action, scrollable so it never clips or wraps
+                    // awkwardly on narrow phones.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AttachFileButton(
+                            enabled = composerState.isAttachButtonEnabled,
+                            isUploading = composerState.isUploadingAttachment,
+                            onAttachFile = actions.onAttachFile,
+                        )
+                        ProfileSelectorButton(
+                            profileOptions = profileSelectorState.profileOptions,
+                            selectedProfileName = profileSelectorState.selectedProfileName,
+                            isSwitchingProfile = composerState.isProfileSelectorLoading,
+                            onSelectProfile = actions.onSelectProfile,
+                        )
+                        ModelSelectorButton(
+                            modelCatalogGroups = modelSelectorState.modelCatalogGroups,
+                            currentModel = modelSelectorState.currentModel,
+                            currentModelProvider = modelSelectorState.currentModelProvider,
+                            isLoadingModelCatalog = modelSelectorState.isLoadingModelCatalog,
+                            isUpdatingComposerConfiguration = composerState.isModelSelectorLoading,
+                            onOpenModelPicker = actions.onOpenModelPicker,
+                            onSelectModel = actions.onSelectModel,
+                        )
+                    }
                 }
             }
         }

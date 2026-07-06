@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.chat.MarkdownText
 import com.hermex.android.core.network.dto.CronJobStatus
 import com.hermex.android.sessions.relativeTimeText
+import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,7 +129,7 @@ fun TaskDetailScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        HermexReadableContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),

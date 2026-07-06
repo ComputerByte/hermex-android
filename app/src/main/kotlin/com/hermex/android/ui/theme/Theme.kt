@@ -30,6 +30,8 @@ object HermexColors {
     val DarkSurfaceHighest = Color(0xFF2C2C2E)
     val DarkLabel = Color(0xFFFFFFFF)
     val DarkSecondaryLabel = Color(0xFF98989F)
+    val DarkTertiaryLabel = Color(0xFF636366)
+    val LightTertiaryLabel = Color(0xFFC4C4C6)
     val DarkSeparator = Color(0xFF38383A)
     val UserBubbleDark = Color(0xFF48484A)
     val CodeBackgroundDark = Color(0xFF0A0D12)
@@ -63,6 +65,17 @@ object HermexRadii {
     val Bubble = 20.dp
     val Composer = 22.dp
     val Code = 24.dp
+}
+
+/** Common spacing scale for new/restyled layouts. Existing screens keep their inline dp values
+ * until they're touched by a restyle pass; this isn't meant to force a retrofit. */
+object HermexSpacing {
+    val XS = 4.dp
+    val SM = 8.dp
+    val MD = 12.dp
+    val LG = 16.dp
+    val XL = 24.dp
+    val XXL = 32.dp
 }
 
 // Kept for the legacy Settings header-color option. It is not the primary action/accent color.

@@ -60,6 +60,10 @@ fun ChatScreen(
     modifier: Modifier = Modifier,
     initialComposerDraft: String? = null,
     pendingFileUploadUris: List<String>? = null,
+    // True only in the wide-layout right pane, where the persistent left pane already shows which
+    // session is open -- the top bar's own "Chat" label adds nothing there, so it's dropped rather
+    // than shown redundantly. Back/Files/Refresh stay exactly as they are either way.
+    isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -100,11 +104,13 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Chat",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    if (!isPaneMode) {
+                        Text(
+                            "Chat",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

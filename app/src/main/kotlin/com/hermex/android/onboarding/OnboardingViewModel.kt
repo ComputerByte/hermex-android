@@ -5,8 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.auth.AuthState
 import com.hermex.android.auth.AuthState.LoggedOut
+import com.hermex.android.auth.InvalidServerUrlException
 import com.hermex.android.auth.LoginOutcome
 import com.hermex.android.auth.PASSKEY_ONLY_MESSAGE
+import com.hermex.android.auth.ServerUrlNormalizer
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +30,8 @@ class OnboardingViewModel(
     )
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
+    private var urlValidationJob: kotlinx.coroutines.Job? = null
+
     fun onServerUrlChanged(value: String) {
         _uiState.update {
             it.copy(
@@ -36,6 +41,16 @@ class OnboardingViewModel(
                 passkeyOnlyBlocked = false,
                 errorMessage = null,
             )
+        }
+        urlValidationJob?.cancel()
+        urlValidationJob = viewModelScope.launch {
+            if (value.isBlank()) return@launch
+            delay(500L)
+            try {
+                ServerUrlNormalizer.normalize(value)
+            } catch (e: InvalidServerUrlException) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Enter a valid server URL.") }
+            }
         }
     }
 

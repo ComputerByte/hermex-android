@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -339,6 +340,13 @@ fun ChatScreen(
                                         tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.6f),
                                         modifier = Modifier.size(18.dp),
                                     )
+                                }
+                                TextButton(
+                                    onClick = { viewModel.sendMessage() },
+                                    modifier = Modifier.height(24.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp),
+                                ) {
+                                    Text("Retry", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }

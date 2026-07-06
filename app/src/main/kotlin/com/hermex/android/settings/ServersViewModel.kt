@@ -8,6 +8,7 @@ import com.hermex.android.auth.ServerUrlNormalizer
 import com.hermex.android.core.storage.HermexServerConfig
 import com.hermex.android.core.storage.ServerStore
 import com.hermex.android.core.storage.defaultServerName
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,8 +58,20 @@ class ServersViewModel(
         _uiState.update { it.copy(editorName = value) }
     }
 
+    private var urlValidationJob: kotlinx.coroutines.Job? = null
+
     fun updateEditorUrl(value: String) {
         _uiState.update { it.copy(editorUrl = value, editorError = null, connectionTestError = null) }
+        urlValidationJob?.cancel()
+        urlValidationJob = viewModelScope.launch {
+            if (value.isBlank()) return@launch
+            delay(500L)
+            try {
+                ServerUrlNormalizer.normalize(value)
+            } catch (e: InvalidServerUrlException) {
+                _uiState.update { it.copy(editorError = e.message ?: "Enter a valid server URL.") }
+            }
+        }
     }
 
     fun dismissEditor() {

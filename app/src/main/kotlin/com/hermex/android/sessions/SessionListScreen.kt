@@ -18,18 +18,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
@@ -39,8 +35,6 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -58,7 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -67,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.ui.theme.HermexColors
 import com.hermex.android.ui.theme.HermexRadii
 import com.hermex.android.ui.theme.HermexSpacing
@@ -84,15 +78,14 @@ import java.util.Locale
  */
 enum class SessionListNavItem { TASKS, SKILLS, MEMORY, INSIGHTS, PROFILES, PROJECTS }
 
-/** Clears the floating New Chat + avatar row at the bottom of the list, independent of the
+/** Clears the floating New Chat button at the bottom of the list, independent of the
  * system navigation bar inset (added separately via `navigationBarsPadding()` where this is used). */
 private val SessionListBottomControlsHeight = 96.dp
 
 /**
- * The nav destinations that live above the session list (Skills, and -- as each phase lands --
- * Memory/Tasks/Profiles/Projects/Insights) render as leading rows in one continuous scrollable
- * list here, mirroring the iOS app's single-screen layout rather than hiding them behind a
- * separate drawer.
+ * The nav destinations that live above the session list are now accessed via a slide-out drawer
+ * (hamburger menu), mirroring the Claude iOS app layout. The drawer contains nav items, recents,
+ * and a New Chat button. The session list itself shows only chats grouped by date.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,6 +109,7 @@ fun SessionListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var isSearchActive by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
+    val openDrawer = LocalHermexDrawerOpener.current
 
     LaunchedEffect(isSearchActive) {
         if (isSearchActive) searchFocusRequester.requestFocus()
@@ -123,176 +117,154 @@ fun SessionListScreen(
 
     Scaffold(
         modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (isSearchActive) {
-                        TextField(
-                            value = uiState.searchQuery,
-                            onValueChange = viewModel::onSearchQueryChanged,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(searchFocusRequester),
-                            placeholder = { Text("Search sessions") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        if (isSearchActive) {
+                            TextField(
+                                value = uiState.searchQuery,
+                                onValueChange = viewModel::onSearchQueryChanged,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(searchFocusRequester),
+                                placeholder = { Text("Search sessions") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(percent = 50),
+                                colors = TextFieldDefaults.colors(
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                ),
+                            )
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { openDrawer() }) {
+                                    Icon(
+                                        Icons.Filled.Menu,
+                                        contentDescription = "Open menu",
+                                    )
+                                }
+                                Text(
+                                    text = "Hermex",
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = uiState.headerLogoColor.toComposeColor(),
                                 )
-                            },
-                            singleLine = true,
-                            shape = RoundedCornerShape(percent = 50),
-                            colors = TextFieldDefaults.colors(
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                            ),
-                        )
-                    } else {
-                        Text(
-                            text = "Hermex",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = uiState.headerLogoColor.toComposeColor(),
-                        )
-                    }
-                },
-                actions = {
-                    if (isSearchActive) {
-                        IconButton(onClick = {
-                            isSearchActive = false
-                            viewModel.onSearchQueryChanged("")
-                        }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close search")
-                        }
-                    } else {
-                        // Reuses the existing refresh() call that already backs pull-to-refresh
-                        // below -- no new ViewModel/API surface needed for this action.
-                        IconButton(onClick = viewModel::refresh) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh sessions")
-                        }
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search sessions")
-                        }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Filled.AccountCircle, contentDescription = "Settings")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                ),
-            )
-        },
-        floatingActionButton = {
-            // BoxWithConstraints reports the width Scaffold gives this slot (effectively the
-            // screen width), so narrow devices fall back to an icon-only pill rather than
-            // clipping or crowding an "New Chat" label. Sharing this single slot (rather than a
-            // second independent overlay) means the avatar and the CTA share the same Scaffold-
-            // computed placement/inset handling.
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val useCompactFab = maxWidth < 360.dp
-                val onNewChat = { viewModel.createSession(onOpenSession) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    ) {
-                        Icon(
-                            Icons.Filled.AccountCircle,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (useCompactFab) {
-                        FloatingActionButton(
-                            onClick = onNewChat,
-                            shape = RoundedCornerShape(HermexRadii.Dialog),
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                        ) {
-                            if (uiState.isCreatingSession) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            } else {
-                                Icon(Icons.Filled.Edit, contentDescription = "New chat")
                             }
                         }
-                    } else {
-                        ExtendedFloatingActionButton(
-                            onClick = onNewChat,
-                            shape = RoundedCornerShape(HermexRadii.Dialog),
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            icon = {
+                    },
+                    actions = {
+                        if (isSearchActive) {
+                            IconButton(onClick = {
+                                isSearchActive = false
+                                viewModel.onSearchQueryChanged("")
+                            }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Close search")
+                            }
+                        } else {
+                            // Reuses the existing refresh() call that already backs pull-to-refresh
+                            // below -- no new ViewModel/API surface needed for this action.
+                            IconButton(onClick = viewModel::refresh) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh sessions")
+                            }
+                            IconButton(onClick = { isSearchActive = true }) {
+                                Icon(Icons.Filled.Search, contentDescription = "Search sessions")
+                            }
+                            IconButton(onClick = onOpenSettings) {
+                                Icon(Icons.Filled.AccountCircle, contentDescription = "Settings")
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            },
+            floatingActionButton = {
+                // BoxWithConstraints reports the width Scaffold gives this slot (effectively the
+                // screen width), so narrow devices fall back to an icon-only pill rather than
+                // clipping or crowding a "New Chat" label.
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val useCompactFab = maxWidth < 360.dp
+                    val onNewChat = { viewModel.createSession(onOpenSession) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        if (useCompactFab) {
+                            FloatingActionButton(
+                                onClick = onNewChat,
+                                shape = RoundedCornerShape(HermexRadii.Dialog),
+                                containerColor = Color.White,
+                                contentColor = Color.Black,
+                            ) {
                                 if (uiState.isCreatingSession) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(24.dp),
                                         strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        color = Color.Black,
                                     )
                                 } else {
-                                    Icon(Icons.Filled.Edit, contentDescription = null)
+                                    Icon(Icons.Filled.Edit, contentDescription = "New chat")
                                 }
-                            },
-                            text = { Text("New Chat", fontWeight = FontWeight.SemiBold) },
-                        )
+                            }
+                        } else {
+                            ExtendedFloatingActionButton(
+                                onClick = onNewChat,
+                                shape = RoundedCornerShape(HermexRadii.Dialog),
+                                containerColor = Color.White,
+                                contentColor = Color.Black,
+                                icon = {
+                                    if (uiState.isCreatingSession) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Color.Black,
+                                        )
+                                    } else {
+                                        Icon(Icons.Filled.Edit, contentDescription = null)
+                                    }
+                                },
+                                text = { Text("New Chat", fontWeight = FontWeight.SemiBold) },
+                            )
+                        }
                     }
                 }
-            }
-        },
-    ) { innerPadding ->
-        SessionListBody(
-            viewModel = viewModel,
-            onOpenSession = onOpenSession,
-            onOpenSkills = onOpenSkills,
-            onOpenMemory = onOpenMemory,
-            onOpenTasks = onOpenTasks,
-            onOpenProfiles = onOpenProfiles,
-            onOpenProjects = onOpenProjects,
-            onOpenInsights = onOpenInsights,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            selectedNavItem = selectedNavItem,
-            selectedSessionId = selectedSessionId,
-        )
-    }
+            },
+        ) { innerPadding ->
+            SessionListBody(
+                viewModel = viewModel,
+                onOpenSession = onOpenSession,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                selectedSessionId = selectedSessionId,
+            )
+        }
 }
 
 /**
- * The scrollable body of the session list screen (nav rows + session list + status/error
- * banners), extracted from [SessionListScreen] so it can be reused as the persistent left-pane
- * content once the adaptive two-pane shell lands, without duplicating this rendering logic.
- * [SessionListScreen] retains ownership of the surrounding `Scaffold` (top bar, FAB/avatar row).
+ * The scrollable body of the session list screen (session list + status/error banners), extracted
+ * from [SessionListScreen] so it can be reused as the persistent left-pane content once the
+ * adaptive two-pane shell lands. Nav items now live in the slide-out drawer owned by
+ * [SessionListScreen].
  */
 @Composable
 fun SessionListBody(
     viewModel: SessionListViewModel,
     onOpenSession: (String) -> Unit,
-    onOpenSkills: () -> Unit,
-    onOpenMemory: () -> Unit,
-    onOpenTasks: () -> Unit,
-    onOpenProfiles: () -> Unit,
-    onOpenProjects: () -> Unit,
-    onOpenInsights: () -> Unit,
     modifier: Modifier = Modifier,
-    selectedNavItem: SessionListNavItem? = null,
     selectedSessionId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -334,114 +306,6 @@ fun SessionListBody(
                         }
                     }
                 }
-            }
-            item(key = "nav-tasks") {
-                val isSelected = selectedNavItem == SessionListNavItem.TASKS
-                ListItem(
-                    modifier = Modifier.clickable(onClick = onOpenTasks).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Tasks", isSelected = isSelected) },
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.DateRange,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    ),
-                )
-            }
-            item(key = "nav-skills") {
-                val isSelected = selectedNavItem == SessionListNavItem.SKILLS
-                ListItem(
-                    modifier = Modifier.clickable(onClick = onOpenSkills).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Skills", isSelected = isSelected) },
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Build,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    ),
-                )
-            }
-            item(key = "nav-memory") {
-                val isSelected = selectedNavItem == SessionListNavItem.MEMORY
-                ListItem(
-                    modifier = Modifier.clickable(onClick = onOpenMemory).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Memory", isSelected = isSelected) },
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Face,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    ),
-                )
-            }
-            item(key = "nav-insights") {
-                val isSelected = selectedNavItem == SessionListNavItem.INSIGHTS
-                ListItem(
-                    modifier = Modifier.clickable(onClick = onOpenInsights).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Insights", isSelected = isSelected) },
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    ),
-                )
-            }
-            item(key = "nav-profiles") {
-                val isSelected = selectedNavItem == SessionListNavItem.PROFILES
-                ListItem(
-                    modifier = Modifier.clickable(onClick = onOpenProfiles).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Profiles", isSelected = isSelected) },
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Person,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    ),
-                )
-            }
-            item(key = "nav-projects") {
-                val isSelected = selectedNavItem == SessionListNavItem.PROJECTS
-                ListItem(
-                    modifier = Modifier.clickable(onClick = onOpenProjects).padding(vertical = HermexSpacing.XS),
-                    headlineContent = { NavItemLabel("Projects", isSelected = isSelected) },
-                    leadingContent = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.List,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    ),
-                )
             }
             item(key = "sessions-header") {
                 Text(
@@ -537,12 +401,10 @@ fun SessionListBody(
                 }
             }
             item(key = "bottom-controls-clearance") {
-                // The FAB row (New Chat + avatar) floats over this list and isn't otherwise
-                // accounted for by Scaffold's innerPadding, so the last session row would
-                // otherwise be permanently stuck behind it. navigationBarsPadding() stacks the
-                // system nav bar inset on top of that fixed clearance -- both compact and wide
-                // layouts draw edge-to-edge (see ChatComposer's own navigationBarsPadding() use),
-                // so on-screen nav bar height must be cleared in addition to the FAB/avatar row.
+                // The FAB (New Chat) floats over this list and isn't otherwise accounted for by
+                // Scaffold's innerPadding, so the last session row would otherwise be permanently
+                // stuck behind it. navigationBarsPadding() stacks the system nav bar inset on top
+                // of that fixed clearance -- both compact and wide layouts draw edge-to-edge.
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -585,18 +447,6 @@ fun SessionListBody(
             }
         }
     }
-}
-
-/** A slightly bolder, more spaced nav-row label than plain body text, without going oversized. */
-@Composable
-private fun NavItemLabel(text: String, isSelected: Boolean = false) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.2.sp,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified,
-    )
 }
 
 /** Buckets a session's most-recent-activity timestamp into "TODAY" / "YESTERDAY" / a short date

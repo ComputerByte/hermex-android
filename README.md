@@ -6,7 +6,7 @@ Hermex app.
 
 ## Status
 
-**Active development / UI preview build — current version: v0.9.4-ui-preview.**
+**Active development / UI preview build — current version: v0.10.0-ui-rebuild.**
 
 This is not a final Play Store release yet, but the app is already running on real Android
 hardware against a real Hermes server. A recent pass refreshed the app's home/session-list visual
@@ -19,6 +19,9 @@ contract this app targets.
 - Native Android / Jetpack Compose UI, styled from a shared Hermex design system (colors, shape,
   typography tokens) with a live-composited wordmark, bolder navigation typography, and
   TODAY/YESTERDAY/date session grouping in the home/session list
+- Slide-out navigation drawer with Hermex wordmark, nav items (Chats/Tasks/Skills/Memory/
+  Insights/Projects/Settings), Recents section, and compact New Chat button — accessible via
+  hamburger menu from every screen
 - Real server authentication and session loading
 - Sessions & Chat: SSE token streaming, a stop control for in-progress runs, session search, and a
   refreshed "New Chat" affordance
@@ -52,11 +55,15 @@ contract this app targets.
 
 ## In Progress / Not Finished Yet
 
-- Workspace actions polish: copy path, raw/open/download support
-- Full chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons,
+- Chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons,
   translucent field architecture) — the composer field's shape/radius is aligned to design tokens,
   but not the wider component architecture
-- More iOS parity polish
+- Approval request overlay (Hermes tool approval mid-stream)
+- Clarification request overlay (Hermes asks questions mid-stream)
+- Goal controls (set Hermes direction/goals from composer)
+- Voice input / dictation
+- Git workspace diff/commit/branch features
+- Slash commands / autocomplete in composer
 - Play Store release hardening (this preview ships a debug build; release signing isn't set up yet)
 
 ## Download
@@ -68,9 +75,13 @@ from an unknown source — that's expected for a debug preview build.
 
 ## Screenshots
 
-| Home / Sessions | Search |
+| Home / Sessions | Navigation Drawer |
 |---|---|
-| ![Home / Sessions](release-artifacts/screenshots/session-list.png) | ![Search](release-artifacts/screenshots/search.png) |
+| ![Home / Sessions](release-artifacts/screenshots/session-list.png) | ![Navigation Drawer](release-artifacts/screenshots/nav-drawer.png) |
+
+| Tasks (hamburger navigation) | Settings (hamburger navigation) |
+|---|---|
+| ![Tasks](release-artifacts/screenshots/tasks.png) | ![Settings](release-artifacts/screenshots/settings.png) |
 
 | Chat | Workspace |
 |---|---|

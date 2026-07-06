@@ -54,6 +54,8 @@ class SettingsViewModel(
             _uiState.update { it.copy(notificationsEnabled = chatPreferencesStore.loadNotificationsEnabled()) }
             _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
             _uiState.update { it.copy(appIconVariant = appearancePreferencesStore.loadAppIconVariant()) }
+            val initials = appearancePreferencesStore.loadUserInitials()
+            _uiState.update { it.copy(userInitials = initials) }
             val customHeaders = customHeadersStore.load()
             _uiState.update { it.copy(customHeaderCount = customHeaders.size) }
             val api = authRepository.apiForActiveServer()
@@ -101,6 +103,13 @@ class SettingsViewModel(
         viewModelScope.launch {
             appearancePreferencesStore.setAppIconVariant(variant)
             appIconSwitcher.applyVariant(variant)
+        }
+    }
+
+    fun setUserInitials(initials: String) {
+        viewModelScope.launch {
+            appearancePreferencesStore.setUserInitials(initials)
+            _uiState.update { it.copy(userInitials = initials) }
         }
     }
 

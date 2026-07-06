@@ -17,8 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.CronJob
 import com.hermex.android.core.network.dto.CronJobStatus
+import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
 
@@ -61,6 +62,7 @@ fun TasksScreen(
     isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val openDrawer = LocalHermexDrawerOpener.current
 
     Scaffold(
         modifier = modifier,
@@ -76,8 +78,8 @@ fun TasksScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = { openDrawer() }) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Open menu")
                     }
                 },
                 actions = {

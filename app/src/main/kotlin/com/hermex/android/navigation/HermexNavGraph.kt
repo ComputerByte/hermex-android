@@ -1,6 +1,8 @@
 package com.hermex.android.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,15 +12,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +59,7 @@ import com.hermex.android.profiles.ProfilesScreen
 import com.hermex.android.profiles.ProfilesViewModel
 import com.hermex.android.projects.ProjectsScreen
 import com.hermex.android.projects.ProjectsViewModel
+import com.hermex.android.sessions.HermexDrawerContent
 import com.hermex.android.sessions.SessionListNavItem
 import com.hermex.android.sessions.SessionListScreen
 import com.hermex.android.sessions.SessionListViewModel
@@ -74,6 +85,9 @@ import com.hermex.android.workspace.WorkspaceViewModel
 import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+val LocalHermexDrawerOpener = compositionLocalOf<() -> Unit> { {} }
 
 private object Routes {
     const val ONBOARDING = "onboarding"
@@ -161,6 +175,12 @@ fun HermexNavGraph(
     }
 
     val navController = rememberNavController()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+
+    BackHandler(enabled = drawerState.isOpen) {
+        drawerScope.launch { drawerState.close() }
+    }
 
     LaunchedEffect(authState) {
         val target = if (authState is AuthState.LoggedIn) Routes.SESSION_LIST else Routes.ONBOARDING
@@ -517,99 +537,166 @@ fun HermexNavGraph(
         }
     }
 
-    if (isWideLayout && authState is AuthState.LoggedIn) {
-        // Composition order vs. visual order, and why they're deliberately decoupled here:
-        //
-        // 1. NavHost MUST be the first thing composed in this Row. It performs its own internal
-        //    bootstrap on composition -- attaching the graph to navController, attaching the
-        //    ViewModelStore, wiring back-press handling -- and none of that is replicated in this
-        //    file. The left pane below depends on that bootstrap having already happened, since
-        //    it calls navController.getBackStackEntry(SESSION_LIST), which throws if the back
-        //    stack has no entries yet. (Confirmed the hard way: composing the left pane before
-        //    NavHost crashed twice, once for the missing back stack entry and once for the
-        //    missing ViewModelStore -- two separate pieces of NavHost's own setup.)
-        // 2. Visually, the left pane must still appear on the LEFT and NavHost (the right content
-        //    pane) on the RIGHT -- the opposite of the composition order required by point 1.
-        // 3. The CompositionLocalProvider(LayoutDirection.Rtl) / .Ltr pair below resolves that
-        //    conflict by decoupling composition order from visual order: Row lays out children
-        //    left-to-right in RTL context, which means "first-declared" maps to "rightmost". So
-        //    NavHost is declared (and composed) first, satisfying point 1, but renders visually on
-        //    the right, satisfying point 2. Each child is wrapped back in its own Ltr provider so
-        //    its own content (text, icons) still reads normally -- only the Row's own child
-        //    placement is mirrored, not the panes' internal layout.
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    NavHost(
-                        navController = navController,
-                        graph = navGraph,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
+    val isLoggedIn = authState is AuthState.LoggedIn
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+        drawerContent = {
+            if (isLoggedIn) {
+                val sessionListViewModel: SessionListViewModel = viewModel(factory = appContainer.sessionListViewModelFactory())
+                val sessionListUiState by sessionListViewModel.uiState.collectAsStateWithLifecycle()
+                val store = remember { com.hermex.android.core.storage.DataStoreAppearancePreferencesStore(appContainer.context) }
+                var userInitials by remember {
+                    mutableStateOf(kotlinx.coroutines.runBlocking { store.loadUserInitials() })
                 }
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    // Shares the SESSION_LIST destination's own ViewModel (rather than creating a
-                    // second, independent instance) by explicitly using its back stack entry as
-                    // the store owner -- outside a composable() block, viewModel() would otherwise
-                    // resolve to the Activity's ViewModelStoreOwner instead.
-                    val sessionListEntry = remember(navController) {
-                        navController.getBackStackEntry(Routes.SESSION_LIST)
+                LaunchedEffect(drawerState.isOpen) {
+                    if (drawerState.isOpen) {
+                        userInitials = store.loadUserInitials()
                     }
-                    val leftPaneViewModel: SessionListViewModel = viewModel(
-                        viewModelStoreOwner = sessionListEntry,
-                        factory = appContainer.sessionListViewModelFactory(),
-                    )
-
-                    // Drives the left pane's selected-state highlighting. Read here (after NavHost
-                    // above has already composed/bootstrapped) rather than before it, for the same
-                    // ordering reason spelled out above -- currentBackStackEntryAsState() itself is
-                    // unlikely to need the bootstrap, but keeping every navController read in this
-                    // block after NavHost avoids reopening that class of hazard for a future reader.
-                    val currentBackStackEntry by navController.currentBackStackEntryAsState()
-                    val currentRoute = currentBackStackEntry?.destination?.route
-                    val selectedNavItem = when (currentRoute) {
-                        Routes.TASKS -> SessionListNavItem.TASKS
-                        Routes.SKILLS -> SessionListNavItem.SKILLS
-                        Routes.MEMORY -> SessionListNavItem.MEMORY
-                        Routes.INSIGHTS -> SessionListNavItem.INSIGHTS
-                        Routes.PROFILES -> SessionListNavItem.PROFILES
-                        Routes.PROJECTS -> SessionListNavItem.PROJECTS
-                        else -> null
-                    }
-                    // destination.route is the route *pattern* ("chat/{sessionId}?..."), not the
-                    // resolved path, so comparing against CHAT_PATTERN is reliable regardless of
-                    // which session is open. The argument is decoded the same way the CHAT_PATTERN
-                    // composable below decodes it, so it compares equal to SessionSummary.sessionId.
-                    val selectedSessionId = currentBackStackEntry
-                        ?.takeIf { currentRoute == Routes.CHAT_PATTERN }
-                        ?.arguments?.getString("sessionId")
-                        ?.let { URLDecoder.decode(it, "UTF-8") }
-
-                    SessionListScreen(
-                        viewModel = leftPaneViewModel,
-                        onOpenSession = onOpenSession,
-                        onOpenSkills = onOpenSkills,
-                        onOpenMemory = onOpenMemory,
-                        onOpenTasks = onOpenTasks,
-                        onOpenProfiles = onOpenProfiles,
-                        onOpenProjects = onOpenProjects,
-                        onOpenInsights = onOpenInsights,
-                        onOpenSettings = onOpenSettings,
-                        modifier = Modifier
-                            .width(400.dp)
-                            .fillMaxHeight(),
-                        selectedNavItem = selectedNavItem,
-                        selectedSessionId = selectedSessionId,
+                }
+                BoxWithConstraints {
+                    HermexDrawerContent(
+                        modifier = Modifier.width(maxWidth * 0.80f),
+                        uiState = sessionListUiState,
+                        selectedNavItem = null,
+                        onNavItemSelected = { item ->
+                            drawerScope.launch { drawerState.close() }
+                            when (item) {
+                                SessionListNavItem.TASKS -> navController.navigate(Routes.TASKS) { launchSingleTop = true }
+                                SessionListNavItem.SKILLS -> navController.navigate(Routes.SKILLS) { launchSingleTop = true }
+                                SessionListNavItem.MEMORY -> navController.navigate(Routes.MEMORY) { launchSingleTop = true }
+                                SessionListNavItem.INSIGHTS -> navController.navigate(Routes.INSIGHTS) { launchSingleTop = true }
+                                SessionListNavItem.PROFILES -> navController.navigate(Routes.PROFILES) { launchSingleTop = true }
+                                SessionListNavItem.PROJECTS -> navController.navigate(Routes.PROJECTS) { launchSingleTop = true }
+                            }
+                        },
+                        onOpenSession = { sessionId ->
+                            drawerScope.launch { drawerState.close() }
+                            navController.navigate(Routes.chat(sessionId))
+                        },
+                        onOpenSessions = {
+                            drawerScope.launch { drawerState.close() }
+                            navController.navigate(Routes.SESSION_LIST) { launchSingleTop = true }
+                        },
+                        onCreateSession = {
+                            drawerScope.launch { drawerState.close() }
+                            sessionListViewModel.createSession { newSessionId ->
+                                navController.navigate(Routes.chat(newSessionId)) {
+                                    popUpTo(Routes.SESSION_LIST) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        onOpenSettings = {
+                            drawerScope.launch { drawerState.close() }
+                            navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                        },
+                        initialText = userInitials,
+                        headerLogoColor = sessionListUiState.headerLogoColor,
                     )
                 }
             }
+        },
+    ) {
+        CompositionLocalProvider(LocalHermexDrawerOpener provides {
+            drawerScope.launch { drawerState.open() }
+        }) {
+            if (isWideLayout && authState is AuthState.LoggedIn) {
+                // Composition order vs. visual order, and why they're deliberately decoupled here:
+                //
+                // 1. NavHost MUST be the first thing composed in this Row. It performs its own internal
+                //    bootstrap on composition -- attaching the graph to navController, attaching the
+                //    ViewModelStore, wiring back-press handling -- and none of that is replicated in this
+                //    file. The left pane below depends on that bootstrap having already happened, since
+                //    it calls navController.getBackStackEntry(SESSION_LIST), which throws if the back
+                //    stack has no entries yet. (Confirmed the hard way: composing the left pane before
+                //    NavHost crashed twice, once for the missing back stack entry and once for the
+                //    missing ViewModelStore -- two separate pieces of NavHost's own setup.)
+                // 2. Visually, the left pane must still appear on the LEFT and NavHost (the right content
+                //    pane) on the RIGHT -- the opposite of the composition order required by point 1.
+                // 3. The CompositionLocalProvider(LayoutDirection.Rtl) / .Ltr pair below resolves that
+                //    conflict by decoupling composition order from visual order: Row lays out children
+                //    left-to-right in RTL context, which means "first-declared" maps to "rightmost". So
+                //    NavHost is declared (and composed) first, satisfying point 1, but renders visually on
+                //    the right, satisfying point 2. Each child is wrapped back in its own Ltr provider so
+                //    its own content (text, icons) still reads normally -- only the Row's own child
+                //    placement is mirrored, not the panes' internal layout.
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            NavHost(
+                                navController = navController,
+                                graph = navGraph,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            )
+                        }
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            // Shares the SESSION_LIST destination's own ViewModel (rather than creating a
+                            // second, independent instance) by explicitly using its back stack entry as
+                            // the store owner -- outside a composable() block, viewModel() would otherwise
+                            // resolve to the Activity's ViewModelStoreOwner instead.
+                            val sessionListEntry = remember(navController) {
+                                navController.getBackStackEntry(Routes.SESSION_LIST)
+                            }
+                            val leftPaneViewModel: SessionListViewModel = viewModel(
+                                viewModelStoreOwner = sessionListEntry,
+                                factory = appContainer.sessionListViewModelFactory(),
+                            )
+
+                            // Drives the left pane's selected-state highlighting. Read here (after NavHost
+                            // above has already composed/bootstrapped) rather than before it, for the same
+                            // ordering reason spelled out above -- currentBackStackEntryAsState() itself is
+                            // unlikely to need the bootstrap, but keeping every navController read in this
+                            // block after NavHost avoids reopening that class of hazard for a future reader.
+                            val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                            val currentRoute = currentBackStackEntry?.destination?.route
+                            val selectedNavItem = when (currentRoute) {
+                                Routes.TASKS -> SessionListNavItem.TASKS
+                                Routes.SKILLS -> SessionListNavItem.SKILLS
+                                Routes.MEMORY -> SessionListNavItem.MEMORY
+                                Routes.INSIGHTS -> SessionListNavItem.INSIGHTS
+                                Routes.PROFILES -> SessionListNavItem.PROFILES
+                                Routes.PROJECTS -> SessionListNavItem.PROJECTS
+                                else -> null
+                            }
+                            // destination.route is the route *pattern* ("chat/{sessionId}?..."), not the
+                            // resolved path, so comparing against CHAT_PATTERN is reliable regardless of
+                            // which session is open. The argument is decoded the same way the CHAT_PATTERN
+                            // composable below decodes it, so it compares equal to SessionSummary.sessionId.
+                            val selectedSessionId = currentBackStackEntry
+                                ?.takeIf { currentRoute == Routes.CHAT_PATTERN }
+                                ?.arguments?.getString("sessionId")
+                                ?.let { URLDecoder.decode(it, "UTF-8") }
+
+                            SessionListScreen(
+                                viewModel = leftPaneViewModel,
+                                onOpenSession = onOpenSession,
+                                onOpenSkills = onOpenSkills,
+                                onOpenMemory = onOpenMemory,
+                                onOpenTasks = onOpenTasks,
+                                onOpenProfiles = onOpenProfiles,
+                                onOpenProjects = onOpenProjects,
+                                onOpenInsights = onOpenInsights,
+                                onOpenSettings = onOpenSettings,
+                                modifier = Modifier
+                                    .width(400.dp)
+                                    .fillMaxHeight(),
+                                selectedNavItem = selectedNavItem,
+                                selectedSessionId = selectedSessionId,
+                            )
+                        }
+                    }
+                }
+            } else {
+                NavHost(
+                    navController = navController,
+                    graph = navGraph,
+                )
+            }
         }
-    } else {
-        NavHost(
-            navController = navController,
-            graph = navGraph,
-        )
     }
 }
 

@@ -22,8 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -66,6 +67,7 @@ import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
 import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
+import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.ui.theme.toComposeColor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,9 +85,11 @@ fun SettingsScreen(
     isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val openDrawer = LocalHermexDrawerOpener.current
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showAppIconPicker by remember { mutableStateOf(false) }
+    var showInitialsDialog by remember { mutableStateOf(false) }
     var showNotificationEducation by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -144,6 +148,32 @@ fun SettingsScreen(
         )
     }
 
+    if (showInitialsDialog) {
+        var draftInitials by remember { mutableStateOf(uiState.userInitials) }
+        AlertDialog(
+            onDismissRequest = { showInitialsDialog = false },
+            shape = RoundedCornerShape(HermexRadii.Dialog),
+            title = { Text("Set initials") },
+            text = {
+                TextField(
+                    value = draftInitials,
+                    onValueChange = { if (it.length <= 4) draftInitials = it.uppercase() },
+                    singleLine = true,
+                    label = { Text("Initials (max 4 chars)") },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showInitialsDialog = false
+                    viewModel.setUserInitials(draftInitials)
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInitialsDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     if (showAppIconPicker) {
         AppIconVariantDialog(
             selected = uiState.appIconVariant,
@@ -189,8 +219,8 @@ fun SettingsScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = { openDrawer() }) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Open menu")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -289,6 +319,14 @@ fun SettingsScreen(
                         uiState.headerLogoColor.displayName,
                         onClick = { showColorPicker = true },
                     )
+                    ListItem(
+                        headlineContent = { Text("User Name") },
+                        supportingContent = { Text(uiState.userInitials) },
+                        trailingContent = {
+                            TextButton(onClick = { showInitialsDialog = true }) { Text("Edit") }
+                        },
+                    )
+                    SettingsDivider()
                     SettingsRow(
                         "App Icon",
                         uiState.appIconVariant.displayName,

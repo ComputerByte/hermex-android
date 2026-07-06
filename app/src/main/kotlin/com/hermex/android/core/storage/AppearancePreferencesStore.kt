@@ -8,6 +8,8 @@ interface AppearancePreferencesStore {
     suspend fun setHeaderLogoColor(color: HeaderLogoColor)
     suspend fun loadAppIconVariant(): AppIconVariant
     suspend fun setAppIconVariant(variant: AppIconVariant)
+    suspend fun loadUserInitials(): String
+    suspend fun setUserInitials(initials: String)
 }
 
 /** Default used wherever no real store is wired in -- mirrors [NoOpCustomHeadersStore]. Always
@@ -17,4 +19,6 @@ object NoOpAppearancePreferencesStore : AppearancePreferencesStore {
     override suspend fun setHeaderLogoColor(color: HeaderLogoColor) = Unit
     override suspend fun loadAppIconVariant(): AppIconVariant = AppIconVariant.SYSTEM
     override suspend fun setAppIconVariant(variant: AppIconVariant) = Unit
+    override suspend fun loadUserInitials(): String = "BD"
+    override suspend fun setUserInitials(initials: String) = Unit
 }

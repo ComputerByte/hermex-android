@@ -15,7 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.chat.MarkdownText
+import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.sessions.relativeTimeText
 import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
@@ -54,6 +55,7 @@ fun MemoryScreen(
     isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val openDrawer = LocalHermexDrawerOpener.current
 
     Scaffold(
         modifier = modifier,
@@ -69,8 +71,8 @@ fun MemoryScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = { openDrawer() }) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Open menu")
                     }
                 },
                 actions = {

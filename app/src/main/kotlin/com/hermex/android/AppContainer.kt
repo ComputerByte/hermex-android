@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
  * reference and is only ever invoked later (on an actual 401), by which point both are fully
  * constructed -- a standard way to break constructor-order circular deps in manual DI.
  */
-class AppContainer(context: Context) {
+class AppContainer(val context: Context) {
     private val applicationContext = context.applicationContext
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)

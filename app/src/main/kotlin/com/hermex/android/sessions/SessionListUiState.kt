@@ -11,6 +11,7 @@ data class SessionListUiState(
     val errorMessage: String? = null,
     val searchQuery: String = "",
     val headerLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
+    val userInitials: String = "BD",
     /** True when [sessions] came from the offline cache rather than a successful network
      * fetch -- either shown immediately on screen load (before the network result lands) or kept
      * on screen because the network call then failed. */

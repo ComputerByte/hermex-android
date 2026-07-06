@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -62,6 +62,7 @@ import com.hermex.android.core.network.dto.ProjectSummary
 import com.hermex.android.sessions.relativeTimeText
 import com.hermex.android.ui.theme.HermexReadableContent
 import com.hermex.android.ui.theme.HermexRadii
+import com.hermex.android.navigation.LocalHermexDrawerOpener
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +72,7 @@ fun ProjectsScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val openDrawer = LocalHermexDrawerOpener.current
     var editingProject by remember { mutableStateOf<ProjectSummary?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var deleteCandidate by remember { mutableStateOf<ProjectSummary?>(null) }
@@ -133,8 +135,8 @@ fun ProjectsScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = { openDrawer() }) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Open menu")
                     }
                 },
                 actions = {

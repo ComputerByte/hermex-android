@@ -5,9 +5,11 @@ package com.hermex.android.core.storage
 internal class FakeAppearancePreferencesStore(
     initialHeaderLogoColor: HeaderLogoColor = HeaderLogoColor.DEFAULT,
     initialAppIconVariant: AppIconVariant = AppIconVariant.SYSTEM,
+    initialUserInitials: String = "BD",
 ) : AppearancePreferencesStore {
     var stored: HeaderLogoColor = initialHeaderLogoColor
     var storedIcon: AppIconVariant = initialAppIconVariant
+    var storedInitials: String = initialUserInitials
 
     override suspend fun loadHeaderLogoColor(): HeaderLogoColor = stored
 
@@ -19,5 +21,11 @@ internal class FakeAppearancePreferencesStore(
 
     override suspend fun setAppIconVariant(variant: AppIconVariant) {
         storedIcon = variant
+    }
+
+    override suspend fun loadUserInitials(): String = storedInitials
+
+    override suspend fun setUserInitials(initials: String) {
+        storedInitials = initials
     }
 }

@@ -36,6 +36,7 @@ class SessionListViewModel(
     init {
         load()
         loadHeaderLogoColor()
+        loadUserInitials()
     }
 
     /** Re-reads just the header color preference (fast, local, no network) -- used to reflect a
@@ -44,6 +45,12 @@ class SessionListViewModel(
     fun loadHeaderLogoColor() {
         viewModelScope.launch {
             _uiState.update { it.copy(headerLogoColor = appearancePreferencesStore.loadHeaderLogoColor()) }
+        }
+    }
+
+    fun loadUserInitials() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(userInitials = appearancePreferencesStore.loadUserInitials()) }
         }
     }
 

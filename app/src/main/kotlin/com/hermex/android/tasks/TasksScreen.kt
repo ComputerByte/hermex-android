@@ -112,7 +112,7 @@ fun TasksScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "No scheduled tasks on this server.",
+                            "No tasks on this server.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }

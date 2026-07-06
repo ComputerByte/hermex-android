@@ -6,13 +6,20 @@ Hermex app.
 
 ## Status
 
-**Active development / UI preview build — current version: v0.10.0-ui-rebuild.**
+**Current version: v0.10.6-preview — full-device regression checkpoint.** The v0.10.x release
+train (v0.10.0 through v0.10.6) delivered 7 releases spanning approximately 3,200 lines of
+changes with zero regressions:
 
-This is not a final Play Store release yet, but the app is already running on real Android
-hardware against a real Hermes server. The v0.10.0 release introduced a slide-out navigation
-drawer with hamburger menu access from every screen, replacing the previous inline nav
-layout. See the Screenshots section below for the current look. See `API_CONTRACT.md` for the
-verified server API contract this app targets.
+- **v0.10.0** — Navigation drawer, hamburger navigation, compact New Chat
+- **v0.10.1** — Approval and clarification request overlays mid-stream
+- **v0.10.2** — Chat/composer hardening (stop button, stream timeout, error banner)
+- **v0.10.3** — Attachments UX (file type icons, thumbnails, lightbox, document opener)
+- **v0.10.4** — Auth/offline/error hardening (test connection, session expiry, friendly errors)
+- **v0.10.5** — Control-plane consistency (shared error banner, refresh buttons, empty states)
+- **v0.10.6** — Full device regression verification (12 scenarios on real hardware)
+
+See the Screenshots section below for the current look. See `API_CONTRACT.md` for the verified
+server API contract this app targets.
 
 ## Current Features
 
@@ -52,14 +59,24 @@ verified server API contract this app targets.
 - Home screen widget entry surface
 - Settings: active server details, default model, custom headers, notification preferences, app
   icon/header color appearance, and sign-out
+- Approval request overlays: approve tool execution mid-stream (allow once/session/always/deny)
+- Clarification request overlays: respond to server questions mid-stream with choices or free-text
+- File type icons and inline image thumbnails in chat message history with full-screen lightbox
+- Tap-to-open downloaded documents from message history via system intent
+- Shared HermexErrorBanner composable with retry action across all control-plane screens
+- Refresh buttons on Projects, Task Detail, and Skill Detail screens
+- Test Connection button in servers editor with success/error indicators
+- Friendly user-facing error messages for network, HTTP, and auth failures
+- Retry action on chat error banners
+- Debounced in-field URL validation on onboarding and server editor
+- "Session expired" re-auth banner with auto-focused password field
+- Flush bottom padding to system navigation bar on every screen
 
 ## In Progress / Not Finished Yet
 
 - Chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons,
   translucent field architecture) — the composer field's shape/radius is aligned to design tokens,
   but not the wider component architecture
-- Approval request overlay (Hermes tool approval mid-stream)
-- Clarification request overlay (Hermes asks questions mid-stream)
 - Goal controls (set Hermes direction/goals from composer)
 - Voice input / dictation
 - Git workspace diff/commit/branch features

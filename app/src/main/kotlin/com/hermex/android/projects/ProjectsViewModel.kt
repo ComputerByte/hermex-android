@@ -52,20 +52,20 @@ class ProjectsViewModel(
     fun create(name: String, color: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
-        mutate { api -> safeApiCall { api.createProject(CreateProjectRequest(trimmed, color)) } }
+        mutate({ api -> safeApiCall { api.createProject(CreateProjectRequest(trimmed, color)) } }, errorLabel = "Could not create project.")
     }
 
     fun rename(projectId: String, name: String, color: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
-        mutate { api -> safeApiCall { api.renameProject(RenameProjectRequest(projectId, trimmed, color)) } }
+        mutate({ api -> safeApiCall { api.renameProject(RenameProjectRequest(projectId, trimmed, color)) } }, errorLabel = "Could not rename project.")
     }
 
     fun delete(projectId: String) {
-        mutate { api -> safeApiCall { api.deleteProject(ProjectIdRequest(projectId)) } }
+        mutate({ api -> safeApiCall { api.deleteProject(ProjectIdRequest(projectId)) } }, errorLabel = "Could not delete project.")
     }
 
-    private fun mutate(call: suspend (HermexApi) -> ProjectMutationResponse) {
+    private fun mutate(call: suspend (HermexApi) -> ProjectMutationResponse, errorLabel: String = "Action failed") {
         val api = authRepository.apiForActiveServer()
         if (api == null) {
             _uiState.update { it.copy(errorMessage = "Not signed in.") }
@@ -76,7 +76,7 @@ class ProjectsViewModel(
             try {
                 val response = call(api)
                 if (response.ok == false) {
-                    _uiState.update { it.copy(errorMessage = response.error ?: "Action failed.") }
+                    _uiState.update { it.copy(errorMessage = response.error ?: errorLabel) }
                 } else {
                     // Reload before clearing isMutating, so a caller waiting on "!isMutating"
                     // observes the refreshed list, not the pre-mutation one.

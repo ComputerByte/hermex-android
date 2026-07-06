@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +50,7 @@ import com.hermex.android.chat.MarkdownText
 import com.hermex.android.core.network.dto.CronJobStatus
 import com.hermex.android.sessions.relativeTimeText
 import com.hermex.android.ui.theme.HermexReadableContent
+import com.hermex.android.ui.theme.HermexErrorBanner
 import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,6 +102,9 @@ fun TaskDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.load() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    }
                     if (uiState.isMutating) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else if (uiState.job != null) {
@@ -232,29 +237,7 @@ fun TaskDetailScreen(
                         .padding(16.dp),
                     contentAlignment = Alignment.BottomCenter,
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(HermexRadii.Accessory),
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Filled.Warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = message,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
+                    HermexErrorBanner(message = message, onRetry = { viewModel.load() })
                 }
             }
         }

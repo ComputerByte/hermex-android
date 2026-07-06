@@ -13,8 +13,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.10.4-auth-hardening"
+        versionCode = 19
+        versionName = "0.10.5-control-plane-consistency"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

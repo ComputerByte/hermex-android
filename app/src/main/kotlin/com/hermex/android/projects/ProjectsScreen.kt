@@ -1,6 +1,5 @@
 package com.hermex.android.projects
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,10 +58,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.ProjectColorPalette
 import com.hermex.android.core.network.dto.ProjectSummary
-import com.hermex.android.sessions.relativeTimeText
-import com.hermex.android.ui.theme.HermexReadableContent
-import com.hermex.android.ui.theme.HermexRadii
 import com.hermex.android.navigation.LocalHermexDrawerOpener
+import com.hermex.android.sessions.relativeTimeText
+import com.hermex.android.ui.theme.HermexErrorBanner
+import com.hermex.android.ui.theme.HermexReadableContent
+import com.hermex.android.ui.theme.HermexErrorBanner
+import com.hermex.android.ui.theme.HermexRadii
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,6 +141,9 @@ fun ProjectsScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.load() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    }
                     if (uiState.isMutating) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
@@ -224,35 +228,8 @@ fun ProjectsScreen(
 
             uiState.errorMessage?.let { message ->
                 if (uiState.projects.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.BottomCenter,
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(HermexRadii.Accessory),
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    Icons.Filled.Warning,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = message,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
+                    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
+                        HermexErrorBanner(message = message, onRetry = { viewModel.load() })
                     }
                 }
             }

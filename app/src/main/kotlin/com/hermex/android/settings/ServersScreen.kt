@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.storage.HermexServerConfig
@@ -216,6 +221,58 @@ private fun ServerEditorDialog(uiState: ServersUiState, viewModel: ServersViewMo
                     colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Test Connection button + result
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OutlinedButton(
+                        onClick = viewModel::testConnection,
+                        enabled = !uiState.isSavingEditor && !uiState.isTestingConnection &&
+                            uiState.editorUrl.isNotBlank(),
+                        shape = RoundedCornerShape(HermexRadii.Cell),
+                    ) {
+                        if (uiState.isTestingConnection) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Testing…")
+                        } else {
+                            Text("Test Connection")
+                        }
+                    }
+                    uiState.connectionTestError?.let { error ->
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (uiState.connectionTestError == null && uiState.editorUrl.isNotBlank() && !uiState.isTestingConnection) {
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            contentDescription = "Connected",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "Connected",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 uiState.editorError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }

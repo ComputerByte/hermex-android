@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,7 +33,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +46,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.R
 import com.hermex.android.ui.theme.HermexRadii
@@ -53,6 +59,13 @@ fun OnboardingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val fieldShape = RoundedCornerShape(HermexRadii.Cell)
+    val passwordFocusRequester = remember { FocusRequester() }
+
+    if (uiState.isReauthAfterExpiry) {
+        LaunchedEffect(Unit) {
+            passwordFocusRequester.requestFocus()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -88,6 +101,35 @@ fun OnboardingScreen(
         )
         Spacer(Modifier.height(32.dp))
 
+        uiState.isReauthAfterExpiry.let { isReauth ->
+            if (isReauth) {
+                Surface(
+                    shape = RoundedCornerShape(HermexRadii.Accessory),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Session expired — sign in again",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
         OutlinedTextField(
             value = uiState.serverUrlInput,
             onValueChange = viewModel::onServerUrlChanged,
@@ -120,7 +162,7 @@ fun OnboardingScreen(
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(passwordFocusRequester),
             )
         }
 

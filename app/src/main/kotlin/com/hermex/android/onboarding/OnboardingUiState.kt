@@ -11,4 +11,6 @@ data class OnboardingUiState(
     val hasTestedConnection: Boolean = false,
     val passkeyOnlyBlocked: Boolean = false,
     val errorMessage: String? = null,
+    /** True when redirected to login due to a 401 (expired session), not a fresh install. */
+    val isReauthAfterExpiry: Boolean = false,
 )

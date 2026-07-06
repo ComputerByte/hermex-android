@@ -17,6 +17,9 @@ data class ServersUiState(
     val editorUrl: String = "",
     val editorError: String? = null,
     val isSavingEditor: Boolean = false,
+    val isTestingConnection: Boolean = false,
+    /** null = not tested yet / last test succeeded. Non-null error message from last test. */
+    val connectionTestError: String? = null,
     /** Drives the "remove this server?" confirmation dialog. */
     val serverPendingRemoval: HermexServerConfig? = null,
 )

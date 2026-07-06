@@ -43,13 +43,13 @@ class ServersViewModel(
 
     fun startAdding() {
         _uiState.update {
-            it.copy(showEditor = true, editingServerId = null, editorName = "", editorUrl = "", editorError = null)
+            it.copy(showEditor = true, editingServerId = null, editorName = "", editorUrl = "", editorError = null, connectionTestError = null)
         }
     }
 
     fun startEditing(config: HermexServerConfig) {
         _uiState.update {
-            it.copy(showEditor = true, editingServerId = config.id, editorName = config.name, editorUrl = config.baseUrl, editorError = null)
+            it.copy(showEditor = true, editingServerId = config.id, editorName = config.name, editorUrl = config.baseUrl, editorError = null, connectionTestError = null)
         }
     }
 
@@ -58,7 +58,7 @@ class ServersViewModel(
     }
 
     fun updateEditorUrl(value: String) {
-        _uiState.update { it.copy(editorUrl = value, editorError = null) }
+        _uiState.update { it.copy(editorUrl = value, editorError = null, connectionTestError = null) }
     }
 
     fun dismissEditor() {
@@ -100,6 +100,38 @@ class ServersViewModel(
                 it.copy(isSavingEditor = false, showEditor = false, editingServerId = null, editorName = "", editorUrl = "")
             }
             load()
+        }
+    }
+
+    fun testConnection() {
+        val current = _uiState.value
+        val normalizedUrl = try {
+            ServerUrlNormalizer.normalize(current.editorUrl)
+        } catch (e: InvalidServerUrlException) {
+            _uiState.update { it.copy(connectionTestError = e.message ?: "Enter a valid server URL.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTestingConnection = true, connectionTestError = null) }
+            try {
+                val status = authRepository.testConnection(normalizedUrl)
+                _uiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        connectionTestError = if (status.authEnabled == true) null else "This server doesn't require authentication — you can sign in without a password.",
+                    )
+                }
+            } catch (e: Exception) {
+                val message = when {
+                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+                        "Server not found. Check the URL."
+                    e.message?.contains("timeout", ignoreCase = true) == true ->
+                        "Connection timed out. Is the server running?"
+                    else -> e.message ?: "Could not reach the server."
+                }
+                _uiState.update { it.copy(isTestingConnection = false, connectionTestError = message) }
+            }
         }
     }
 

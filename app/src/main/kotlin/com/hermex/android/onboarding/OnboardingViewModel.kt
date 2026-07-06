@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.auth.AuthState
+import com.hermex.android.auth.AuthState.LoggedOut
 import com.hermex.android.auth.LoginOutcome
 import com.hermex.android.auth.PASSKEY_ONLY_MESSAGE
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ class OnboardingViewModel(
     private val _uiState = MutableStateFlow(
         OnboardingUiState(
             serverUrlInput = (authRepository.state.value as? AuthState.LoggedOut)?.serverUrl.orEmpty(),
+            isReauthAfterExpiry = authRepository.state.value is AuthState.LoggedOut,
         ),
     )
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()

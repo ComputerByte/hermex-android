@@ -11,6 +11,18 @@ sealed class ApiError(message: String, cause: Throwable? = null) : Exception(mes
     data object Unauthorized : ApiError("Unauthorized (401)")
 }
 
+/** Returns a user-facing message for this error, suitable for display in the UI. */
+fun ApiError.userMessage(): String = when (this) {
+    is ApiError.Network -> "Could not reach the server. Check your connection and server address."
+    is ApiError.Http -> when (statusCode) {
+        404 -> "Server not found at this URL."
+        500 -> "Server error. The server encountered an internal problem."
+        else -> "Server returned an error (HTTP $statusCode)."
+    }
+    is ApiError.Decoding -> "Unexpected response format. Make sure the server is running hermes-webui."
+    is ApiError.Unauthorized -> "Session expired. Please sign in again."
+}
+
 /**
  * Wraps a [HermexApi] suspend call, translating Retrofit/OkHttp/kotlinx.serialization
  * exceptions into [ApiError]. This is the call-site-local complement to [NetworkModule]'s

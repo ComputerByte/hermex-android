@@ -128,3 +128,23 @@ data class ToolCallUi(
      * regardless of which turn it actually happened in. */
     val anchorMessageCount: Int = 0,
 )
+
+/**
+ * Historical replay's analog of a live [ToolCallUi]: per API_CONTRACT.md, a persisted tool result
+ * arrives as a plain [ChatMessage] with `role: "tool"` (`name`/`toolCallId`/`content` set) rather
+ * than the live event stream's `tool`/`tool_complete` SSE payloads. Without this mapping such a
+ * message falls through to [MessageBubble], which just prints `content` as chat prose -- and that
+ * content is frequently a raw JSON blob, since it's whatever the tool actually returned. Mapping
+ * it into the same [ToolCallUi] model lets it render through the same [ToolCallCard] a live tool
+ * call uses, instead of dumping JSON into the transcript. Returns null for every other role so
+ * callers can fall back to [MessageBubble] unchanged.
+ */
+fun ChatMessage.toHistoricalToolCallUi(): ToolCallUi? {
+    if (role != "tool") return null
+    return ToolCallUi(
+        stableId = toolCallId ?: stableId,
+        name = name,
+        preview = content,
+        isComplete = true,
+    )
+}

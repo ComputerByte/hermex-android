@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -26,6 +28,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -48,14 +52,17 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +75,7 @@ import com.hermex.android.sessions.MoveToProjectDialog
 import com.hermex.android.sessions.RenameSessionDialog
 import com.hermex.android.ui.theme.HermexErrorBanner
 import com.hermex.android.ui.theme.HermexRadii
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -278,13 +286,34 @@ fun ChatScreen(
                     // the user made to read up, and -- since scrollToItem only aligns an item's
                     // *top* edge with the viewport -- also permanently hid the tail of a
                     // streaming bubble taller than one screen). Instead it's tracked explicitly:
-                    // true on load/new turn, re-evaluated only when a scroll gesture (ours or the
-                    // user's) actually finishes.
+                    // true on load/new turn, re-evaluated only when a scroll gesture actually
+                    // finishes.
                     var stickToBottom by remember { mutableStateOf(true) }
+                    val coroutineScope = rememberCoroutineScope()
 
+                    // Re-evaluate stickiness only after a *real* user drag settles -- not after
+                    // every scroll gesture. The scrollToItem/scrollBy calls below toggle
+                    // `isScrollInProgress` exactly like a user drag does, so watching that alone
+                    // can't tell "the user just scrolled away" from "we just finished our own
+                    // auto-scroll". Misreading the latter as the former was the root cause of a
+                    // reopened session sometimes sticking near the top instead of the newest
+                    // message: our own multi-step scrollToItem-then-scrollBy sequence could get
+                    // read as a finished user scroll partway through, flipping stickToBottom off
+                    // and aborting the rest of the jump to bottom.
                     LaunchedEffect(listState) {
-                        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
-                            if (!scrolling) stickToBottom = !listState.canScrollForward
+                        var userIsScrolling = false
+                        launch {
+                            listState.interactionSource.interactions.collect { interaction ->
+                                if (interaction is DragInteraction.Start) userIsScrolling = true
+                            }
+                        }
+                        launch {
+                            snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+                                if (!scrolling && userIsScrolling) {
+                                    userIsScrolling = false
+                                    stickToBottom = !listState.canScrollForward
+                                }
+                            }
                         }
                     }
 
@@ -343,7 +372,14 @@ fun ChatScreen(
                                     ToolCallCard(toolCall, initiallyExpanded = uiState.expandToolCallsByDefault)
                                 }
                             }
-                            item(key = message.stableId) { MessageBubble(message) }
+                            val historicalToolCall = message.toHistoricalToolCallUi()
+                            item(key = message.stableId) {
+                                if (historicalToolCall != null) {
+                                    ToolCallCard(historicalToolCall, initiallyExpanded = uiState.expandToolCallsByDefault)
+                                } else {
+                                    MessageBubble(message)
+                                }
+                            }
                         }
                         if (uiState.streamingReasoning.isNotEmpty()) {
                             item(key = "streaming-reasoning") {
@@ -369,6 +405,36 @@ fun ChatScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                                 )
                             }
+                        }
+                    }
+
+                    // Quick-jump controls -- only shown when there's somewhere to jump to, so they
+                    // don't clutter a transcript that already fits on one screen.
+                    val canJumpToTop by remember { derivedStateOf { listState.canScrollBackward } }
+                    val canJumpToBottom by remember { derivedStateOf { listState.canScrollForward } }
+
+                    if (canJumpToTop) {
+                        Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.TopEnd) {
+                            ChatJumpButton(
+                                icon = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Jump to oldest message",
+                                onClick = { coroutineScope.launch { listState.scrollToItem(0) } },
+                            )
+                        }
+                    }
+                    if (canJumpToBottom) {
+                        Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.BottomEnd) {
+                            ChatJumpButton(
+                                icon = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Jump to newest message",
+                                onClick = {
+                                    stickToBottom = true
+                                    coroutineScope.launch {
+                                        listState.scrollToItem(totalItems - 1)
+                                        listState.scrollBy(Float.MAX_VALUE)
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -501,4 +567,33 @@ private fun chatShareSession(context: Context, sessionId: String, sessionTitle: 
         putExtra(Intent.EXTRA_SUBJECT, sessionTitle)
     }
     context.startActivity(Intent.createChooser(intent, "Share Session"))
+}
+
+/** A small floating circular button for the transcript's jump-to-top/jump-to-bottom controls --
+ * styled like [ToolCallCard]'s surface (bordered `surfaceContainerHighest`, primary-tinted icon)
+ * rather than a stock `FloatingActionButton`, so it reads as part of the same card language
+ * instead of introducing a new visual element. */
+@Composable
+private fun ChatJumpButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(40.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shadowElevation = 2.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
 }

@@ -251,6 +251,18 @@ fun HermexNavGraph(
                         backStackEntry.savedStateHandle["refreshHeaderLogoColor"] = false
                     }
                 }
+                // Same round-trip-refresh pattern as the header color above -- the "Subagent
+                // Sessions" toggle is a Settings-screen preference too, and this ViewModel
+                // instance likewise survives the trip there and back.
+                val shouldRefreshShowSubagentSessions by backStackEntry.savedStateHandle
+                    .getStateFlow("refreshShowSubagentSessions", false)
+                    .collectAsStateWithLifecycle()
+                LaunchedEffect(shouldRefreshShowSubagentSessions) {
+                    if (shouldRefreshShowSubagentSessions) {
+                        viewModel.loadShowSubagentSessions()
+                        backStackEntry.savedStateHandle["refreshShowSubagentSessions"] = false
+                    }
+                }
                 // In wide layout the left pane already shows this exact content, so this
                 // destination becomes a quiet "nothing selected" placeholder instead of a second
                 // copy of the session list.
@@ -324,6 +336,7 @@ fun HermexNavGraph(
                     viewModel = viewModel,
                     onBack = {
                         navController.previousBackStackEntry?.savedStateHandle?.set("refreshHeaderLogoColor", true)
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshShowSubagentSessions", true)
                         navController.popBackStack()
                     },
                     onOpenDefaultModel = { navController.navigate(Routes.DEFAULT_MODEL) },

@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +63,11 @@ fun copyableTextFor(message: ChatMessage): String = message.content.orEmpty()
 fun MessageBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
+    /** Non-null only for the message this action currently applies to (the editable user turn /
+     * the regenerable assistant turn) -- absence of the callback is what hides the icon, so
+     * callers gate applicability rather than this composable guessing from [message] alone. */
+    onEdit: (() -> Unit)? = null,
+    onRegenerate: (() -> Unit)? = null,
 ) {
     val isUser = message.role == "user"
     val displayContent = stripAttachedFilesMarker(message.content)
@@ -117,13 +126,30 @@ fun MessageBubble(
                         )
                     }
                 }
-                message.effectiveTimestamp?.let { timestamp ->
-                    Text(
-                        text = messageTimeText(timestamp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (message.effectiveTimestamp != null || onEdit != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(top = 3.dp, end = 4.dp),
-                    )
+                    ) {
+                        onEdit?.let { edit ->
+                            IconButton(onClick = edit, modifier = Modifier.size(20.dp)) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = "Edit message",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(2.dp))
+                        }
+                        message.effectiveTimestamp?.let { timestamp ->
+                            Text(
+                                text = messageTimeText(timestamp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -158,13 +184,30 @@ fun MessageBubble(
                     )
                 }
             }
-            message.effectiveTimestamp?.let { timestamp ->
-                Text(
-                    text = messageTimeText(timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            if (message.effectiveTimestamp != null || onRegenerate != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 3.dp),
-                )
+                ) {
+                    message.effectiveTimestamp?.let { timestamp ->
+                        Text(
+                            text = messageTimeText(timestamp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    onRegenerate?.let { regenerate ->
+                        Spacer(Modifier.width(2.dp))
+                        IconButton(onClick = regenerate, modifier = Modifier.size(20.dp)) {
+                            Icon(
+                                Icons.Filled.Refresh,
+                                contentDescription = "Regenerate response",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

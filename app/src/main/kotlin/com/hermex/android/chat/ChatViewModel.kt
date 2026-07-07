@@ -900,9 +900,22 @@ class ChatViewModel(
         }
     }
 
+    /** Edit a past user message: truncates the session (server + local) back to just before
+     * [index] and pre-fills the composer with that message's original text, so the subsequent
+     * Send replaces it (and everything after it) instead of appending a duplicate at the end. */
     fun editMessage(index: Int) {
-        val text = _uiState.value.messages.getOrNull(index)?.content ?: return
-        _uiState.update { it.copy(composerText = text) }
+        val message = _uiState.value.messages.getOrNull(index) ?: return
+        if (message.role != "user") return
+        val text = message.content ?: return
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                safeApiCall { api.truncateSession(TruncateSessionRequest(session_id = sessionId, keep_count = index)) }
+                _uiState.update { it.copy(messages = it.messages.take(index), composerText = text) }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not edit message.") }
+            }
+        }
     }
 
     fun retryLastMessage() {

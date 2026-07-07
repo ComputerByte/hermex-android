@@ -8,6 +8,7 @@ import com.hermex.android.core.cache.FakeOfflineCacheRepository
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.dto.SessionSummary
+import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.FakeAppearancePreferencesStore
 import com.hermex.android.core.storage.FakeServerStore
 import com.hermex.android.core.storage.HeaderLogoColor
@@ -37,6 +38,22 @@ private suspend fun <T> ReceiveTurbine<T>.awaitUntil(predicate: (T) -> Boolean):
     var item = awaitItem()
     while (!predicate(item)) item = awaitItem()
     return item
+}
+
+/** Mutable (unlike the read-only fakes elsewhere) so tests can flip the persisted toggle between
+ * [SessionListViewModel] construction and a later [SessionListViewModel.loadShowSubagentSessions]
+ * call, simulating a real round trip through the Settings screen. */
+private class FakeChatPreferencesStore(
+    private var showSubagentSessions: Boolean = true,
+) : ChatPreferencesStore {
+    override suspend fun loadExpandThinkingByDefault(): Boolean = false
+    override suspend fun setExpandThinkingByDefault(value: Boolean) {}
+    override suspend fun loadExpandToolCallsByDefault(): Boolean = false
+    override suspend fun setExpandToolCallsByDefault(value: Boolean) {}
+    override suspend fun loadNotificationsEnabled(): Boolean = false
+    override suspend fun setNotificationsEnabled(value: Boolean) {}
+    override suspend fun loadShowSubagentSessions(): Boolean = showSubagentSessions
+    override suspend fun setShowSubagentSessions(value: Boolean) { showSubagentSessions = value }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -382,6 +399,47 @@ class SessionListViewModelTest {
             val settled = awaitUntil { !it.isLoading }
             assertEquals(listOf("Server B session"), settled.sessions.map { it.title })
             assertTrue(settled.sessions.none { it.title == "Server A session" })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ── Subagent Sessions toggle ──
+
+    @Test
+    fun `showSubagentSessions is loaded from the preferences store at init, not just defaulted to true`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+        val store = FakeChatPreferencesStore(showSubagentSessions = false)
+
+        val viewModel = SessionListViewModel(authRepository, chatPreferencesStore = store)
+
+        viewModel.uiState.test {
+            val settled = awaitUntil { !it.isLoading }
+            assertEquals(false, settled.showSubagentSessions)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadShowSubagentSessions re-reads the toggle -- the refresh HermexNavGraph fires on return from Settings`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+        val store = FakeChatPreferencesStore(showSubagentSessions = true)
+
+        val viewModel = SessionListViewModel(authRepository, chatPreferencesStore = store)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            assertEquals(true, viewModel.uiState.value.showSubagentSessions)
+
+            // Simulates flipping the toggle off on the Settings screen (a separate ViewModel
+            // instance/screen -- this ViewModel only finds out via the explicit reload below,
+            // matching the navigation-driven refresh HermexNavGraph performs on return).
+            store.setShowSubagentSessions(false)
+            viewModel.loadShowSubagentSessions()
+            val refreshed = awaitUntil { !it.showSubagentSessions }
+            assertEquals(false, refreshed.showSubagentSessions)
+
             cancelAndIgnoreRemainingEvents()
         }
     }

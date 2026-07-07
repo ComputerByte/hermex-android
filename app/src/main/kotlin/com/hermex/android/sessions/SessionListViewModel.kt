@@ -13,7 +13,9 @@ import com.hermex.android.core.network.dto.SessionRenameRequest
 import com.hermex.android.core.network.dto.SessionSummary
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.AppearancePreferencesStore
+import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.storage.NoOpAppearancePreferencesStore
+import com.hermex.android.core.storage.NoOpChatPreferencesStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +34,7 @@ class SessionListViewModel(
     private val authRepository: AuthRepository,
     private val appearancePreferencesStore: AppearancePreferencesStore = NoOpAppearancePreferencesStore,
     private val offlineCacheRepository: OfflineCacheRepository = NoOpOfflineCacheRepository,
+    private val chatPreferencesStore: ChatPreferencesStore = NoOpChatPreferencesStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SessionListUiState())
     val uiState: StateFlow<SessionListUiState> = _uiState.asStateFlow()
@@ -40,6 +43,7 @@ class SessionListViewModel(
         load()
         loadHeaderLogoColor()
         loadUserInitials()
+        loadShowSubagentSessions()
     }
 
     /** Re-reads just the header color preference (fast, local, no network) -- used to reflect a
@@ -54,6 +58,17 @@ class SessionListViewModel(
     fun loadUserInitials() {
         viewModelScope.launch {
             _uiState.update { it.copy(userInitials = appearancePreferencesStore.loadUserInitials()) }
+        }
+    }
+
+    /** Re-reads just the "Subagent Sessions" toggle (fast, local, no network) -- same
+     * Settings-screen-round-trip refresh pattern as [loadHeaderLogoColor], see
+     * [com.hermex.android.navigation.HermexNavGraph]. Without this, [SessionListUiState.showSubagentSessions]
+     * would be stuck at its `true` default forever, since this ViewModel instance survives the
+     * trip to Settings and back. */
+    fun loadShowSubagentSessions() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(showSubagentSessions = chatPreferencesStore.loadShowSubagentSessions()) }
         }
     }
 

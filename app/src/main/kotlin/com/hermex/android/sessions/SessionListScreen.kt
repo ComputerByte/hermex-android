@@ -401,7 +401,7 @@ fun SessionListBody(
                     }
                 }
 
-                uiState.filteredSessions.isEmpty() -> item(key = "no-search-matches") {
+                uiState.groupedSessions.isEmpty() && (uiState.searchQuery.isBlank() || uiState.filteredSessions.isEmpty()) -> item(key = "no-search-matches") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -424,10 +424,11 @@ fun SessionListBody(
                     // existing ordering in filteredSessions is walked as-is, and a header
                     // is inserted only when the bucket changes from the previous row.
                     var previousBucket: String? = null
-                    uiState.filteredSessions.forEach { session ->
-                        val bucket = (session.lastMessageAt ?: session.createdAt)?.let(::sessionDateBucket)
+                    uiState.groupedSessions.forEach { group ->
+                        val parent = group.parent
+                        val bucket = (parent.lastMessageAt ?: parent.createdAt)?.let(::sessionDateBucket)
                         if (bucket != null && bucket != previousBucket) {
-                            item(key = "date-header-$bucket-${session.sessionId ?: session.hashCode()}") {
+                            item(key = "date-header-$bucket-${parent.sessionId ?: parent.hashCode()}") {
                                 Text(
                                     text = bucket,
                                     style = MaterialTheme.typography.labelSmall,
@@ -439,46 +440,56 @@ fun SessionListBody(
                             }
                             previousBucket = bucket
                         }
-                        item(key = session.sessionId ?: session.hashCode()) {
+                        item(key = parent.sessionId ?: parent.hashCode()) {
                             Box {
                                 var showMenu by remember { mutableStateOf(false) }
                                 SessionRow(
-                                    session = session,
-                                    onClick = { session.sessionId?.let(onOpenSession) },
+                                    session = parent,
+                                    onClick = { parent.sessionId?.let(onOpenSession) },
                                     modifier = Modifier
                                         .padding(horizontal = 12.dp, vertical = 4.dp)
                                         .combinedClickable(
-                                            onClick = { session.sessionId?.let(onOpenSession) },
+                                            onClick = { parent.sessionId?.let(onOpenSession) },
                                             onLongClick = { showMenu = true },
                                         ),
-                                    isSelected = session.sessionId != null && session.sessionId == selectedSessionId,
+                                    isSelected = parent.sessionId != null && parent.sessionId == selectedSessionId,
                                 )
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                     DropdownMenuItem(
                                         text = { Text("Rename") },
-                                        onClick = { showMenu = false; pendingRenameSession = session },
+                                        onClick = { showMenu = false; pendingRenameSession = parent },
                                         leadingIcon = { Icon(Icons.Filled.Edit, null) },
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Move to Project") },
-                                        onClick = { showMenu = false; pendingMoveSession = session },
+                                        onClick = { showMenu = false; pendingMoveSession = parent },
                                         leadingIcon = { Icon(Icons.Filled.Folder, null) },
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Share") },
                                         onClick = {
                                             showMenu = false
-                                            session.sessionId?.let { shareSession(context, it, session.title ?: "Session") }
+                                            parent.sessionId?.let { shareSession(context, it, parent.title ?: "Session") }
                                         },
                                         leadingIcon = { Icon(Icons.Filled.Share, null) },
                                     )
                                     HorizontalDivider()
                                     DropdownMenuItem(
                                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                        onClick = { showMenu = false; pendingDeleteSession = session },
+                                        onClick = { showMenu = false; pendingDeleteSession = parent },
                                         leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
                                     )
                                 }
+                            }
+                        }
+                        group.children.forEach { child ->
+                            item(key = child.sessionId ?: child.hashCode()) {
+                                SessionRow(
+                                    session = child,
+                                    onClick = { child.sessionId?.let(onOpenSession) },
+                                    isNested = true,
+                                    isSelected = child.sessionId != null && child.sessionId == selectedSessionId,
+                                )
                             }
                         }
                     }

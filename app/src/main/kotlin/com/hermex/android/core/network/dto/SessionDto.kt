@@ -29,6 +29,15 @@ data class SessionSummary(
     val sourceTag: String? = null,
     val sessionSource: String? = null,
     val sourceLabel: String? = null,
+    val parentSessionId: String? = null,
+    val relationshipType: String? = null,
+    val readOnly: Boolean? = null,
+)
+
+@Serializable
+data class TruncateSessionRequest(
+    val session_id: String,
+    val keep_count: Int,
 )
 
 @Serializable

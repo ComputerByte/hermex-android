@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.update
 import com.hermex.android.core.network.dto.ApprovalRespondRequest
 import com.hermex.android.core.network.dto.ClarificationRespondRequest
 import com.hermex.android.core.network.dto.SessionYoloRequest
+import com.hermex.android.core.network.dto.TruncateSessionRequest
 import com.hermex.android.core.network.dto.SessionRenameRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -876,6 +877,48 @@ class ChatViewModel(
                 safeApiCall { api.renameSession(SessionRenameRequest(sessionId, newTitle)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Could not rename session.") }
+            }
+        }
+    }
+
+    fun regenerate() {
+        val messages = _uiState.value.messages
+        if (messages.size < 2) return
+        val lastMessage = messages.lastOrNull() ?: return
+        if (lastMessage.role == "user") return
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                val keepCount = messages.size - 1
+                safeApiCall { api.truncateSession(TruncateSessionRequest(session_id = sessionId, keep_count = keepCount)) }
+                val lastUserText = messages.dropLast(1).lastOrNull()?.content ?: return@launch
+                _uiState.update { it.copy(messages = it.messages.dropLast(1), composerText = lastUserText) }
+                sendMessage()
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not regenerate.") }
+            }
+        }
+    }
+
+    fun editMessage(index: Int) {
+        val text = _uiState.value.messages.getOrNull(index)?.content ?: return
+        _uiState.update { it.copy(composerText = text) }
+    }
+
+    fun retryLastMessage() {
+        val messages = _uiState.value.messages
+        val lastUserIdx = messages.indexOfLast { it.role == "user" }
+        if (lastUserIdx < 0) return
+        val lastUserText = messages[lastUserIdx].content.orEmpty()
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                val keepCount = lastUserIdx
+                safeApiCall { api.truncateSession(TruncateSessionRequest(session_id = sessionId, keep_count = keepCount)) }
+                _uiState.update { it.copy(messages = it.messages.take(keepCount), composerText = lastUserText) }
+                sendMessage()
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not retry.") }
             }
         }
     }

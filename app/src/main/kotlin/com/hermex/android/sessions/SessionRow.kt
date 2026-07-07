@@ -39,13 +39,15 @@ fun SessionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
+    isNested: Boolean = false,
 ) {
+    val paddingStart = if (isNested) 40.dp else 0.dp
     val streamingColor = if (isSystemInDarkTheme()) HermexColors.SuccessDark else HermexColors.SuccessLight
 
     val mutedLabel = if (isSystemInDarkTheme()) HermexColors.DarkTertiaryLabel else HermexColors.LightTertiaryLabel
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.padding(start = paddingStart),
         shape = RoundedCornerShape(HermexRadii.Cell),
         // Selected state (wide-layout left pane only) stays quiet: a soft primary tint over the
         // existing low-contrast background, no border/elevation change.
@@ -67,6 +69,21 @@ fun SessionRow(
                             modifier = Modifier.size(14.dp),
                         )
                         Spacer(Modifier.width(6.dp))
+                    }
+                    if (isNested) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        ) {
+                            Text(
+                                text = "Subagent",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
                     }
                     Text(
                         text = session.title?.takeIf { it.isNotBlank() } ?: "Untitled",

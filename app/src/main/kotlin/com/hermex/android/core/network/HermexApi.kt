@@ -62,6 +62,7 @@ import com.hermex.android.core.network.dto.GenericResponse
 import com.hermex.android.core.network.dto.SessionRenameRequest
 import com.hermex.android.core.network.dto.SessionIdRequest
 import com.hermex.android.core.network.dto.SessionProjectRequest
+import com.hermex.android.core.network.dto.TruncateSessionRequest
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
@@ -115,6 +116,9 @@ interface HermexApi {
 
     @POST("api/session/project")
     suspend fun moveSessionToProject(@Body request: SessionProjectRequest): GenericResponse
+
+    @POST("api/session/truncate")
+    suspend fun truncateSession(@Body body: TruncateSessionRequest): SessionResponse
 
     @POST("/api/chat/start")
     suspend fun chatStart(@Body body: ChatStartRequest): ChatStartResponse

@@ -32,4 +32,22 @@ data class SessionListUiState(
             if (query.isEmpty()) return filtered
             return filtered.filter { it.title?.contains(query, ignoreCase = true) == true }
         }
+
+    data class SessionGroup(
+        val parent: SessionSummary,
+        val children: List<SessionSummary>,
+    )
+
+    /** Groups sessions by parent_session_id. Children appear nested under their parent. */
+    val groupedSessions: List<SessionGroup>
+        get() {
+            val filtered = filteredSessions
+            val childrenByParent = filtered.filter { it.parentSessionId != null }.groupBy { it.parentSessionId }
+            return filtered.filter { it.parentSessionId == null }.map { parent ->
+                SessionGroup(
+                    parent = parent,
+                    children = childrenByParent[parent.sessionId].orEmpty(),
+                )
+            }
+        }
 }

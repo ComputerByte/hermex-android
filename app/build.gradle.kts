@@ -13,8 +13,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.11.0-streaming-bugfixes"
+        versionCode = 22
+        versionName = "0.11.1-issues"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

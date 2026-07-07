@@ -139,7 +139,7 @@ class AppContainer(val context: Context) {
     }
 
     fun sessionListViewModelFactory() = viewModelFactory {
-        initializer { SessionListViewModel(authRepository, appearancePreferencesStore, offlineCacheRepository) }
+        initializer { SessionListViewModel(authRepository, appearancePreferencesStore, offlineCacheRepository, chatPreferencesStore) }
     }
 
     fun chatViewModelFactory(sessionId: String) = viewModelFactory {

@@ -1967,4 +1967,108 @@ class ChatViewModelTest {
         assertFalse(viewModel.uiState.value.isSending)
         assertFalse(viewModel.uiState.value.isStreaming)
     }
+
+    // ── editMessage / regenerate ──
+
+    @Test
+    fun `editMessage truncates the session at that message and prefills the composer with its original text`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[
+                    {"role":"user","content":"first"},
+                    {"role":"assistant","content":"reply one"},
+                    {"role":"user","content":"second"},
+                    {"role":"assistant","content":"reply two"}
+                ]}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1"}}""")) // truncate response
+
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(4, loaded.messages.size)
+
+            // Editing the *second* user turn (index 2) must drop it and everything after it --
+            // not just the tail end -- so Send re-adds it (with whatever new text) in its place
+            // instead of appending a duplicate after "reply two".
+            viewModel.editMessage(2)
+            val edited = awaitUntil { it.composerText == "second" }
+            assertEquals(2, edited.messages.size)
+            assertEquals("first", edited.messages[0].content)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val truncateRequest = server.takeRequest()
+        assertTrue(truncateRequest.path?.contains("/api/session/truncate") == true)
+        val body = truncateRequest.body.readUtf8()
+        assertTrue(body.contains("\"keep_count\":2"))
+    }
+
+    @Test
+    fun `editMessage on a message that no longer exists is a no-op`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        viewModel.editMessage(0)
+        assertEquals("", viewModel.uiState.value.composerText)
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        assertNull(server.takeRequest(200, java.util.concurrent.TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `regenerate truncates the last assistant message and resends the prior user turn`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[
+                    {"role":"user","content":"question"},
+                    {"role":"assistant","content":"bad answer"}
+                ]}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1"}}""")) // truncate response
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}""")) // chat/start
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { emptyList<SseEvent>().asFlow() },
+            FakeChatPreferencesStore(),
+        )
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals(2, loaded.messages.size)
+
+            viewModel.regenerate()
+            awaitUntil { it.isSending || it.isStreaming }
+
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        server.takeRequest() // session
+        server.takeRequest() // profiles
+        val truncateRequest = server.takeRequest()
+        assertTrue(truncateRequest.path?.contains("/api/session/truncate") == true)
+        assertTrue(truncateRequest.body.readUtf8().contains("\"keep_count\":1"))
+        val chatStartRequest = server.takeRequest()
+        assertTrue(chatStartRequest.path?.contains("/api/chat/start") == true)
+        assertTrue(chatStartRequest.body.readUtf8().contains("question"))
+    }
 }

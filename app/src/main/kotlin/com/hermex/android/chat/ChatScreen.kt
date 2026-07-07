@@ -382,6 +382,10 @@ fun ChatScreen(
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // Edit/regenerate mutate session history server-side (truncate), so they're
+                        // withheld mid-turn -- racing a truncate against an in-flight send/stream
+                        // would desync local state from the server's.
+                        val canMutateHistory = !uiState.isSending && !uiState.isStreaming
                         uiState.messages.forEachIndexed { index, message ->
                             toolCallsByAnchor[index]?.forEach { toolCall ->
                                 item(key = toolCall.stableId) {
@@ -393,7 +397,17 @@ fun ChatScreen(
                                 if (historicalToolCall != null) {
                                     ToolCallCard(historicalToolCall, initiallyExpanded = uiState.expandToolCallsByDefault)
                                 } else {
-                                    MessageBubble(message)
+                                    MessageBubble(
+                                        message = message,
+                                        onEdit = if (canMutateHistory && message.role == "user") {
+                                            { viewModel.editMessage(index) }
+                                        } else null,
+                                        // regenerate() always targets the session's actual last message,
+                                        // so only the last assistant turn can offer it.
+                                        onRegenerate = if (canMutateHistory && message.role != "user" && index == uiState.messages.lastIndex) {
+                                            viewModel::regenerate
+                                        } else null,
+                                    )
                                 }
                             }
                         }

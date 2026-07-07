@@ -27,8 +27,13 @@ data class SessionListUiState(
     val filteredSessions: List<SessionSummary>
         get() {
             val query = searchQuery.trim()
+            // `parentSessionId != null` is the same signal [groupedSessions] uses to nest a
+            // session under its parent (see the "Subagent" badge in SessionRow) -- excluding it
+            // here too is what makes turning this off actually remove the indented rows, instead
+            // of just leaving them nested with no way to hide them. `sourceTag` is kept as it
+            // predates and is independent of that parent/child relationship.
             val filtered = if (showSubagentSessions) sessions
-                else sessions.filter { it.sourceTag != "subagent" }
+                else sessions.filter { it.sourceTag != "subagent" && it.parentSessionId == null }
             if (query.isEmpty()) return filtered
             return filtered.filter { it.title?.contains(query, ignoreCase = true) == true }
         }

@@ -1,5 +1,6 @@
 package com.hermex.android.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -85,6 +86,11 @@ fun SettingsScreen(
     isPaneMode: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // There's no in-app back arrow here (the top bar's nav icon opens the drawer instead, see
+    // below) -- system/gesture back is the only way out, so it must go through [onBack] itself
+    // rather than falling through to NavHost's default pop, or the refresh signals onBack sets
+    // (e.g. refreshHeaderLogoColor, refreshShowSubagentSessions) never fire.
+    BackHandler(onBack = onBack)
     val openDrawer = LocalHermexDrawerOpener.current
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }

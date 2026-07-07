@@ -13,8 +13,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "0.11.1-issues"
+        versionCode = 23
+        versionName = "0.11.2-preview"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

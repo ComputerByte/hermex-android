@@ -60,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -336,7 +337,22 @@ fun ChatScreen(
                     LaunchedEffect(totalItems, stickToBottom) {
                         if (totalItems > 0 && stickToBottom) {
                             listState.scrollToItem(totalItems - 1)
-                            listState.scrollBy(Float.MAX_VALUE)
+                            // A single scrollBy right after scrollToItem can undershoot the true
+                            // end: on a reopened session with a long markdown message as the last
+                            // item (code blocks, images), its first-pass measured height is smaller
+                            // than what it settles to a frame or two later, so `canScrollForward`
+                            // read immediately afterward under-reports how much further there is to
+                            // go -- observed landing mid-message instead of on its last line. Yield
+                            // a frame before each check/nudge so layout catches up; capped so this
+                            // can't spin forever (streaming has its own debounced effect below and
+                            // isn't expected to hit this loop).
+                            var attempts = 0
+                            while (attempts < 10) {
+                                withFrameNanos {}
+                                attempts++
+                                if (!listState.canScrollForward) break
+                                listState.scrollBy(Float.MAX_VALUE)
+                            }
                         }
                     }
 

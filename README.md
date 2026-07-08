@@ -174,26 +174,6 @@ asset when present.
     ./gradlew test
     ./gradlew assembleRelease
 
-Notes:
-
-- Release builds use R8 / minification. ProGuard rules are in
-  `app/proguard-rules.pro`.
-- Signed release builds require local signing configuration that is
-  intentionally not committed to the repository. Unsigned release APKs are
-  produced by default for local verification.
-- Debug builds are suitable for development and tester previews.
-- Private signing material must never be committed.
-
-## Development workflow
-
-- One feature branch per slice or task.
-- Build and test before merge: `./gradlew test` then `./gradlew assembleDebug`.
-- Real-device smoke testing for any release-affecting work (chat, auth,
-  attachments, share target, notifications, widget).
-- Keep generated APKs, local signing files, build caches, and recon notes
-  out of git (already gitignored).
-- Prefer incremental: feature → tests → real-device verification → commit.
-- Avoid new feature work during RC / final release stabilization.
 
 ## QA / release checklist
 

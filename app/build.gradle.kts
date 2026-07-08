@@ -21,7 +21,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Note: signingConfig requires the keystore to exist
+            // For this demo, release builds are unsigned (R8 minification still works)
+            // The debug APK is what ships to testers
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -48,6 +51,14 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/license.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/notice.txt"
+            excludes += "META-INF/ASL2.0"
         }
     }
 }
@@ -89,6 +100,10 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
+
+    // Security Crypto / Tink — needs error prone annotations for R8
+    implementation("com.google.errorprone:error_prone_annotations:2.36.0")
+    implementation("com.google.http-client:google-http-client-gson:1.44.2")
 
     // Markdown rendering
     implementation("io.noties.markwon:core:4.6.2")

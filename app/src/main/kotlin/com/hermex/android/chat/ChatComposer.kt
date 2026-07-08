@@ -48,12 +48,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -170,6 +176,8 @@ fun ChatComposer(
     var commandQuery by remember { mutableStateOf("") }
     var isRecording by remember { mutableStateOf(false) }
     val voiceHandler = remember { VoiceInputHandler(context) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     val recordAudioPermission = android.Manifest.permission.RECORD_AUDIO
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -185,6 +193,28 @@ fun ChatComposer(
                 },
             )
             isRecording = true
+        } else {
+            // Permission denied -- show education Snackbar
+            coroutineScope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Microphone permission is required for voice input. Please enable it in Settings.",
+                    actionLabel = "Settings",
+                    withDismissAction = true,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    // Open app settings
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = android.net.Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                }
+            }
+        }
+    }
+    // Clean up SpeechRecognizer on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceHandler.stopListening()
         }
     }
     // Capped and centered rather than left plain fillMaxWidth(), so the dock doesn't stretch to an
@@ -196,6 +226,7 @@ fun ChatComposer(
     // and max width to the full available space, so a subsequent widthIn(max) below that pinned
     // min gets silently overridden back up to full width, defeating the cap on wide panes.
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        SnackbarHost(hostState = snackbarHostState)
         Surface(
             modifier = Modifier
                 .widthIn(max = ComposerMaxWidth)

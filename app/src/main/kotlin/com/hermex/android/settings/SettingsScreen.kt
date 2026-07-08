@@ -358,6 +358,12 @@ fun SettingsScreen(
                 Card {
                     SettingsRow("Version", BuildConfig.VERSION_NAME)
                     SettingsRow("Build", BuildConfig.VERSION_CODE.toString(), showDivider = false)
+                    SettingsRow(
+                        "Copy Diagnostics",
+                        "Version, server, headers",
+                        onClick = { viewModel.copyDiagnostics(context) },
+                        showDivider = false,
+                    )
                 }
 
                 Spacer(Modifier.height(24.dp))

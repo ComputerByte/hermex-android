@@ -134,4 +134,23 @@ class SettingsViewModel(
             authRepository.signOut()
         }
     }
+
+    /** Copies a diagnostic snapshot (version, build, server, header count) to the system
+     * clipboard -- helps users report issues without typing the details by hand. */
+    fun copyDiagnostics(context: android.content.Context) {
+        val state = _uiState.value
+        val diagnostics = buildString {
+            appendLine("Hermex Android Diagnostics")
+            appendLine("App: ${com.hermex.android.BuildConfig.VERSION_NAME} (build ${com.hermex.android.BuildConfig.VERSION_CODE})")
+            appendLine("Server: ${state.activeServerName ?: "Not signed in"}")
+            appendLine("URL: ${state.serverUrl ?: "--"}")
+            appendLine("Server Version: ${state.serverVersion ?: "--"}")
+            appendLine("Default Model: ${state.defaultModel ?: "--"}")
+            appendLine("Custom Headers: ${state.customHeaderCount}")
+            appendLine("Notifications: ${state.notificationsEnabled}")
+            appendLine("Show Subagent Sessions: ${state.showSubagentSessions}")
+        }
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Hermex Diagnostics", diagnostics))
+    }
 }

@@ -81,6 +81,11 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
                         source.readUtf8Line()
                     }
                 } catch (e: IOException) {
+                    // If the coroutine is no longer active, the stream was cancelled intentionally
+                    // (user navigated away, model/profile switch, etc.) and the IOException is
+                    // an expected artefact of canceling the underlying OkHttp call — do not
+                    // surface a scary TransportError to the user.
+                    if (!isActive) break
                     HermexLog.w("Sse", "read error", e)
                     trySend(SseEvent.TransportError(e.message ?: "Stream read error"))
                     null

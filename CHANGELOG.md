@@ -1,3 +1,52 @@
+# Hermex Android v0.12.1-preview
+
+## Stream Cancellation Hotfix
+
+This is a **hotfix** for tester-reported issues in v0.12.0-preview / v1.0.0-rc1.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+
+**Download:**
+- `hermex-android-v0.12.1-preview-release.apk` (release build, R8 minified, signed)
+
+**Verify integrity:**
+```
+12e3bf1fe748c9519343dc0976af28fb9d11a5b51854fdf53e5ff8040c0a3d4a  hermex-android-v0.12.1-preview-release.apk
+```
+
+## Changelog
+
+- **Fixed:** Benign stream cancellation no longer surfaces as "Software caused connection abort" error.
+  - Underlying SSE read now checks coroutine `isActive` before emitting a `TransportError`; expected
+    cancellation artifacts from user navigation are silently dropped.
+- **Fixed:** Drawer "Recents" section now respects the "Subagent Sessions" toggle, matching the main
+  session list behavior.
+- **Tests:** Added two regression tests in `SseClientTest` for cancelled-stream behavior.
+
+## Known Limitations (carried forward)
+
+- Git workspace is read-only (commit/discard/checkout deferred to 1.1+)
+- Full chat pagination beyond `msg_limit=50` deferred to 1.1
+- Gateway-only / OpenAI-compatible mode is not in 1.0 (planned for 1.1+)
+- Background response completion notifications may be unreliable on some OEM ROMs
+
+## Upgrade
+
+- **From v0.12.0-preview or v1.0.0-rc1:** Direct install. Settings and session data preserved.
+- **Fresh install:** Configure server URL on first launch.
+
+## Build Info
+
+- versionName: 0.12.1-preview
+- versionCode: 26
+- compileSdk: 36
+- minSdk: 26
+- R8: enabled (release, signed)
+
+---
+
 # Hermex Android v1.0.0-rc1
 
 ## 1.0 Release Candidate

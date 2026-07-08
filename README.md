@@ -6,9 +6,9 @@ Hermex app.
 
 ## Status
 
-**Current version: v0.11.0-streaming-bugfixes.** The v0.10.x release
+**Current version: v0.11.2-preview.** The v0.10.x release
 train (v0.10.0 through v0.10.6) delivered 7 releases spanning approximately 3,200 lines of
-changes with zero regressions, followed by v0.11.0 with streaming bugfixes and feature polish:
+changes with zero regressions, followed by v0.11.x with chat polish and bugfixes:
 
 - **v0.10.0** — Navigation drawer, hamburger navigation, compact New Chat
 - **v0.10.1** — Approval and clarification request overlays mid-stream
@@ -19,6 +19,8 @@ changes with zero regressions, followed by v0.11.0 with streaming bugfixes and f
 - **v0.10.6** — Full device regression verification (12 scenarios on real hardware)
 - **v0.11.0** — Session actions, slash commands, voice input, stream reattach, smooth streaming,
   subagent toggle, chat replay bugfixes
+- **v0.11.1** — Regenerate assistant response, edit/resend user message, subagent session grouping
+- **v0.11.2** — Chat edit/regenerate button fixes, subagent toggle refresh on Settings back
 
 See the Screenshots section below for the current look. See `API_CONTRACT.md` for the verified
 server API contract this app targets.
@@ -76,13 +78,17 @@ server API contract this app targets.
 
 ## In Progress / Not Finished Yet
 
-- Chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons,
-  translucent field architecture) — the composer field's shape/radius is aligned to design tokens,
-  but not the wider component architecture
-- Goal controls (set Hermes direction/goals from composer)
+### Done (needs polish)
+
+- Chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons)
 - Voice input / dictation
-- Git workspace diff/commit/branch features
 - Slash commands / autocomplete in composer
+- Git workspace (read-only: status, diff, branches)
+
+### Not yet implemented
+
+- Goal controls (set Hermes direction/goals from composer)
+- Git write operations (commit, push, pull)
 - Play Store release hardening (this preview ships a debug build; release signing isn't set up yet)
 
 ## Download
@@ -91,6 +97,15 @@ A preview APK is available under [GitHub Releases](../../releases).
 
 This is a manual-install APK, not distributed through the Play Store. Android will warn that it's
 from an unknown source — that's expected for a debug preview build.
+
+## Debug vs Release Builds
+
+**Debug build** (`assembleDebug`): Signed with debug keystore, minification disabled. Install directly:
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+**Release build** (`assembleRelease`): Requires signing config in `app/build.gradle.kts`. Not yet configured.
 
 ## Screenshots
 
@@ -113,6 +128,32 @@ from an unknown source — that's expected for a debug preview build.
 More screenshots (multi-server, connection headers, header logo color, chat model picker, app
 icon picker, offline cache banner) are in
 [`release-artifacts/screenshots/`](release-artifacts/screenshots).
+
+## Hermex 1.0 Roadmap
+
+The 1.0 release targets a polished, production-ready mobile control plane for Hermes.
+
+### P0 — Must Have
+
+- [ ] Chat: edit/regenerate fully functional (needs polish after v0.11.2)
+- [ ] Chat: attachments UX polish
+- [ ] Chat: send/stop reliability under edge cases
+- [ ] Subagent sessions: proper parent-child relationship
+- [ ] Settings back navigation: consistent refresh across all preferences
+
+### P1 — Should Have
+
+- [ ] Composer: full design system alignment
+- [ ] Voice input: end-to-end functional
+- [ ] Slash commands: autocomplete + execution
+- [ ] Git: write operations (commit/push/pull)
+- [ ] Offline mode: reliable cache-first loading
+
+### P2 — Nice to Have
+
+- [ ] Goal controls in composer
+- [ ] Play Store release hardening
+- [ ] Release signing and minification
 
 ## Requirements
 

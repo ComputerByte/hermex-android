@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -19,13 +21,43 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Local signing.properties is gitignored. When present, it enables signed release builds.
+    // When absent, release builds still R8-minify but produce an unsigned APK that Android
+    // will refuse to install — a clear warning is logged.
+    val signingPropsFile = rootProject.file("signing.properties")
+    val hasSigningProps = signingPropsFile.exists()
+
+    if (hasSigningProps) {
+        val props = Properties()
+        signingPropsFile.inputStream().use { stream -> props.load(stream) }
+        // Accept both spec field names (storeFile/storePassword/keyAlias/keyPassword) and
+        // the existing convention (keystore/keystore.password/key.alias/key.password).
+        val storeFilePath: String = props.getProperty("storeFile") ?: props.getProperty("keystore") ?: ""
+        val storePassword: String = props.getProperty("storePassword") ?: props.getProperty("keystore.password") ?: ""
+        val keyAliasName: String = props.getProperty("keyAlias") ?: props.getProperty("key.alias") ?: ""
+        val keyPasswordValue: String = props.getProperty("keyPassword") ?: props.getProperty("key.password") ?: ""
+
+        val releaseSigning = signingConfigs.create("release")
+        releaseSigning.storeFile = rootProject.file(storeFilePath)
+        releaseSigning.storePassword = storePassword
+        releaseSigning.keyAlias = keyAliasName
+        releaseSigning.keyPassword = keyPasswordValue
+    } else {
+        logger.warn(
+            "signing.properties not found at repo root. Release builds will be UNSIGNED " +
+            "and Android will refuse to install them. Create signing.properties (gitignored) " +
+            "to enable signed release APK output.",
+        )
+    }
+
     buildTypes {
         release {
-            // Note: signingConfig requires the keystore to exist
-            // For this demo, release builds are unsigned (R8 minification still works)
-            // The debug APK is what ships to testers
+            // R8 minification is always on; signing is only applied if signing.properties exists.
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (hasSigningProps) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

@@ -15,8 +15,10 @@ This is the **release candidate** for Hermex Android 1.0. All 21 hardening slice
 **Verify integrity:**
 ```
 dfda5a96e969afbc5728c5f949b29fa4da87b97cb235e8356b5da00ccdd14db8  hermex-android-v1.0.0-rc1-debug.apk
-fcbf1d5530ec400900b8a3bc4054437bda361f2677bb5e07f21abad7346f0fa3  hermex-android-v1.0.0-rc1-release.apk
+51fb00db59709780bd782576731f16ef149884a6476664685ac708a37bd22120  hermex-android-v1.0.0-rc1-release.apk
 ```
+
+> **Note:** the previous v0.12.0-preview release APK (`fcbf1d55…`) was R8-minified but **unsigned**, so Android would refuse to install it. v1.0.0-rc1 release APK above is now properly signed and verified installable on real devices.
 
 ## What's In This Candidate
 

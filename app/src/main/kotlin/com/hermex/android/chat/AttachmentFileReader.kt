@@ -6,6 +6,8 @@ import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** A picked file's bytes and display metadata, read from a content [Uri] -- see
  * [AttachmentFileReader] for why the reader is abstracted behind an interface rather than
@@ -44,23 +46,23 @@ class ContentResolverAttachmentReader(
     private val contentResolver: ContentResolver,
     private val maxBytes: Long = DEFAULT_MAX_ATTACHMENT_BYTES,
 ) : AttachmentFileReader {
-    override suspend fun read(uri: Uri): AttachmentReadResult {
+    override suspend fun read(uri: Uri): AttachmentReadResult = withContext(Dispatchers.IO) {
         val name = queryDisplayName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "attachment"
         val knownSize = querySize(uri)
-        if (knownSize != null && knownSize > maxBytes) return AttachmentReadResult.TooLarge(name)
+        if (knownSize != null && knownSize > maxBytes) return@withContext AttachmentReadResult.TooLarge(name)
 
         val bytes = try {
             contentResolver.openInputStream(uri)?.use { readBounded(it, maxBytes) }
         } catch (e: Exception) {
             null
-        } ?: return AttachmentReadResult.Unreadable
+        } ?: return@withContext AttachmentReadResult.Unreadable
 
         // The stream may not have reported an accurate Content-Length up front -- re-check the
         // bytes actually read, not just the cursor's claimed size.
-        if (bytes.size.toLong() > maxBytes) return AttachmentReadResult.TooLarge(name)
+        if (bytes.size.toLong() > maxBytes) return@withContext AttachmentReadResult.TooLarge(name)
 
         val mime = contentResolver.getType(uri) ?: guessMimeFromExtension(name)
-        return AttachmentReadResult.Success(AttachmentFile(name = name, bytes = bytes, mime = mime))
+        return@withContext AttachmentReadResult.Success(AttachmentFile(name = name, bytes = bytes, mime = mime))
     }
 
     private fun queryDisplayName(uri: Uri): String? = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)

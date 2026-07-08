@@ -1,168 +1,225 @@
 # Hermex Android
 
-Hermex is the native Android control plane for a self-hosted [Hermes](https://github.com/nesquena/hermes-webui)
-AI agent server, built with Kotlin and Jetpack Compose — the Android counterpart to the iOS
-Hermex app.
+Native Android client for Hermex/Hermes self-hosted AI servers.
+
+Hermex Android is the operator-grade mobile control plane for [Hermes](https://github.com/nesquena/hermes-webui)
+servers — a calm, dense, native surface for sessions, chat, tools, projects,
+tasks, skills, memory, insights, and server administration. It runs against
+real self-hosted backends, not mocks or prototypes.
 
 ## Status
 
-**Current version: v0.11.2-preview.** The v0.10.x release
-train (v0.10.0 through v0.10.6) delivered 7 releases spanning approximately 3,200 lines of
-changes with zero regressions, followed by v0.11.x with chat polish and bugfixes:
+- **Current release:** v0.12.0-preview
+- **Status:** 1.0 hardening complete (21 slices)
+- **Next milestone:** v1.0.0-rc1
+- **Distribution:** GitHub Releases
+- **Play Store:** planned after stable 1.0 ships
 
-- **v0.10.0** — Navigation drawer, hamburger navigation, compact New Chat
-- **v0.10.1** — Approval and clarification request overlays mid-stream
-- **v0.10.2** — Chat/composer hardening (stop button, stream timeout, error banner)
-- **v0.10.3** — Attachments UX (file type icons, thumbnails, lightbox, document opener)
-- **v0.10.4** — Auth/offline/error hardening (test connection, session expiry, friendly errors)
-- **v0.10.5** — Control-plane consistency (shared error banner, refresh buttons, empty states)
-- **v0.10.6** — Full device regression verification (12 scenarios on real hardware)
-- **v0.11.0** — Session actions, slash commands, voice input, stream reattach, smooth streaming,
-  subagent toggle, chat replay bugfixes
-- **v0.11.1** — Regenerate assistant response, edit/resend user message, subagent session grouping
-- **v0.11.2** — Chat edit/regenerate button fixes, subagent toggle refresh on Settings back
+## Overview
 
-See the Screenshots section below for the current look. See `API_CONTRACT.md` for the verified
-server API contract this app targets.
+Hermex Android connects to one or more Hermex/Hermes servers with real
+authentication, real SSE streaming, and real persistent state. It is designed
+for daily operator use on a phone or tablet: switch servers, manage sessions,
+chat with streaming responses, browse workspaces, run projects/tasks/skills,
+inspect memory and insights, and configure the app itself.
 
-## Current Features
+The app is built to match the shared Hermex design system across iOS and
+WebUI where possible, adapted to native Android idioms (Compose, Material 3,
+edge-to-edge, system navigation).
 
-- Native Android / Jetpack Compose UI, styled from a shared Hermex design system (colors, shape,
-  typography tokens) with a live-composited wordmark, bolder navigation typography, and
-  TODAY/YESTERDAY/date session grouping in the home/session list
-- Slide-out navigation drawer with Hermex wordmark, nav items (Chats/Tasks/Skills/Memory/
-  Insights/Projects/Settings), Recents section, and compact New Chat button — accessible via
-  hamburger menu from every screen
+## Features
+
+### Core chat
+
 - Real server authentication and session loading
-- Sessions & Chat: SSE token streaming, a stop control for in-progress runs, session search, and a
-  refreshed "New Chat" affordance
-- Markdown rendering in chat (bold/italic, inline & fenced code, lists), plus tool call cards and
-  collapsible reasoning blocks; copy message via long-press
-- Attachment upload: pick a file from the composer, it uploads immediately, and is attached to
-  the next sent message (with upload-failure handling that preserves the composer's text/state)
-- Session-scoped workspace/file browser: folder navigation, text file preview and editing,
-  create/rename/move/delete, and git status/diff viewing for git-backed workspaces
-- Tasks: scheduled/cron job list and detail view
-- Skills: browse the server's configured skills by category, with detail view
-- Memory: view the server's stored memory content
-- Profiles: switch between configured server profiles (model, skills, provider)
-- Projects: create and browse projects that group sessions
-- Insights: usage analytics (sessions, messages, token counts, estimated cost) by time range and
-  model
-- Chat-scoped model switching (updates a session in place, matching iOS)
-- Multi-server switching, per-server cookies, and per-server custom HTTP headers
-- Runtime app icon switching (Light/Dark/Disco/System), using the real iOS icon assets
-- Header logo color theming (also drives the home screen wordmark's tint)
-- Room-based offline cache for the session list, with per-server cache isolation
-- Room-based offline cache for chat/message history, with cache-first load and fallback banners
-- Offline cache retention: pruned once per app startup, per server, to the 50 most recently
-  active sessions or 90 days old (whichever is stricter); orphaned cached messages are swept too
-- Android share target support for shared text, single files, and multiple files
-- Deep link entry routes for `hermex://` and `hermes-agent://`
-- Notification channel and notification routing foundation
-- Home screen widget entry surface
-- Settings: active server details, default model, custom headers, notification preferences, app
-  icon/header color appearance, and sign-out
-- Approval request overlays: approve tool execution mid-stream (allow once/session/always/deny)
-- Clarification request overlays: respond to server questions mid-stream with choices or free-text
-- File type icons and inline image thumbnails in chat message history with full-screen lightbox
-- Tap-to-open downloaded documents from message history via system intent
-- Shared HermexErrorBanner composable with retry action across all control-plane screens
-- Refresh buttons on Projects, Task Detail, and Skill Detail screens
-- Test Connection button in servers editor with success/error indicators
-- Friendly user-facing error messages for network, HTTP, and auth failures
-- Retry action on chat error banners
-- Debounced in-field URL validation on onboarding and server editor
-- "Session expired" re-auth banner with auto-focused password field
-- Flush bottom padding to system navigation bar on every screen
+- Session list with day-grouped recents (Today / Yesterday / date)
+- SSE token streaming with stop control and reattach after background
+- Chat-scoped model and profile switching
+- Attachments with hardened I/O dispatcher (no ANR on large files)
+- Markdown rendering: bold, italic, lists, inline and fenced code
+- Tool call cards with status pills; collapsible reasoning blocks
+- Approval and clarification request overlays mid-stream
+- Slash command autocomplete and execution (`/continue`, `/summarize`, ...)
+- Voice input with runtime permission flow and education Snackbar
+- Copy message via long-press; friendly retry on failed sends
+- "Session expired" re-auth banner with auto-focused password
 
-## In Progress / Not Finished Yet
+### Server / self-hosting
 
-### Done (needs polish)
+- Multi-server switching
+- Per-server cookies
+- Per-server custom HTTP headers (Authorization, X-Api-Key, etc.)
+- Header value masking in UI with per-row reveal toggle
+- HTTP URL policy: HTTPS always allowed; HTTP LAN/localhost allowed with
+  warning; **HTTP public blocked** before save
+- Self-signed certificate detection with clear user messaging
+- Test Connection in the server editor with success/error indicators
+- Safer logging suppression (verbose/debug stripped in release builds)
 
-- Chat composer redesign per the design system (pill-shaped chip row, capsule icon buttons)
-- Voice input / dictation
-- Slash commands / autocomplete in composer
-- Git workspace (read-only: status, diff, branches)
+### App surfaces
 
-### Not yet implemented
+- **Projects** — create, rename, delete, color tag
+- **Profiles** — switch between configured server profiles
+- **Tasks** — scheduled/cron job list and detail view
+- **Skills** — browse server skills by category with detail view
+- **Memory** — view server-stored memory content
+- **Insights** — usage analytics by time range and model
+- **Settings** — active server, default model, custom headers, notification
+  preferences, app icon variant, header logo color, sign-out, copy diagnostics
+- **Share target** — accept shared text, single file, and multiple files
+  (`text/plain`, `*/*`, `SEND_MULTIPLE`) with destination picker
+- **Notifications + widget** — notification channel registered, widget
+  provider registered, deep-link entry points
 
-- Goal controls (set Hermes direction/goals from composer)
-- Git write operations (commit, push, pull)
-- Play Store release hardening (this preview ships a debug build; release signing isn't set up yet)
+### Local persistence
 
-## Download
+- Room-based offline cache for session list and chat/message history
+- Per-server cache isolation; per-server logout vs forget distinction
+- Cache-first load with fallback banners
+- Startup pruning: 50 most recent sessions or 90 days (whichever is stricter)
+- Full cache audit completed for 1.0 (migration, isolation, logout, pruning)
 
-A preview APK is available under [GitHub Releases](../../releases).
+### UI / polish
 
-This is a manual-install APK, not distributed through the Play Store. Android will warn that it's
-from an unknown source — that's expected for a debug preview build.
+- Jetpack Compose + Material 3
+- Hermex design system: tokens, shape, typography
+- Runtime app icon switching (Light / Dark / Disco / System) using iOS assets
+- Header logo color theming (drives home screen wordmark tint)
+- Composer design-system alignment with capsule icon buttons
+- Slide-out navigation drawer; hamburger from every screen
+- Shared `HermexErrorBanner` composable with retry across control-plane screens
+- Refresh buttons on Projects, Task Detail, Skill Detail
 
-## Debug vs Release Builds
+## Release status / 1.0 path
 
-**Debug build** (`assembleDebug`): Signed with debug keystore, minification disabled. Install directly:
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+The 21-slice 1.0 hardening roadmap is complete. v0.12.0-preview is the
+hardening cut. v1.0.0-rc1 is the next validation release. Final v1.0.0
+follows tester approval. Play Store submission comes after the stable
+GitHub release.
 
-**Release build** (`assembleRelease`): Requires signing config in `app/build.gradle.kts`. Not yet configured.
+### Completed hardening highlights (v0.12.0-preview)
 
-## Screenshots
+- R8 / minified release build with comprehensive ProGuard rules
+- Attachment I/O dispatcher fix (ANR elimination on large files)
+- HTTP URL policy classifier with public-HTTP blocking
+- SSL error detection for self-signed certificates
+- Custom header value masking by default
+- Release logging suppression via R8
+- Composer, slash-command, and voice polish
+- Stream reattach regression coverage
+- Large-session stability documentation
+- Offline cache audit and server-isolation tests
+- Share target regression verification
+- Notifications and widget QA verification
+- Full regression checklist (40+ scenarios)
+- Test suite hardening (3 consecutive green runs)
+- Release packaging with SHA-256 hashes and version tagging
 
-| Home / Sessions | Navigation Drawer |
-|---|---|
-| ![Home / Sessions](release-artifacts/screenshots/session-list.png) | ![Navigation Drawer](release-artifacts/screenshots/nav-drawer.png) |
+### Deferred to 1.1+
 
-| Tasks (hamburger navigation) | Settings (hamburger navigation) |
-|---|---|
-| ![Tasks](release-artifacts/screenshots/tasks.png) | ![Settings](release-artifacts/screenshots/settings.png) |
+- Git write actions: commit, push, pull, checkout, discard
+- Play Store submission
+- Larger workspace / git panel expansion
+- Goal controls in composer
+- Additional iOS parity polish
 
-| Chat | Workspace |
-|---|---|
-| ![Chat](release-artifacts/screenshots/chat.png) | ![Workspace](release-artifacts/screenshots/workspace.png) |
+## Screens / app areas
 
-| Insights | Projects |
-|---|---|
-| ![Insights](release-artifacts/screenshots/insights.png) | ![Projects](release-artifacts/screenshots/projects.png) |
+- Chat
+- Sessions
+- Projects
+- Profiles
+- Tasks
+- Skills
+- Memory
+- Insights
+- Settings
+- Server management
 
-More screenshots (multi-server, connection headers, header logo color, chat model picker, app
-icon picker, offline cache banner) are in
-[`release-artifacts/screenshots/`](release-artifacts/screenshots).
+## Getting APKs
 
-## Hermex 1.0 Roadmap
+Preview and release-candidate APKs are published through GitHub Releases:
 
-The 1.0 release targets a polished, production-ready mobile control plane for Hermes.
+    https://github.com/ComputerByte/hermex-android/releases
 
-### P0 — Must Have
+Download the newest release or RC asset, then sideload. Android may require
+"install unknown apps" permission for the installer you use (Files, browser,
+etc.) — this is expected for sideloaded builds. Prefer the newest release
+asset when present.
 
-- [ ] Chat: edit/regenerate fully functional (needs polish after v0.11.2)
-- [ ] Chat: attachments UX polish
-- [ ] Chat: send/stop reliability under edge cases
-- [ ] Subagent sessions: proper parent-child relationship
-- [ ] Settings back navigation: consistent refresh across all preferences
+## Build from source
 
-### P1 — Should Have
+    ./gradlew assembleDebug
+    ./gradlew test
+    ./gradlew assembleRelease
 
-- [ ] Composer: full design system alignment
-- [ ] Voice input: end-to-end functional
-- [ ] Slash commands: autocomplete + execution
-- [ ] Git: write operations (commit/push/pull)
-- [ ] Offline mode: reliable cache-first loading
+Notes:
 
-### P2 — Nice to Have
+- Release builds use R8 / minification. ProGuard rules are in
+  `app/proguard-rules.pro`.
+- Signed release builds require local signing configuration that is
+  intentionally not committed to the repository. Unsigned release APKs are
+  produced by default for local verification.
+- Debug builds are suitable for development and tester previews.
+- Private signing material must never be committed.
 
-- [ ] Goal controls in composer
-- [ ] Play Store release hardening
-- [ ] Release signing and minification
+## Development workflow
 
-## Requirements
+- One feature branch per slice or task.
+- Build and test before merge: `./gradlew test` then `./gradlew assembleDebug`.
+- Real-device smoke testing for any release-affecting work (chat, auth,
+  attachments, share target, notifications, widget).
+- Keep generated APKs, local signing files, build caches, and recon notes
+  out of git (already gitignored).
+- Prefer incremental: feature → tests → real-device verification → commit.
+- Avoid new feature work during RC / final release stabilization.
 
-- JDK 17+ (developed against Temurin/OpenJDK 21)
-- Android SDK (`compileSdk`/`targetSdk` 36, `minSdk` 26)
+## QA / release checklist
 
-## Build
+- [ ] Full unit tests pass (`./gradlew test`)
+- [ ] Debug build passes (`./gradlew assembleDebug`)
+- [ ] Release build passes (`./gradlew assembleRelease`)
+- [ ] Release APK installs on real device
+- [ ] Login and session persistence verified
+- [ ] Session list loads
+- [ ] Chat streaming works
+- [ ] Stop / send works (including reattach)
+- [ ] Model switching works
+- [ ] Attachments path smoke tested
+- [ ] Slash commands smoke tested
+- [ ] Share target smoke tested (text, file, multi-file)
+- [ ] Offline cache checked
+- [ ] Settings / about / version checked
+- [ ] APK SHA-256 hashes generated
+- [ ] Git tag pushed
+- [ ] GitHub release created
 
-```bash
-./gradlew test
-./gradlew assembleDebug
-```
+## Security / privacy notes
+
+- Server cookies are stored per server and cleared on logout or
+  per-server removal.
+- Sensitive custom header values (Authorization, X-Api-Key) are masked by
+  default in the UI and revealed only on explicit tap.
+- Release logging rules strip verbose / debug log calls to avoid leaking
+  sensitive runtime data.
+- HTTP server URLs are subject to policy checks: HTTPS is unrestricted;
+  HTTP LAN is allowed with a warning; public HTTP is blocked.
+- Prefer HTTPS for any remote server. Use a reverse proxy with Let's
+  Encrypt for self-hosted deployments.
+- Self-hosted LAN HTTP may be supported with clear warnings depending on
+  configuration; the user is informed before any connection attempt.
+- Private signing material (keystores, passwords, signing properties) must
+  never be committed.
+
+## Contributing / project notes
+
+- Open PRs against `master` unless a release branch is active.
+- Keep PRs scoped to one feature / fix / slice.
+- Include test results and, where relevant, real-device verification notes.
+- Avoid new feature work during RC / final release stabilization.
+- See `qa/1.0-regression-checklist.md`, `docs/`, and `CHANGELOG.md` for the
+  current state of QA, feature documentation, and release history.
+
+## License
+
+See the repository license file, if present.

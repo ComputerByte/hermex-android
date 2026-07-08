@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -99,8 +101,10 @@ fun CustomHeadersScreen(
                     items(uiState.headers.size) { index ->
                         HeaderRow(
                             header = uiState.headers[index],
+                            isRevealed = uiState.headers[index].id in uiState.revealedHeaderIds,
                             onNameChanged = { viewModel.updateName(index, it) },
                             onValueChanged = { viewModel.updateValue(index, it) },
+                            onToggleReveal = { viewModel.toggleReveal(uiState.headers[index].id) },
                             onRemove = { viewModel.removeRow(index) },
                         )
                     }
@@ -132,8 +136,10 @@ fun CustomHeadersScreen(
 @Composable
 private fun HeaderRow(
     header: CustomHttpHeader,
+    isRevealed: Boolean,
     onNameChanged: (String) -> Unit,
     onValueChanged: (String) -> Unit,
+    onToggleReveal: () -> Unit,
     onRemove: () -> Unit,
 ) {
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -170,9 +176,17 @@ private fun HeaderRow(
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Value") },
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (isRevealed) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
             shape = RoundedCornerShape(HermexRadii.Cell),
             colors = fieldColors,
+            trailingIcon = {
+                IconButton(onClick = onToggleReveal) {
+                    Icon(
+                        if (isRevealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (isRevealed) "Hide value" else "Show value",
+                    )
+                }
+            },
         )
     }
 }

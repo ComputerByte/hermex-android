@@ -8,4 +8,6 @@ data class CustomHeadersUiState(
      * called, so navigating back without saving discards any in-progress edit. */
     val headers: List<CustomHttpHeader> = emptyList(),
     val isSaving: Boolean = false,
+    /** Header IDs currently revealed (value visible). */
+    val revealedHeaderIds: Set<String> = emptySet(),
 )

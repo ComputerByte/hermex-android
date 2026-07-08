@@ -48,6 +48,18 @@ class CustomHeadersViewModel(
         }
     }
 
+    /** Toggle reveal state for a specific header (shows value vs masked). */
+    fun toggleReveal(headerId: String) {
+        _uiState.update { state ->
+            val newRevealed = if (headerId in state.revealedHeaderIds) {
+                state.revealedHeaderIds - headerId
+            } else {
+                state.revealedHeaderIds + headerId
+            }
+            state.copy(revealedHeaderIds = newRevealed)
+        }
+    }
+
     /** Persists the current draft rows (blank-name rows are dropped by the store itself) and
      * invokes [onSaved] -- the caller navigates back on success. */
     fun save(onSaved: () -> Unit) {

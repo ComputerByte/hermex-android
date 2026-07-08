@@ -87,3 +87,16 @@
 -keepclassmembers class * implements android.os.Parcelable {
     public static final ** CREATOR;
 }
+
+# Logging: strip verbose/debug logs in release, keep error/warning
+# HermexLog uses android.util.Log internally
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+# Keep error and warning for crash reporting in release
+-assumenosideeffects class android.util.Log {
+    public static int e(...);
+    public static int w(...);
+}

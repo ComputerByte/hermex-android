@@ -1162,6 +1162,11 @@ private fun GitStatusCard(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "read-only",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         if (gitState.isGit) {
                             Text(
                                 text = gitState.branch ?: "(detached)",

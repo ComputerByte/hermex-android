@@ -136,6 +136,27 @@ GitHub release.
 - Settings
 - Server management
 
+## Screenshots
+
+| | |
+|---|---|
+| Sessions | Navigation Drawer |
+| ![Sessions](release-artifacts/screenshots/session-list.png) | ![Navigation Drawer](release-artifacts/screenshots/nav-drawer.png) |
+| Chat | Model Picker |
+| ![Chat](release-artifacts/screenshots/chat.png) | ![Model Picker](release-artifacts/screenshots/chat-model-picker.png) |
+| Projects | Insights |
+| ![Projects](release-artifacts/screenshots/projects.png) | ![Insights](release-artifacts/screenshots/insights.png) |
+| Tasks | Settings |
+| ![Tasks](release-artifacts/screenshots/tasks.png) | ![Settings](release-artifacts/screenshots/settings.png) |
+| Multi-server | Connection Headers |
+| ![Multi-server](release-artifacts/screenshots/multi-server.png) | ![Connection Headers](release-artifacts/screenshots/connection-headers.png) |
+| App Icon Picker | Header Logo Color |
+| ![App Icon Picker](release-artifacts/screenshots/app-icon-picker.png) | ![Header Logo Color](release-artifacts/screenshots/header-logo-color.png) |
+| Offline Cache | Workspace |
+| ![Offline Cache](release-artifacts/screenshots/offline-cache.png) | ![Workspace](release-artifacts/screenshots/workspace.png) |
+
+Additional screenshots and release assets live in `release-artifacts/screenshots`.
+
 ## Getting APKs
 
 Preview and release-candidate APKs are published through GitHub Releases:

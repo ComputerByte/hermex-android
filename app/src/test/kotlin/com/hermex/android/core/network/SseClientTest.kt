@@ -1,6 +1,8 @@
 package com.hermex.android.core.network
 
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -163,5 +165,49 @@ class SseClientTest {
             listOf(SseEvent.Unknown, SseEvent.Token("final"), SseEvent.StreamEnd),
             events,
         )
+    }
+
+    @Test
+    fun `cancelling a stream mid-read does not emit TransportError`() = runTest {
+        server.enqueue(
+            MockResponse().setBodyDelay(30, TimeUnit.SECONDS).setBody(
+                "event: token\ndata: {\"text\":\"never\"}\n\n",
+            ),
+        )
+
+        val events = mutableListOf<SseEvent>()
+        val job = launch(UnconfinedTestDispatcher()) {
+            client.stream(server.url("/api/chat/stream?stream_id=abc")).collect { events.add(it) }
+        }
+
+        // Cancel well before the 30s delay would complete
+        job.cancel()
+        job.join()
+
+        // No events should have been emitted -- the stream was cancelled before any data arrived
+        assertTrue("Cancelled stream should not emit TransportError: $events", events.isEmpty())
+    }
+
+    @Test
+    fun `cancelling a stream mid-transmission does not surface a TransportError from socket close`() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                "event: token\ndata: {\"text\":\"a\"}\n\n",
+            ),
+        )
+
+        val events = mutableListOf<SseEvent>()
+        val job = launch(UnconfinedTestDispatcher()) {
+            client.stream(server.url("/api/chat/stream?stream_id=abc")).collect {
+                events.add(it)
+            }
+        }
+        // Wait until at least one event is emitted, then cancel
+        while (events.isEmpty()) { Thread.sleep(10) }
+        job.cancel()
+        job.join()
+
+        assertTrue("Should have received at least the 'a' token", events.any { it is SseEvent.Token })
+        assertTrue("Must not contain TransportError: $events", events.none { it is SseEvent.TransportError })
     }
 }

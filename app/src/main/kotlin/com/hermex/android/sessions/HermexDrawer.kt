@@ -122,7 +122,7 @@ fun HermexDrawerContent(
                     onClick = onOpenSettings,
                 )
 
-                val recentSessions = uiState.sessions.take(5)
+                val recentSessions = uiState.filteredSessions.take(5)
                 if (recentSessions.isNotEmpty()) {
                     Text(
                         text = "Recents",

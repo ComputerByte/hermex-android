@@ -13,4 +13,6 @@ data class OnboardingUiState(
     val errorMessage: String? = null,
     /** True when redirected to login due to a 401 (expired session), not a fresh install. */
     val isReauthAfterExpiry: Boolean = false,
+    /** Security policy classification for the current URL input. */
+    val urlPolicy: com.hermex.android.auth.ServerUrlPolicy = com.hermex.android.auth.ServerUrlPolicy.Allowed,
 )

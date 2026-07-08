@@ -50,6 +50,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.R
+import com.hermex.android.auth.ServerUrlPolicy
 import com.hermex.android.ui.theme.HermexRadii
 
 @Composable
@@ -194,6 +195,34 @@ fun OnboardingScreen(
             }
         }
 
+        // Warning for local HTTP (allowed but unencrypted)
+        if (uiState.urlPolicy is ServerUrlPolicy.LocalHttp) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(HermexRadii.Accessory),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "HTTP is unencrypted. Use only for trusted local/self-hosted servers.",
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
 
         Row(
@@ -216,7 +245,7 @@ fun OnboardingScreen(
             Button(
                 onClick = viewModel::login,
                 shape = fieldShape,
-                enabled = uiState.hasTestedConnection && !uiState.passkeyOnlyBlocked && !uiState.isLoggingIn,
+                enabled = uiState.hasTestedConnection && !uiState.passkeyOnlyBlocked && !uiState.isLoggingIn && uiState.urlPolicy !is ServerUrlPolicy.PublicHttp,
                 modifier = Modifier.weight(1f),
             ) {
                 if (uiState.isLoggingIn) {

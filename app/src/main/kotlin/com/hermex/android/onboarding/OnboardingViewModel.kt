@@ -8,7 +8,9 @@ import com.hermex.android.auth.AuthState.LoggedOut
 import com.hermex.android.auth.InvalidServerUrlException
 import com.hermex.android.auth.LoginOutcome
 import com.hermex.android.auth.PASSKEY_ONLY_MESSAGE
+import com.hermex.android.auth.ServerUrlClassifier
 import com.hermex.android.auth.ServerUrlNormalizer
+import com.hermex.android.auth.ServerUrlPolicy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,13 +35,18 @@ class OnboardingViewModel(
     private var urlValidationJob: kotlinx.coroutines.Job? = null
 
     fun onServerUrlChanged(value: String) {
+        val policy = ServerUrlClassifier.classify(value)
         _uiState.update {
             it.copy(
                 serverUrlInput = value,
                 hasTestedConnection = false,
                 requiresPassword = false,
                 passkeyOnlyBlocked = false,
-                errorMessage = null,
+                urlPolicy = policy,
+                errorMessage = when (policy) {
+                    is ServerUrlPolicy.PublicHttp -> "Public HTTP servers are not allowed. Use HTTPS, or connect to a local/private self-hosted address."
+                    else -> null
+                },
             )
         }
         urlValidationJob?.cancel()
@@ -59,7 +66,13 @@ class OnboardingViewModel(
     }
 
     fun testConnection() {
-        val serverUrl = _uiState.value.serverUrlInput
+        val current = _uiState.value
+        // Block public HTTP
+        if (current.urlPolicy is ServerUrlPolicy.PublicHttp) {
+            _uiState.update { it.copy(errorMessage = "Public HTTP servers are not allowed. Use HTTPS, or connect to a local/private self-hosted address.") }
+            return
+        }
+        val serverUrl = current.serverUrlInput
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingConnection = true, errorMessage = null, passkeyOnlyBlocked = false) }
             try {
@@ -88,6 +101,11 @@ class OnboardingViewModel(
 
     fun login() {
         val current = _uiState.value
+        // Block public HTTP
+        if (current.urlPolicy is ServerUrlPolicy.PublicHttp) {
+            _uiState.update { it.copy(errorMessage = "Public HTTP servers are not allowed. Use HTTPS, or connect to a local/private self-hosted address.") }
+            return
+        }
         if (current.requiresPassword && current.passwordInput.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Enter the server password.") }
             return

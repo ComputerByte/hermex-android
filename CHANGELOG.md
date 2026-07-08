@@ -1,3 +1,69 @@
+# Hermex Android v1.0.0-rc1
+
+## 1.0 Release Candidate
+
+This is the **release candidate** for Hermex Android 1.0. All 21 hardening slices from the v0.12.0-preview cycle are carried forward with no new feature work. This build is intended for tester validation prior to the final stable v1.0.0.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+
+**Download:**
+- `hermex-android-v1.0.0-rc1-release.apk` (release build, R8 minified, unsigned)
+- `hermex-android-v1.0.0-rc1-debug.apk` (debug build, for development)
+
+**Verify integrity:**
+```
+dfda5a96e969afbc5728c5f949b29fa4da87b97cb235e8356b5da00ccdd14db8  hermex-android-v1.0.0-rc1-debug.apk
+fcbf1d5530ec400900b8a3bc4054437bda361f2677bb5e07f21abad7346f0fa3  hermex-android-v1.0.0-rc1-release.apk
+```
+
+## What's In This Candidate
+
+- Carries forward all v0.12.0-preview hardening:
+  - R8/minified release build
+  - HTTP URL policy classifier
+  - SSL error detection
+  - Custom header value masking
+  - Logging suppression in release
+  - Stream reattach regression coverage
+  - Offline cache audit
+  - Share target regression verification
+  - Notifications + widget QA
+  - Full regression checklist + 3x green test runs
+- README updates: restored screenshots gallery; added Gateway-only / OpenAI-compatible compatibility note (gateway-only mode deferred to 1.1+)
+- No new features in this build
+
+## Known Limitations (carried forward)
+
+- Git workspace is read-only (commit/discard/checkout deferred to 1.1+)
+- Background response completion notifications may be unreliable on some OEM ROMs
+- Full chat pagination beyond `msg_limit=50` deferred to 1.1
+- Edit/resend and Regenerate UI deferred to 1.1
+- Release APK is unsigned (debug APK is the primary tester distribution)
+- Gateway-only / OpenAI-compatible mode is not in 1.0 (planned for 1.1+)
+
+## Upgrade
+
+- **From v0.12.0-preview:** Direct install. Settings and session data preserved.
+- **From earlier:** Database migration is automatic.
+- **Fresh install:** Configure server URL on first launch.
+
+## Build Info
+
+- versionName: 1.0.0-rc1
+- versionCode: 25
+- compileSdk: 36
+- minSdk: 26
+- targetSdk: 36
+- R8: enabled (release)
+
+## Reporting Issues
+
+Use **Settings → App → Copy Diagnostics** to copy a snapshot of version, build, server, and headers. Include this in any bug report.
+
+---
+
 # Hermex Android v0.12.0-preview
 
 ## 1.0 Hardening Release

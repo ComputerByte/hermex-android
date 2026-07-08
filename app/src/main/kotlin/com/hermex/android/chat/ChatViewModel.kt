@@ -490,6 +490,13 @@ class ChatViewModel(
         val text = _uiState.value.composerText.trim()
         if (text.isEmpty() || _uiState.value.isSending || _uiState.value.isStreaming) return
 
+        // Handle slash commands before sending
+        val command = CommandRegistry.matchCommand(text)
+        if (command != null) {
+            executeCommand(command)
+            return
+        }
+
         val api = authRepository.apiForActiveServer()
         val serverBaseUrl = authRepository.activeServerBaseUrl()
         if (api == null || serverBaseUrl == null) {
@@ -991,6 +998,26 @@ class ChatViewModel(
         size = size,
         isImage = isImage,
     )
+
+    /** Executes a slash command action -- either sends a prompt or triggers UI state. */
+    private fun executeCommand(command: CommandAction) {
+        when (command) {
+            is CommandAction.Continue -> {
+                _uiState.update { it.copy(composerText = command.prompt) }
+                sendMessage()
+            }
+            is CommandAction.Summarize -> {
+                _uiState.update { it.copy(composerText = command.prompt) }
+                sendMessage()
+            }
+            is CommandAction.Edit -> {
+                _uiState.update { it.copy(composerText = "", errorMessage = "Edit mode coming soon. Delete and re-send the message for now.") }
+            }
+            is CommandAction.Search -> {
+                _uiState.update { it.copy(composerText = "", errorMessage = "Use the search icon in sessions list to search.") }
+            }
+        }
+    }
 
     /** Matches iOS's `PendingAttachment.chatReference`: prefer the server-assigned upload path,
      * falling back to the display name only when there's no path at all. */

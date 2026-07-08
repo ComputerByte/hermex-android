@@ -15,6 +15,10 @@ real self-hosted backends, not mocks or prototypes.
 - **Distribution:** GitHub Releases
 - **Play Store:** planned after stable 1.0 ships
 
+### Gateway-only / OpenAI-compatible servers
+
+Hermex Android 1.0 targets the full Hermex/Hermes app-server API. A plain Hermes Gateway or OpenAI-compatible server may expose `/v1/chat/completions`, but it may not expose app-level routes such as `/api/auth/status`, sessions, projects, tasks, memory, insights, and settings. Gateway-only mode is planned for a future 1.1+ compatibility release.
+
 ## Overview
 
 Hermex Android connects to one or more Hermex/Hermes servers with real

@@ -16,3 +16,5 @@ release-artifacts/*.apk
 *-recon.md
 *-recone.md
 *-prompt*.md
+release.jks
+signing.properties

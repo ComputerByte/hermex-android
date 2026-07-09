@@ -15,6 +15,7 @@ import com.hermex.android.core.network.ToolEventPayload
 import com.hermex.android.core.network.chatStreamUrl
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ChatStartRequest
+import com.hermex.android.core.network.dto.ChatStartResponse
 import com.hermex.android.core.network.dto.MessageAttachment
 import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ModelCatalogParser
@@ -25,6 +26,7 @@ import com.hermex.android.core.network.dto.UploadResponse
 import com.hermex.android.core.network.dto.buildAttachedFilesMarker
 import com.hermex.android.core.network.dto.capAtChatStartLimit
 import com.hermex.android.core.network.dto.mergingLiveModels
+import com.hermex.android.core.network.dto.SessionResponse
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.util.HermexLog
@@ -83,6 +85,11 @@ class ChatViewModel(
     private var activeStreamId: String? = null
     private var approvalPollingJob: Job? = null
     private var clarificationPollingJob: Job? = null
+    /** Tracks the in-flight server cancel so subsequent sends / edits / regenerates can await it
+     * before issuing their own request. Without this, an immediate "stop then send" can race the
+     * cancel POST -- the new chat/start reaches the server before the previous stream has been
+     * released, and the server returns 409 "session already has an active stream" (Issue #10). */
+    private var cancelJob: Job? = null
 
     private val currentSessionId: String get() = sessionId
 
@@ -505,6 +512,10 @@ class ChatViewModel(
         }
 
         viewModelScope.launch {
+            // Issue #10: if a server cancel is still in flight (e.g. user tapped Stop then Send
+            // quickly), wait for it to complete before issuing chat/start -- otherwise the start
+            // can race the cancel and get a 409 "session already has an active stream" back.
+            awaitPendingCancel()
             val state = _uiState.value
             // Captured now, not re-read on completion: if the user picks a *different* model
             // while this request is in flight, that pick's own true value must win, not get
@@ -522,20 +533,54 @@ class ChatViewModel(
             _uiState.update { it.copy(isSending = true, errorMessage = null) }
 
             val startResponse = try {
-                safeApiCall {
-                    api.chatStart(
-                        ChatStartRequest(
-                            sessionId = sessionId,
-                            message = messageForApi,
-                            workspace = state.currentWorkspace,
-                            model = state.currentModel,
-                            modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
-                            profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
-                            explicitModelPick = if (explicitModelPick) true else null,
-                            attachments = cappedAttachments.ifEmpty { null },
-                        ),
+                // Up to 2 attempts: the first is the normal start; if the server still has a
+                // stale stream from a previous (raced) cancel, give it a brief moment to release
+                // the slot and retry once. A second 409 is treated as a real user-facing error
+                // because it means the server is genuinely still holding the session.
+                var attempt = 0
+                var response: ChatStartResponse? = null
+                while (response == null) {
+                    try {
+                        response = safeApiCall {
+                            api.chatStart(
+                                ChatStartRequest(
+                                    sessionId = sessionId,
+                                    message = messageForApi,
+                                    workspace = state.currentWorkspace,
+                                    model = state.currentModel,
+                                    modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
+                                    profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
+                                    explicitModelPick = if (explicitModelPick) true else null,
+                                    attachments = cappedAttachments.ifEmpty { null },
+                                ),
+                            )
+                        }
+                    } catch (e: ApiError.StreamConflict) {
+                        attempt++
+                        if (attempt > 1) throw e
+                        HermexLog.w(
+                            "Chat",
+                            "chat/start 409: server still has active stream (${e.activeStreamId}); waiting for release",
+                        )
+                        // Brief wait for the server's view of the slot to clear (up to ~4s).
+                        // If it clears, the retry wins; if not, the next iteration throws and
+                        // the catch below surfaces a clear message.
+                        val released = awaitServerStreamRelease()
+                        if (!released) throw e
+                    }
+                }
+                response
+            } catch (e: ApiError.StreamConflict) {
+                // After 2 attempts: a 409 from chat/start means the server has a stream we don't
+                // know how to claim. Surface a clear "Previous stream is still stopping" message
+                // rather than the raw API error -- the user knows to wait a moment and retry.
+                _uiState.update {
+                    it.copy(
+                        isSending = false,
+                        errorMessage = "Previous stream is still stopping. Please wait a moment and tap Send again.",
                     )
                 }
+                return@launch
             } catch (e: ApiError.Network) {
                 // A connectivity/IO failure specifically (see ApiError.Network) -- never queued,
                 // never shown as if it sent; the composer keeps the unsent text so nothing is lost.
@@ -896,6 +941,12 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                // Issue #10: if a stream is still in flight, we must stop it (and wait for the
+                // server to release the session slot) before truncating or starting a new one.
+                // The UI disables the regenerate action while streaming, but a tap just after
+                // the user hit Stop can still race the cancel POST.
+                if (activeStreamId != null) cancelStream()
+                awaitPendingCancel()
                 val keepCount = messages.size - 1
                 safeApiCall { api.truncateSession(TruncateSessionRequest(session_id = sessionId, keep_count = keepCount)) }
                 val lastUserText = messages.dropLast(1).lastOrNull()?.content ?: return@launch
@@ -917,6 +968,10 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                // Issue #10: see [regenerate] -- an in-flight stream must be cancelled (and the
+                // cancel awaited) before we can safely truncate the session.
+                if (activeStreamId != null) cancelStream()
+                awaitPendingCancel()
                 safeApiCall { api.truncateSession(TruncateSessionRequest(session_id = sessionId, keep_count = index)) }
                 _uiState.update { it.copy(messages = it.messages.take(index), composerText = text) }
             } catch (e: ApiError) {
@@ -933,6 +988,9 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                // Issue #10: same lifecycle ordering as regenerate/edit.
+                if (activeStreamId != null) cancelStream()
+                awaitPendingCancel()
                 val keepCount = lastUserIdx
                 safeApiCall { api.truncateSession(TruncateSessionRequest(session_id = sessionId, keep_count = keepCount)) }
                 _uiState.update { it.copy(messages = it.messages.take(keepCount), composerText = lastUserText) }
@@ -949,7 +1007,11 @@ class ChatViewModel(
      * waiting on a flaky server is worse than a possibly-still-running server turn the user can
      * no longer see); a failed cancel just surfaces an error afterward without reopening the
      * stream or touching [ChatUiState.messages]. No-ops with a "reconnect" error instead of
-     * calling the server at all when showing cached data offline -- see [ChatUiState.isShowingCachedData]. */
+     * calling the server at all when showing cached data offline -- see [ChatUiState.isShowingCachedData].
+     *
+     * The server cancel is tracked in [cancelJob] and awaited by [sendMessage], [regenerate],
+     * [editMessage], and [retryLastMessage] so a tight "stop then send" can't race the cancel and
+     * hit a 409. (Issue #10.) */
     fun reattachStream() {
         val streamId = _uiState.value.disconnectedStreamId ?: return
         val serverBaseUrl = authRepository.activeServerBaseUrl() ?: return
@@ -968,21 +1030,67 @@ class ChatViewModel(
         HermexLog.d("Chat", "cancelStream: streamId=$streamId")
         val api = authRepository.apiForActiveServer()
         if (api != null) {
-            viewModelScope.launch {
+            // Track the cancel so the next send/edit/regenerate can wait for it (Issue #10).
+            // We surface isStopping to the UI so the composer can be disabled / show progress
+            // while the cancel is in flight, but the local finalize still happens immediately --
+            // the user can still keep typing.
+            _uiState.update { it.copy(isStopping = true) }
+            cancelJob?.cancel()
+            cancelJob = viewModelScope.launch {
                 try {
                     val response = safeApiCall { api.chatCancel(streamId) }
                     if (response.error != null) {
+                        HermexLog.w("Chat", "chat/cancel returned error: ${response.error}")
                         _uiState.update { it.copy(errorMessage = response.error) }
                     }
                 } catch (e: ApiError) {
+                    // A network/IO failure on the cancel POST doesn't unwind the local finalize
+                    // (the SSE is already gone), but the server may still be running the turn.
+                    // Surface a clear user-facing error so the user knows the server wasn't
+                    // notified -- matches pre-fix behavior asserted by ChatViewModelTest's
+                    // "cancelStream failure surfaces an error" test.
                     HermexLog.w("Chat", "chat/cancel failed: ${e.message}")
                     _uiState.update {
                         it.copy(errorMessage = e.message ?: "Could not confirm the stop with the server.")
                     }
+                } finally {
+                    _uiState.update { it.copy(isStopping = false) }
                 }
             }
         }
         finalizeStream(reason = StreamCompletionReason.CANCELLED)
+    }
+
+    /** Suspends until any in-flight server cancel completes, so the calling operation (send,
+     * edit, regenerate, retry) can safely issue a follow-up `/api/chat/start` or
+     * `/api/session/truncate` without racing the cancel and hitting 409 (Issue #10). No-op if
+     * there is no pending cancel. */
+    private suspend fun awaitPendingCancel() {
+        val job = cancelJob ?: return
+        if (job.isActive) {
+            HermexLog.d("Chat", "awaiting in-flight server cancel before next request")
+            job.join()
+        }
+    }
+
+    /** Suspends until a previously cancelled stream is actually released by the server, up to
+     * [timeoutMs]. Polls the session detail endpoint for `activeStreamId == null` -- this is the
+     * authoritative signal that the server has finished its cleanup. Used by the 409 recovery
+     * path in [sendMessage] when reattach isn't appropriate (e.g. the conflict was on a stream
+     * the user just stopped, not one they want to rejoin). Returns true if the slot is free, false
+     * if the timeout elapsed with the server still holding the stream. */
+    private suspend fun awaitServerStreamRelease(timeoutMs: Long = 4_000L): Boolean {
+        val api = authRepository.apiForActiveServer() ?: return true
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val stillActive: String? = try {
+                val resp: SessionResponse = safeApiCall { api.session(sessionId = sessionId, messages = 1, msgLimit = 1) }
+                resp.session?.activeStreamId
+            } catch (_: ApiError) { null }
+            if (stillActive.isNullOrBlank() || stillActive == activeStreamId) return true
+            kotlinx.coroutines.delay(150)
+        }
+        return false
     }
 
     override fun onCleared() {

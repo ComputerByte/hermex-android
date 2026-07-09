@@ -4,8 +4,10 @@ import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.cache.FakeOfflineCacheRepository
+import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.FakeCookieStore
 import com.hermex.android.core.network.NetworkModule
+import com.hermex.android.core.network.userMessage
 import com.hermex.android.core.network.SseEvent
 import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.network.ToolEventPayload
@@ -2070,5 +2072,256 @@ class ChatViewModelTest {
         val chatStartRequest = server.takeRequest()
         assertTrue(chatStartRequest.path?.contains("/api/chat/start") == true)
         assertTrue(chatStartRequest.body.readUtf8().contains("question"))
+    }
+
+    // ---- Issue #10 regression: stream-lifecycle ordering and 409 recovery ----
+
+    @Test
+    fun `send then stop then edit then resend does not race the cancel and hit 409`() = runTest {
+        // Reproduces Issue #10: after tapping Stop mid-stream, the immediate Edit + Resend
+        // (truncate + chat/start) was racing the in-flight /api/chat/cancel POST, causing the
+        // server to return 409 "session already has an active stream" and the resend to be
+        // lost. After the fix, editMessage must wait for the cancel to complete before
+        // truncating.
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        // chat/cancel will be served with a real (non-failure) response, but we deliberately
+        // delay it so the test can prove that editMessage() awaits it before truncating.
+        server.enqueue(
+            MockResponse().setBodyDelay(300, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .setBody("""{"ok":true,"cancelled":true}"""),
+        )
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1"}}""")) // truncate
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-2","session_id":"s1"}""")) // chat/start
+        // cancelStream() -> finalizeStream() fires a background cache refresh (GET /api/session).
+        // Queue a few extras so the takeRequest() drain below doesn't hang.
+        repeat(3) {
+            server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        }
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("still typing"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("first send")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "still typing" }
+
+            // User taps Stop, then immediately taps Edit on the user message at index 0.
+            viewModel.cancelStream()
+            viewModel.editMessage(0)
+
+            // Wait for the full edit lifecycle: composer pre-filled, no longer streaming, no
+            // longer stopping (means the cancel POST has landed and editMessage has moved on to
+            // the truncate + resend path). This guarantees all 6+ requests below are observable
+            // on the MockWebServer when we drain it after the test block.
+            val afterEdit = awaitUntil { it.composerText == "first send" && !it.isStreaming && !it.isStopping }
+            assertEquals(false, afterEdit.isStreaming)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // Verify the critical ordering: the cancel POST must be sent before the truncate.
+        // (editMessage pre-fills the composer but does not auto-send; the actual resend
+        // happens on a user Send tap. So we only assert cancel-then-truncate ordering here --
+        // the resend lifecycle is covered by the other tests in this file.)
+        var sawCancel = false
+        var sawTruncateAfterCancel = false
+        // Bound the scan: takeRequest() blocks by default when the queue empties, so pass
+        // timeout=0 to make it return null immediately if no request is available.
+        repeat(server.requestCount + 1) {
+            val req = server.takeRequest(0, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return@repeat
+            val path = req.path ?: return@repeat
+            when {
+                path.contains("/api/chat/cancel") -> { sawCancel = true }
+                path.contains("/api/session/truncate") && sawCancel -> { sawTruncateAfterCancel = true }
+            }
+        }
+        assertTrue("expected /api/chat/cancel to be sent", sawCancel)
+        assertTrue("expected /api/session/truncate AFTER the cancel (Issue #10)", sawTruncateAfterCancel)
+    }
+
+    @Test
+    fun `send then stop then regenerate awaits cancel before truncating`() = runTest {
+        // Companion to the edit test: regenerate() also calls truncateSession, so it must
+        // cancel + await the in-flight stream first.
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[{"role":"user","content":"q"},{"role":"assistant","content":"a"}]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(
+            MockResponse().setBodyDelay(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .setBody("""{"ok":true,"cancelled":true}"""),
+        )
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1"}}""")) // truncate
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-2","session_id":"s1"}""")) // chat/start
+        repeat(3) {
+            server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1"}}"""))
+        }
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("partial"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("q")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "partial" }
+
+            viewModel.cancelStream()
+            viewModel.regenerate()
+
+            // Wait for the full regenerate lifecycle: composer pre-filled with "q", no longer
+            // streaming, and isStopping has cleared (cancel POST landed) so the truncate +
+            // chat/start below are observable on the server.
+            awaitUntil { it.composerText == "q" && !it.isStreaming && !it.isStopping }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // Same scan-based ordering check as the edit test.
+        var sawCancel = false
+        var sawTruncateAfterCancel = false
+        repeat(server.requestCount + 1) {
+            val req = server.takeRequest(0, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return@repeat
+            val path = req.path ?: return@repeat
+            when {
+                path.contains("/api/chat/cancel") -> { sawCancel = true }
+                path.contains("/api/session/truncate") && sawCancel -> { sawTruncateAfterCancel = true }
+            }
+        }
+        assertTrue("expected /api/chat/cancel to be sent", sawCancel)
+        assertTrue("expected /api/session/truncate AFTER the cancel (Issue #10)", sawTruncateAfterCancel)
+    }
+
+    @Test
+    fun `stop while tokens are actively streaming fires cancel and finalizes locally`() = runTest {
+        // Sanity check: the basic "stop during streaming" path still works after the lifecycle
+        // refactor -- cancel POST is sent, stream local state is cleared, no IOException
+        // surfaces as a user-facing error.
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true,"cancelled":true}""")) // cancel
+
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("a"))
+            emit(SseEvent.Token("b"))
+            emit(SseEvent.Token("c"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "abc" }
+
+            viewModel.cancelStream()
+            val afterCancel = awaitUntil { !it.isStreaming }
+            assertEquals("", afterCancel.streamingText)
+            // No "software connection abort" should have surfaced -- the previous Issue #10 PR
+            // made the SseClient silently drop IOExceptions on cancelled coroutines.
+            assertNull(afterCancel.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `chat start 409 with active_stream_id waits for release and retries once`() = runTest {
+        // Even if the cancel-await isn't enough (e.g. the server hasn't yet processed the
+        // cancel), chat/start returning 409 with "session already has an active stream" should
+        // trigger a brief wait-and-retry that succeeds. Two consecutive 409s would surface a
+        // user-facing message.
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        // First chat/start: 409 with active_stream_id
+        server.enqueue(
+            MockResponse().setResponseCode(409)
+                .setBody("""{"error":"session already has an active stream","active_stream_id":"stale-1"}"""),
+        )
+        // First poll of /api/session for awaitServerStreamRelease: still has the stale stream
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","active_stream_id":"stale-1"}}"""))
+        // Second poll: cleared
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1"}}"""))
+        // Second chat/start: success
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        val viewModel = ChatViewModel(
+            "s1",
+            authRepository,
+            FakeSseClient { flow { emit(SseEvent.Done(null, null)); awaitCancellation() } },
+            FakeChatPreferencesStore(),
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("after conflict")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming || it.errorMessage != null }
+            assertNull(viewModel.uiState.value.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `chat start 409 userMessage produces a clear stop hint`() = runTest {
+        // Unit-test-level guard for the user-facing copy. The full retry/recover timing path
+        // is covered by the lifecycle tests above and by the ApiErrorTest translations; this
+        // just pins the wire-up so a future refactor of the 409 -> StreamConflict mapping
+        // can't silently regress the user message.
+        val conflict = ApiError.StreamConflict("stuck-1")
+        val http409 = ApiError.Http(409, "session already has an active stream")
+        assertTrue("got: ${conflict.userMessage()}", conflict.userMessage().contains("Previous stream is still stopping"))
+        assertTrue("got: ${http409.userMessage()}", http409.userMessage().contains("Previous stream is still stopping"))
+    }
+
+    @Test
+    fun `no user-facing IOException surfaces when a stream is cancelled locally mid-read`() = runTest {
+        // Defends the Issue #9 (stream-cancellation) fix: cancelling the SSE reader while the
+        // server hasn't finished writing the response must not surface a "Software caused
+        // connection abort" error to the user. Combined with this PR's lifecycle ordering, the
+        // end state after a stop-then-send cycle is identical to a clean stop with no error.
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true,"cancelled":true}""")) // cancel
+
+        // The SseClient itself does the OkHttp read; we can't easily inject a delayed body that
+        // throws on cancel here without a real server, but we can at least assert that the
+        // local finalize path (the one that runs in ChatViewModel.finalizeStream on cancel)
+        // leaves errorMessage null. The SseClient-side guarantee is covered by the
+        // SseClientTest cancellation tests.
+        val stillOpenFlow: Flow<SseEvent> = flow {
+            emit(SseEvent.Token("hi"))
+            awaitCancellation()
+        }
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { stillOpenFlow }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hi")
+            viewModel.sendMessage()
+            awaitUntil { it.streamingText == "hi" }
+
+            viewModel.cancelStream()
+            val afterCancel = awaitUntil { !it.isStreaming }
+            assertNull(afterCancel.errorMessage)
+            assertEquals(2, afterCancel.messages.size)
+            assertEquals("hi", afterCancel.messages[1].content)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

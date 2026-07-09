@@ -73,6 +73,12 @@ data class ChatUiState(
     val hasDisconnectedStream: Boolean = false,
     val isReattaching: Boolean = false,
     val disconnectedStreamId: String? = null,
+    /** True while a server-side cancel is in flight (POST /api/chat/cancel has been sent but the
+     * response hasn't landed yet). Set by [ChatViewModel.cancelStream] and awaited by the next
+     * send / edit / regenerate / retry call so the server has had a chance to actually free the
+     * session before we ask it to truncate or start a new stream. Without this, the next
+     * chat/start can race ahead of the cancel and get a 409 back. */
+    val isStopping: Boolean = false,
 )
 
 /** Computed hint shown above the composer when a send failed and the text is preserved for retry. */

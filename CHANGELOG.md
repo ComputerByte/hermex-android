@@ -1,3 +1,81 @@
+# Hermex Android v0.12.2-preview
+
+## Issue #10 Hotfix — Active Stream Conflict Recovery
+
+This is a **hotfix** for tester-reported issue #10: tapping Stop mid-stream, then immediately
+tapping Edit + Resend (or Regenerate / Retry), caused the server to return
+`409 {"error": "session already has an active stream"}` and the resent message was lost.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android)
+
+**SHA-256:** `d488e15dea708f7eaf915ac6e8775a0ebdd31c3179211eb043abf2e633663fa8`
+
+## What changed
+
+### Fixed: stop → edit/resend active stream conflict
+The Stop button fires a server-side `POST /api/chat/cancel`, but the local finalize ran
+immediately, so an immediate Edit + Resend would fire `truncateSession` + `chat/start`
+before the server had finished processing the cancel. The new `chat/start` then hit the
+server while it still owned the previous `active_stream_id` and was rejected with 409.
+
+After this fix, `ChatViewModel` tracks the in-flight server cancel and waits for it to
+complete before any of `sendMessage`, `regenerate`, `editMessage`, or `retryLastMessage`
+mutates the session.
+
+### Fixed: stop → regenerate / retry active stream conflict
+Same lifecycle ordering — regenerate and retry now `cancelStream()` + `awaitPendingCancel()`
+before truncating.
+
+### Fixed: one-shot `ResponseBody` error-body consumption
+`safeApiCall` was reading `errorBody()?.string()` twice (once for the 409 StreamConflict
+check, once for the `ApiError.Http` fallback). OkHttp's `ResponseBody.string()` is one-shot;
+the second read returned `""`, silently losing the error body. Now read once and reused.
+
+### Added: graceful 409 stream conflict handling
+A 409 with body `"session already has an active stream"` is now mapped to a new
+`ApiError.StreamConflict(activeStreamId)`. The chat/start path has a 2-attempt recovery:
+
+1. First attempt → 409 with `active_stream_id` → poll `/api/session` every 150ms for up to
+   ~4s, waiting for the server to release the slot.
+2. If the slot clears, retry `chat/start` once and stream normally.
+3. If the slot stays stuck (real server-side lock), surface a clear user-facing message:
+   `"Previous stream is still stopping. Please wait a moment and tap Send again."`
+
+### Preserved: expected local cancellation stays hidden
+The previous hotfix (v0.12.1-preview, PR #8) silently drops the "Software caused connection
+abort" `IOException` from expected local cancellation. This release preserves that behavior:
+- `SseClient` still checks `coroutineContext.isActive` before surfacing a `TransportError`
+- `cancelStream` still finalizes locally immediately (the user can keep typing)
+- `cancelStream` failure on the server POST is still surfaced, so the user knows the server
+  may still be running the turn
+
+## Files changed
+
+- `app/src/main/kotlin/com/hermex/android/core/network/ApiError.kt` — new
+  `ApiError.StreamConflict` sealed class; `safeApiCall` 409→StreamConflict mapping; body
+  read-once.
+- `app/src/main/kotlin/com/hermex/android/chat/ChatUiState.kt` — new `isStopping: Boolean`
+  field for UI feedback during the server-side cancel.
+- `app/src/main/kotlin/com/hermex/android/chat/ChatViewModel.kt` — `cancelJob` tracking;
+  `awaitPendingCancel()` and `awaitServerStreamRelease()` helpers; cancel-then-await in
+  `regenerate` / `editMessage` / `retryLastMessage`; 2-attempt 409 retry in `sendMessage`.
+- `app/src/test/kotlin/com/hermex/android/core/network/ApiErrorTest.kt` (new) — 9 unit
+  tests for the 409→StreamConflict translation, the body-consumption fix, and `userMessage`
+  copy.
+- `app/src/test/kotlin/com/hermex/android/chat/ChatViewModelTest.kt` — 5 new regression
+  tests covering send/stop/edit/resend ordering, send/stop/regenerate ordering,
+  stop-while-streaming clearing, no-IOException-on-local-cancel, and 409 userMessage copy.
+
+## Previous release
+
+See [v0.12.1-preview](#hermex-android-v0121-preview) below for the prior hotfix.
+
+---
+
 # Hermex Android v0.12.1-preview
 
 ## Stream Cancellation Hotfix

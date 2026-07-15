@@ -1,6 +1,7 @@
 package com.hermex.android.core.network
 
 import com.hermex.android.core.util.HermexLog
+import com.hermex.android.core.util.TtftTracer
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -98,6 +99,7 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
                 when {
                     line.isEmpty() -> {
                         if (dataLines.isNotEmpty()) {
+                            TtftTracer.markOnce("First SSE event received")
                             val event = SseEventParser.parse(eventName, dataLines.toString())
                             // Logged per-event (not the raw text) so logcat timestamps show
                             // arrival timing -- e.g. confirming tokens arrive incrementally

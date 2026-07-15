@@ -1,3 +1,77 @@
+# Hermex Android v0.12.3-preview
+
+## Android chat time-to-first-token connection-reuse fix
+
+`/api/chat/start` and `/api/chat/stream` were served by two independent `OkHttpClient`
+instances, each with its own private connection pool, so every chat turn's SSE request paid a
+redundant TCP (and potentially TLS) connection setup immediately after `chat/start` had just
+opened or reused a connection to the exact same host. This release removes that client-side
+transport penalty; actual model/provider generation time is unaffected and may still account
+for most of the wait before the first token appears.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android)
+
+**SHA-256:** `2d2fa5169e4197ba83e208c5240d77a1e2b6938d9cd1f11308fd87bb7d7d29f2`
+
+## What changed
+
+### Fixed
+- Reduced Android chat time-to-first-token overhead by reusing the existing HTTP connection
+  between `/api/chat/start` and the SSE stream.
+- This removes an unnecessary connection handshake on each chat turn, with the largest benefit
+  on mobile and higher-latency networks.
+- Added debug-only TTFT tracing for future performance diagnostics.
+
+Actual model generation time is unchanged and may still account for most of the wait before
+the first token appears.
+
+### Details
+`NetworkModule.restClient` (used for `chat/start`) and `NetworkModule.sseClient` (used for the
+SSE stream) are now both derived from one shared base `OkHttpClient` via `newBuilder()`, so
+they share its `ConnectionPool`. Confirmed on-device via OkHttp `EventListener` instrumentation
+(debug builds only) and, independently, via the server's own view of TCP client ports: the SSE
+request now consistently reuses the same underlying connection `chat/start` just used, instead
+of opening a new one every turn.
+
+The `Dispatcher` is intentionally *not* shared between the two clients -- it only governs async
+request scheduling and per-host concurrency limits, neither of which the synchronous SSE call
+uses, and sharing it would only couple the two clients' `cancelAll()` semantics for no benefit.
+
+## Files changed
+
+- `app/src/main/kotlin/com/hermex/android/core/network/NetworkModule.kt` -- shared base
+  `OkHttpClient` + `newBuilder()`; explicit separate `Dispatcher` for the SSE client;
+  debug-only `EventListener` attachment.
+- `app/src/main/kotlin/com/hermex/android/core/network/TtftEventListenerFactory.kt` (new) --
+  OkHttp connection-timing instrumentation, scoped to `chat/start`/`chat/stream` only.
+- `app/src/main/kotlin/com/hermex/android/core/util/TtftTracer.kt` (new) -- debug-only
+  stage-timing logger; no-ops entirely in release builds.
+- `app/src/main/kotlin/com/hermex/android/chat/ChatViewModel.kt` -- TTFT trace armed from
+  `sendMessage()` itself (so `regenerate`/`retryLastMessage` re-arm it too); trace disarmed in
+  `finalizeStream()` and `reattachStream()`.
+- `app/src/main/kotlin/com/hermex/android/chat/ChatScreen.kt` -- first-rendered-frame timing
+  mark.
+- `app/src/main/kotlin/com/hermex/android/core/network/SseClient.kt` -- first-SSE-event timing
+  mark.
+
+## Known issue (not fixed in this release)
+
+A pre-existing, unrelated crash (`IllegalArgumentException: Key "assistant-<timestamp>-<n>"
+was already used`) can occur in the chat transcript's `LazyColumn` when two assistant messages
+land with colliding timestamp-derived keys during rapid consecutive sends. Reproduced on both
+the previous and this release's builds, so it predates this fix. Tracked as the next piece of
+work.
+
+## Previous release
+
+See [v0.12.2-preview](#hermex-android-v0122-preview) below for the prior hotfix.
+
+---
+
 # Hermex Android v0.12.2-preview
 
 ## Issue #10 Hotfix — Active Stream Conflict Recovery

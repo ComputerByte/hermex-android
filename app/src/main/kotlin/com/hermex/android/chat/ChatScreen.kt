@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.ProjectSummary
 import com.hermex.android.core.util.HermexLog
+import com.hermex.android.core.util.TtftTracer
 import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.sessions.DeleteSessionDialog
 import com.hermex.android.sessions.MoveToProjectDialog
@@ -220,6 +221,9 @@ fun ChatScreen(
                 attachmentState = ChatComposerAttachmentState.from(uiState),
                 actions = ChatComposerActions(
                     onTextChanged = viewModel::onComposerTextChanged,
+                    // TtftTracer.start() lives inside ChatViewModel.sendMessage() itself (not
+                    // here) so regenerate/retryLastMessage, which call sendMessage() directly,
+                    // re-arm the same trace instead of reusing stale timing state.
                     onSend = viewModel::sendMessage,
                     onStop = viewModel::cancelStream,
                     onSelectProfile = viewModel::selectProfile,
@@ -353,6 +357,18 @@ fun ChatScreen(
                                 if (!listState.canScrollForward) break
                                 listState.scrollBy(Float.MAX_VALUE)
                             }
+                        }
+                    }
+
+                    // Last stage of the TTFT trace: fires once streamingText first goes
+                    // non-empty, then waits for the *next* frame callback so the mark reflects
+                    // an actual committed frame rather than just the recomposition being
+                    // scheduled -- Compose's snapshot state write here doesn't by itself mean
+                    // anything has hit the screen yet.
+                    LaunchedEffect(uiState.streamingText.isNotEmpty()) {
+                        if (uiState.streamingText.isNotEmpty()) {
+                            withFrameNanos {}
+                            TtftTracer.markOnce("First token rendered in Compose")
                         }
                     }
 

@@ -1,10 +1,12 @@
 package com.hermex.android.core.network
 
+import com.hermex.android.BuildConfig
 import com.hermex.android.core.storage.CookieStore
 import com.hermex.android.core.storage.CustomHeadersStore
 import com.hermex.android.core.storage.NoOpCustomHeadersStore
 import com.hermex.android.core.util.HermexLog
 import java.util.concurrent.TimeUnit
+import okhttp3.Dispatcher
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -100,29 +102,56 @@ class NetworkModule(
         }
     }
 
-    private fun baseClientBuilder(): OkHttpClient.Builder =
-        OkHttpClient.Builder()
-            .cookieJar(cookieJar)
-            .addInterceptor(loggingInterceptor)
-            .addInterceptor(customHeadersInterceptor)
-            .addInterceptor(unauthorizedInterceptor)
+    /** TTFT investigation instrumentation -- see [TtftEventListenerFactory]. Debug-only: not
+     * even attached in release, so a release build never pays the (already-negligible) cost of
+     * the listener callbacks. [com.hermex.android.core.util.TtftTracer] has its own separate
+     * DEBUG gate for the marks this feeds. */
+    private val ttftEventListenerFactory = TtftEventListenerFactory()
 
-    /** REST calls: normal bounded timeouts. */
-    val restClient: OkHttpClient = baseClientBuilder()
+    /**
+     * [restClient] and [sseClient] are both built from this one client via [OkHttpClient.newBuilder],
+     * which is OkHttp's documented way to share config -- most importantly the [ConnectionPool] --
+     * across multiple [OkHttpClient] instances. Without that sharing, each was an independently
+     * `OkHttpClient.Builder().build()`-ed client with its own private connection pool, so
+     * `/api/chat/stream` always paid a fresh TCP(+TLS) handshake immediately after `/api/chat/start`
+     * had just warmed one up on the exact same host, even though nothing about the connection
+     * itself needed to differ. Measured on-device (see TTFT investigation): this handshake was
+     * the single largest contributor to Android's higher time-to-first-token vs. the browser
+     * client, which reuses one already-open HTTP/2 connection per origin for both the POST and
+     * the stream GET.
+     *
+     * The [Dispatcher] is deliberately NOT shared (see [sseClient]): connection pooling is a
+     * [ConnectionPool] concern only, `newBuilder()` requires overriding fields you don't want
+     * copied, and sharing the dispatcher would additionally couple the two clients' `cancelAll()`
+     * semantics and `maxRequests`/`maxRequestsPerHost` ceilings for no benefit -- the SSE call is
+     * synchronous (`Call.execute()`), so it never goes through a [Dispatcher]'s async executor or
+     * its per-host concurrency gate in the first place.
+     */
+    private val baseClient: OkHttpClient = OkHttpClient.Builder()
+        .cookieJar(cookieJar)
+        .addInterceptor(loggingInterceptor)
+        .addInterceptor(customHeadersInterceptor)
+        .addInterceptor(unauthorizedInterceptor)
+        .apply { if (BuildConfig.DEBUG) eventListenerFactory(ttftEventListenerFactory) }
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    /** REST calls: normal bounded timeouts, exactly [baseClient]'s own. */
+    val restClient: OkHttpClient = baseClient
+
     /**
      * SSE stream client. `readTimeout` MUST be 0 (no timeout): the server holds the connection
      * open for the whole turn and sends `:`-heartbeat comments every ~30s, but a turn can run
      * far longer between visible tokens. The default ~10s read timeout would kill the stream
-     * long before `done`/`stream_end`. Built here so the Phase 4 SseClient can reuse it.
+     * long before `done`/`stream_end`. Derived from [baseClient] via `newBuilder()` so it shares
+     * the same [ConnectionPool] (and cookie jar / interceptors) -- only the read timeout and the
+     * dispatcher (see [baseClient]'s doc) are overridden.
      */
-    val sseClient: OkHttpClient = baseClientBuilder()
-        .connectTimeout(15, TimeUnit.SECONDS)
+    val sseClient: OkHttpClient = baseClient.newBuilder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
+        .dispatcher(Dispatcher())
         .build()
 
     private val retrofitConverterFactory = HermexJson.asConverterFactory("application/json".toMediaType())

@@ -30,6 +30,7 @@ import com.hermex.android.core.network.dto.SessionResponse
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.ChatPreferencesStore
 import com.hermex.android.core.util.HermexLog
+import com.hermex.android.core.util.TtftTracer
 import com.hermex.android.chat.ResponseCompletionNotifier
 import java.util.UUID
 import kotlinx.coroutines.Job
@@ -511,6 +512,14 @@ class ChatViewModel(
             return
         }
 
+        // Armed here, not from the UI layer: sendMessage() is the one function every send-shaped
+        // entry point (normal send, regenerate, retryLastMessage, the slash-command re-entry
+        // below) funnels through, so this is the single place a fresh turn can start -- see
+        // TtftTracer's class doc for why that matters for regenerate/retry not attaching to a
+        // stale trace. Compose's onClick invokes this synchronously off the tap, so "Send tapped"
+        // here is indistinguishable from the true tap instant.
+        TtftTracer.start()
+        TtftTracer.mark("ViewModel begins processing")
         viewModelScope.launch {
             // Issue #10: if a server cancel is still in flight (e.g. user tapped Stop then Send
             // quickly), wait for it to complete before issuing chat/start -- otherwise the start
@@ -527,9 +536,21 @@ class ChatViewModel(
             // V5 Phase 5 recon) -- deriving the marker from this same capped list, not the
             // uncapped one, keeps the marker and the structured `attachments` field in agreement
             // about which files actually went out.
+            TtftTracer.mark("Request serialization begins")
             val cappedAttachments = state.pendingAttachments.map { it.toMessageAttachment() }.capAtChatStartLimit()
             val attachmentReferences = cappedAttachments.mapNotNull { it.chatReference() }
             val messageForApi = text + buildAttachedFilesMarker(attachmentReferences)
+            val chatStartRequest = ChatStartRequest(
+                sessionId = sessionId,
+                message = messageForApi,
+                workspace = state.currentWorkspace,
+                model = state.currentModel,
+                modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
+                profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
+                explicitModelPick = if (explicitModelPick) true else null,
+                attachments = cappedAttachments.ifEmpty { null },
+            )
+            TtftTracer.mark("Request serialization ends")
             _uiState.update { it.copy(isSending = true, errorMessage = null) }
 
             val startResponse = try {
@@ -541,20 +562,7 @@ class ChatViewModel(
                 var response: ChatStartResponse? = null
                 while (response == null) {
                     try {
-                        response = safeApiCall {
-                            api.chatStart(
-                                ChatStartRequest(
-                                    sessionId = sessionId,
-                                    message = messageForApi,
-                                    workspace = state.currentWorkspace,
-                                    model = state.currentModel,
-                                    modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
-                                    profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
-                                    explicitModelPick = if (explicitModelPick) true else null,
-                                    attachments = cappedAttachments.ifEmpty { null },
-                                ),
-                            )
-                        }
+                        response = safeApiCall { api.chatStart(chatStartRequest) }
                     } catch (e: ApiError.StreamConflict) {
                         attempt++
                         if (attempt > 1) throw e
@@ -649,7 +657,10 @@ class ChatViewModel(
             is SseEvent.Token -> {
                 // Logged once per turn, not per token -- streamingText is empty only for the very
                 // first token, so this can't fire again until the next finalizeStream resets it.
-                if (_uiState.value.streamingText.isEmpty()) HermexLog.d("Chat", "first token received")
+                if (_uiState.value.streamingText.isEmpty()) {
+                    HermexLog.d("Chat", "first token received")
+                    TtftTracer.markOnce("First content token parsed")
+                }
                 _uiState.update { it.copy(streamingText = it.streamingText + event.text) }
             }
             is SseEvent.Reasoning -> _uiState.update { it.copy(streamingReasoning = it.streamingReasoning + event.text) }
@@ -716,6 +727,10 @@ class ChatViewModel(
      * Fires the [responseCompletionNotifier] after state update so it observes the final UI state. */
     private fun finalizeStream(errorMessage: String? = null, reason: StreamCompletionReason = StreamCompletionReason.CANCELLED) {
         HermexLog.d("Chat", "finalizeStream" + (errorMessage?.let { " (error: $it)" } ?: ""))
+        // Single terminal point for done/stream_end/cancel/error alike -- disarming the TTFT
+        // trace here (rather than separately per reason) guarantees no late/unrelated event can
+        // log a mark against this turn's timer after it's genuinely over.
+        TtftTracer.finish()
         streamJob?.cancel()
         streamJob = null
         activeStreamId = null
@@ -1015,6 +1030,12 @@ class ChatViewModel(
     fun reattachStream() {
         val streamId = _uiState.value.disconnectedStreamId ?: return
         val serverBaseUrl = authRepository.activeServerBaseUrl() ?: return
+        // Reattach has no "send tapped" moment of its own -- this stream's turn started
+        // elsewhere (a previous process, a previous screen), so there's nothing meaningful to
+        // measure a TTFT against here. Disarm defensively so the SSE events this is about to
+        // observe can't get misattributed to whatever unrelated turn last called
+        // TtftTracer.start().
+        TtftTracer.finish()
         _uiState.update { it.copy(isReattaching = true, hasDisconnectedStream = false) }
         activeStreamId = streamId
         observeStream(serverBaseUrl, streamId)

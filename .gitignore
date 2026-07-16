@@ -12,9 +12,15 @@ local.properties
 /.hermes/
 .kotlin/
 *.apk
+*.aab
 release-artifacts/*.apk
+release-artifacts/*.aab
 *-recon.md
 *-recone.md
 *-prompt*.md
 release.jks
 signing.properties
+*.jks
+*.keystore
+mapping.txt
+app/build/outputs/mapping/

@@ -15,47 +15,77 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 28
-        versionName = "0.12.3-preview"
+        versionCode = 29
+        versionName = "0.12.4-preview"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // Local signing.properties is gitignored. When present, it enables signed release builds.
-    // When absent, release builds still R8-minify but produce an unsigned APK that Android
-    // will refuse to install — a clear warning is logged.
+    // Local signing.properties is gitignored and points at a keystore stored OUTSIDE this repo
+    // (see DEVELOPMENT docs). `storeFile` may be an absolute path -- rootProject.file() passes
+    // absolute paths through unchanged, so keeping the keystore off-disk-under-the-repo entirely
+    // is the default expectation, not just a convention.
     val signingPropsFile = rootProject.file("signing.properties")
     val hasSigningProps = signingPropsFile.exists()
 
-    if (hasSigningProps) {
-        val props = Properties()
-        signingPropsFile.inputStream().use { stream -> props.load(stream) }
-        // Accept both spec field names (storeFile/storePassword/keyAlias/keyPassword) and
-        // the existing convention (keystore/keystore.password/key.alias/key.password).
-        val storeFilePath: String = props.getProperty("storeFile") ?: props.getProperty("keystore") ?: ""
-        val storePassword: String = props.getProperty("storePassword") ?: props.getProperty("keystore.password") ?: ""
-        val keyAliasName: String = props.getProperty("keyAlias") ?: props.getProperty("key.alias") ?: ""
-        val keyPasswordValue: String = props.getProperty("keyPassword") ?: props.getProperty("key.password") ?: ""
+    // Accept both spec field names (storeFile/storePassword/keyAlias/keyPassword) and the
+    // existing convention (keystore/keystore.password/key.alias/key.password).
+    val signingProps: Properties? = if (hasSigningProps) {
+        Properties().apply { signingPropsFile.inputStream().use { stream -> load(stream) } }
+    } else null
+    val storeFilePath: String = signingProps?.getProperty("storeFile") ?: signingProps?.getProperty("keystore") ?: ""
+    val storePasswordValue: String = signingProps?.getProperty("storePassword") ?: signingProps?.getProperty("keystore.password") ?: ""
+    val keyAliasName: String = signingProps?.getProperty("keyAlias") ?: signingProps?.getProperty("key.alias") ?: ""
+    val keyPasswordValue: String = signingProps?.getProperty("keyPassword") ?: signingProps?.getProperty("key.password") ?: ""
 
+    // Every field present and non-blank, *and* the keystore file it points at actually exists --
+    // a signing.properties with a typo'd or moved storeFile path is exactly as broken as a
+    // missing signing.properties, and must fail the same way rather than passing a bogus
+    // File() through to AGP and failing later with a more confusing error.
+    val signingConfigComplete = hasSigningProps &&
+        storeFilePath.isNotBlank() && storePasswordValue.isNotBlank() &&
+        keyAliasName.isNotBlank() && keyPasswordValue.isNotBlank() &&
+        rootProject.file(storeFilePath).exists()
+
+    if (signingConfigComplete) {
         val releaseSigning = signingConfigs.create("release")
         releaseSigning.storeFile = rootProject.file(storeFilePath)
-        releaseSigning.storePassword = storePassword
+        releaseSigning.storePassword = storePasswordValue
         releaseSigning.keyAlias = keyAliasName
         releaseSigning.keyPassword = keyPasswordValue
-    } else {
-        logger.warn(
-            "signing.properties not found at repo root. Release builds will be UNSIGNED " +
-            "and Android will refuse to install them. Create signing.properties (gitignored) " +
-            "to enable signed release APK output.",
-        )
+    }
+
+    // Release artifacts (assemble/bundle) MUST be signed -- a release build with incomplete or
+    // missing signing config fails loudly here instead of silently producing an unsigned APK
+    // (which Android would refuse to install anyway, but only after a confusing failure far from
+    // the actual cause) or falling back to any other signing identity. Debug builds, tests, and
+    // every other task are unaffected -- this only fires when a release artifact is actually
+    // requested.
+    gradle.taskGraph.whenReady {
+        val buildingReleaseArtifact = allTasks.any { task ->
+            task.path.contains(":app:") &&
+                (task.name.startsWith("assembleRelease") || task.name.startsWith("bundleRelease") ||
+                    task.name.startsWith("packageRelease") || task.name.contains("ReleaseBundle"))
+        }
+        if (buildingReleaseArtifact && !signingConfigComplete) {
+            throw GradleException(
+                "Refusing to build a release artifact: signing.properties is missing, incomplete, " +
+                "or its storeFile does not exist at the resolved path. Release artifacts must be " +
+                "signed with the real release/upload keystore -- see DEVELOPMENT.md for local " +
+                "signing setup. This build type never falls back to an unsigned or debug-signed " +
+                "output.",
+            )
+        }
     }
 
     buildTypes {
         release {
-            // R8 minification is always on; signing is only applied if signing.properties exists.
+            // R8 minification is always on; signing is only applied if signing.properties
+            // resolves to a complete, existing keystore -- see the taskGraph check above for
+            // what happens when it doesn't.
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (hasSigningProps) {
+            if (signingConfigComplete) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }

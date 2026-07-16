@@ -1,3 +1,68 @@
+# Hermex Android v0.12.4-preview
+
+## Security maintenance release — signing key rotation
+
+**v0.12.3-preview and all release-signed builds back to v1.0.0-rc1 are superseded and must
+not be installed.** Their signing key must be treated as compromised (see below). Install
+this release instead.
+
+The signing certificate used for earlier preview APKs may have been exposed in previous
+repository history and has been replaced.
+
+Because this release uses a new signing certificate, users with an older preview APK must
+uninstall it before installing this version. Uninstalling clears locally stored app data.
+
+This release also includes the Android TTFT connection-reuse fix from v0.12.3-preview.
+
+### What happened
+
+`release.jks` and `signing.properties` were briefly committed to this repository in commit
+`cdb6d2c` (2026-07-07) and removed 28 seconds later in `79f3a61`. The repository was public
+for the entire time those files existed in its history. Because Git retains blob content from
+every commit that was ever pushed, the keystore and credentials remain permanently recoverable
+from the public history (`git show cdb6d2c:release.jks`) even though the current working tree
+no longer contains them removing them from the current tree does not revoke the exposure.
+
+**Compromised certificate SHA-256:**
+`30:96:FB:52:82:7C:FB:6B:56:71:3F:4C:AB:6C:59:FF:79:D1:20:D0:3F:00:EF:3D:E8:25:5D:7A:4B:75:DB:F3`
+
+**Releases signed with the compromised key** (confirmed by downloading and verifying each
+release asset): v1.0.0-rc1, v0.12.1-preview, v0.12.2-preview, v0.12.3-preview.
+(v0.12.0-preview's release APK asset was never validly signed at all -- unrelated to this
+issue. Releases v0.11.2-preview and earlier only ever shipped debug-signed APKs, which use a
+different, non-committed keystore and are not affected by this exposure.)
+
+**New upload certificate SHA-256:**
+`BB:A4:76:0B:59:72:98:37:A6:6E:1B:56:EB:F0:05:6C:D1:4A:3C:02:A2:BE:F2:D5:8D:59:AA:E3:BF:78:2C:E1`
+
+The app has never been uploaded to Google Play and Google Play App Signing was never enabled,
+so this rotation only affects GitHub preview distribution -- there is no Play app-signing
+identity to preserve or conflict with. See `SIGNING.md` for the new local signing setup, which
+also now fails the build loudly if release-signing credentials are missing or incomplete,
+instead of silently producing an unsigned artifact.
+
+**Not done as part of this fix:** git history was *not* rewritten. Rewriting history does not
+un-expose a secret that may already have been cloned, cached, or scraped, and force-pushing a
+rewritten history is a separate, disruptive decision (breaks every existing clone/fork/PR) that
+needs its own explicit sign-off. The fix here is the same one used for any leaked credential:
+treat it as burned and rotate away from it, which is what this release does.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android) -- **new certificate**, see
+above. Installing over an older v0.12.x/v1.0.0-rc1 build requires an uninstall first (signature
+mismatch); this clears local app data.
+
+**SHA-256 (APK):** `6e59fe8945d0b8cdf6461a9b1ef9f9c879fde6d4be6e60d26594026e18e19c6d`
+
+## Previous release
+
+See [v0.12.3-preview](#hermex-android-v0123-preview) below -- **superseded, do not install**.
+
+---
+
 # Hermex Android v0.12.3-preview
 
 ## Android chat time-to-first-token connection-reuse fix

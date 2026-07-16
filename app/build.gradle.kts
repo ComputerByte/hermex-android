@@ -22,7 +22,7 @@ android {
     }
 
     // Local signing.properties is gitignored and points at a keystore stored OUTSIDE this repo
-    // (see DEVELOPMENT docs). `storeFile` may be an absolute path -- rootProject.file() passes
+    // (see SIGNING.md). `storeFile` may be an absolute path -- rootProject.file() passes
     // absolute paths through unchanged, so keeping the keystore off-disk-under-the-repo entirely
     // is the default expectation, not just a convention.
     val signingPropsFile = rootProject.file("signing.properties")
@@ -71,7 +71,7 @@ android {
             throw GradleException(
                 "Refusing to build a release artifact: signing.properties is missing, incomplete, " +
                 "or its storeFile does not exist at the resolved path. Release artifacts must be " +
-                "signed with the real release/upload keystore -- see DEVELOPMENT.md for local " +
+                "signed with the real release/upload keystore -- see SIGNING.md for local " +
                 "signing setup. This build type never falls back to an unsigned or debug-signed " +
                 "output.",
             )

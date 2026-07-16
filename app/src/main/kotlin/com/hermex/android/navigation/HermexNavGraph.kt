@@ -650,11 +650,25 @@ fun HermexNavGraph(
                             )
                         }
                         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            // Read here (after NavHost above has already composed/bootstrapped) rather than
+                            // before it, for the same ordering reason spelled out above --
+                            // currentBackStackEntryAsState() itself is unlikely to need the bootstrap, but
+                            // keeping every navController read in this block after NavHost avoids reopening
+                            // that class of hazard for a future reader.
+                            val currentBackStackEntry by navController.currentBackStackEntryAsState()
+
                             // Shares the SESSION_LIST destination's own ViewModel (rather than creating a
                             // second, independent instance) by explicitly using its back stack entry as
                             // the store owner -- outside a composable() block, viewModel() would otherwise
-                            // resolve to the Activity's ViewModelStoreOwner instead.
-                            val sessionListEntry = remember(navController) {
+                            // resolve to the Activity's ViewModelStoreOwner instead. Keyed on
+                            // currentBackStackEntry (a NavBackStackEntry, satisfying the
+                            // UnrememberedGetBackStackEntry lint check's required key type) rather than
+                            // navController -- functionally identical here, since SESSION_LIST stays in the
+                            // back stack for this NavHost's entire lifetime, so re-fetching on every route
+                            // change still resolves to the exact same entry instance (and thus the same
+                            // ViewModelStore) every time; it just also correctly re-evaluates in the general
+                            // case where the target entry could change.
+                            val sessionListEntry = remember(currentBackStackEntry) {
                                 navController.getBackStackEntry(Routes.SESSION_LIST)
                             }
                             val leftPaneViewModel: SessionListViewModel = viewModel(
@@ -662,12 +676,6 @@ fun HermexNavGraph(
                                 factory = appContainer.sessionListViewModelFactory(),
                             )
 
-                            // Drives the left pane's selected-state highlighting. Read here (after NavHost
-                            // above has already composed/bootstrapped) rather than before it, for the same
-                            // ordering reason spelled out above -- currentBackStackEntryAsState() itself is
-                            // unlikely to need the bootstrap, but keeping every navController read in this
-                            // block after NavHost avoids reopening that class of hazard for a future reader.
-                            val currentBackStackEntry by navController.currentBackStackEntryAsState()
                             val currentRoute = currentBackStackEntry?.destination?.route
                             val selectedNavItem = when (currentRoute) {
                                 Routes.TASKS -> SessionListNavItem.TASKS

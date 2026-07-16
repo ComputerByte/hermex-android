@@ -59,7 +59,19 @@ object HermexNotifier {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(context).notify(notificationId, notification)
+        // canPostNotifications() above already guards this for the common case, but lint's
+        // static analysis doesn't trace a Boolean-returning helper as equivalent to an inline
+        // checkSelfPermission() guard -- and permission can theoretically be revoked in the
+        // narrow window between that check and this call. Catching SecurityException is the
+        // second half of lint's own suggested remedy and costs nothing: on a rejected/revoked
+        // permission this notification silently doesn't show, exactly like the early return
+        // above already does.
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        } catch (_: SecurityException) {
+            // Permission was revoked after canPostNotifications() checked it. Same outcome as
+            // that early return: no notification, no crash.
+        }
     }
 
     private fun deepLinkIntent(context: Context, uri: String): Intent = Intent(Intent.ACTION_VIEW).apply {

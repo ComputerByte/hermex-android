@@ -3,4 +3,11 @@
     <color name="hermex_widget_background">#FF000000</color>
     <color name="hermex_widget_text">#FFFFFFFF</color>
     <color name="hermex_widget_text_subtle">#FF98989F</color>
+
+    <!-- Adaptive launcher icon backgrounds: sampled as the modal (most common) flat fill
+         color from each existing pre-composited ic_launcher_(variant).png, so the adaptive
+         background matches the legacy icon exactly. -->
+    <color name="ic_launcher_background_light">#F3F3F3</color>
+    <color name="ic_launcher_background_dark">#040405</color>
+    <color name="ic_launcher_background_disco">#000000</color>
 </resources>

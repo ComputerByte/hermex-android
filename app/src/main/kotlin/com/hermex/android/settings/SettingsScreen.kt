@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -51,7 +50,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +60,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import coil3.compose.AsyncImage
 import com.hermex.android.BuildConfig
 import com.hermex.android.R
 import com.hermex.android.core.storage.AppIconVariant
@@ -530,8 +529,13 @@ private fun AppIconVariantDialog(
                     ListItem(
                         modifier = Modifier.clickable { onSelect(variant) },
                         leadingContent = {
-                            Image(
-                                painter = painterResource(variant.previewMipmapRes(isDarkTheme)),
+                            // painterResource() only supports VectorDrawable and rasterized
+                            // (PNG/JPG/WEBP) resources -- it throws IllegalArgumentException on
+                            // an <adaptive-icon> mipmap (our ic_launcher_* resources, once
+                            // mipmap-anydpi-v26 was added). AsyncImage's Coil-backed pipeline
+                            // loads AdaptiveIconDrawable correctly, same as the OS launcher does.
+                            AsyncImage(
+                                model = variant.previewMipmapRes(isDarkTheme),
                                 contentDescription = null,
                                 modifier = Modifier.size(40.dp),
                             )

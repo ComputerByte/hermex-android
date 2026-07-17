@@ -201,6 +201,7 @@ asset when present.
 
 ## Security / privacy notes
 
+- [Privacy Policy](https://computerbyte.github.io/hermex-android/privacy/)
 - Server cookies are stored per server and cleared on logout or
   per-server removal.
 - Sensitive custom header values (Authorization, X-Api-Key) are masked by

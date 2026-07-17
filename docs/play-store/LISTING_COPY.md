@@ -1,7 +1,7 @@
 # Play Store Listing Copy — Hermex Android
 
 > **Status:** Draft for owner review. Do not paste into Play Console until the privacy
-> policy (see `docs/PRIVACY_POLICY_DRAFT.md`) is hosted at a stable public URL.
+> policy (see `docs/privacy/index.md`) is hosted at its stable public URL.
 > The project license decision is complete (MIT; see `docs/LICENSING_REPORT.md`).
 >
 > **Last updated:** 2026-07-17
@@ -89,10 +89,12 @@ Permissions used
 Privacy and data
 ----------------
 - No analytics, no ads, no telemetry SDKs, no crash-reporting SDKs.
-- Authentication cookies and bearer tokens are stored in
-  EncryptedSharedPreferences on your device, scoped to this app.
-- Cached conversations, attachments, and server settings are stored in the app's
-  private storage and removed when you sign out or uninstall the app.
+- Authentication cookies are encrypted using a key protected by the Android
+  Keystore. Custom headers, including bearer tokens, remain in Android private app
+  storage but are not separately encrypted at the application layer.
+- Cached conversations and server settings are stored in the app's private storage.
+  Sign out clears the selected server's authentication cookie; Forget Server removes
+  that server's configuration, custom headers, and conversation cache.
 - For the full policy, see the privacy-policy URL on the Play listing.
 
 Open source
@@ -126,21 +128,26 @@ This disclosure should appear in:
 - The in-app About / Open-source licenses screen
 - The developer website and privacy-policy pages
 
-## Support email (placeholder)
+## Support email
 
 ```
-<OWNER TO PROVIDE — replace with a real monitored inbox before Play submission>
+brentduarte28@gmail.com
 ```
 
-## Website (placeholder)
+## Website
 
 ```
-https://<OWNER TO PROVIDE>
+https://github.com/ComputerByte/hermex-android
 ```
 
-If the project has no website yet, GitHub Pages is acceptable for the privacy
-policy URL even if a primary project website is not established. The Play Console
-"Website" field can also be set to the GitHub repository URL in the interim.
+## Privacy policy
+
+```
+https://computerbyte.github.io/hermex-android/privacy/
+```
+
+The GitHub Pages URL must be enabled and verified after these changes reach the
+repository's default branch and before it is entered in Play Console.
 
 ## Reviewer access instructions
 
@@ -165,14 +172,20 @@ the developer can provide on request.
 The Play Console Data Safety form asks specific questions. The following worksheet
 records the answers the developer should paste into the form. **All answers must be
 confirmed by the owner before submission.** This worksheet does not submit itself.
+It follows Google's current definition of collection as transmitting data off-device:
+https://support.google.com/googleplay/android-developer/answer/10787469
 
 | Play Data Safety question | Answer for Hermex | Reasoning |
 |---|---|---|
-| Does your app collect or share any of the required user data types? | **No** | The app does not collect data to its own backend. It transmits user-supplied content to a user-configured third-party server, but Data Safety is about the developer's data practices, not the user's. The user's transmission to a third-party server is disclosed in the privacy policy but is not "the app collecting data". |
-| Is all of the user data collected by your app encrypted in transit? | **Yes, when HTTPS is used; user must opt in to cleartext HTTP** | The app uses HTTPS by default. The user can configure a cleartext-HTTP server, in which case the connection is in the clear. The app shows a clear warning before completing such a connection. |
-| Do you provide a way for users to request that their data is deleted? | **n/a — the app does not collect data** | If the user signs out of a server, all cached conversations, attachments, and per-server settings for that server are removed. |
-| Is your app's data collection optional? | **n/a** | |
-| Data safety section — App activity | **"No data collected"** | |
+| Does your app collect or share any of the required user data types? | **Yes — collects; user-initiated transfers are not treated as sharing** | Google defines collection as transmitting data off-device, regardless of whether it goes to the developer or a third-party server. Hermex sends chat content and optional attachments to the selected server, and Android's speech-recognition provider may process optional voice input. These transfers are initiated by the user and are not sold. |
+| Is all of the user data collected by your app encrypted in transit? | **No** | Hermex supports HTTPS but also permits cleartext HTTP for trusted LAN servers after a warning. The Console question is all-or-nothing, so the accurate answer is No. |
+| Do you provide a way for users to request that their data is deleted? | **No developer-hosted deletion service** | Forget Server and Android Clear Data delete local data. Data retained by a configured server must be deleted through that server or its operator; speech-recognition data is controlled by that provider. |
+| Is your app's data collection optional? | **Mixed** | Server authentication and chat messages are required to use the core client. Attachments and voice input are optional. |
+| Messages → Other in-app messages | **Collected; app functionality; required for chat; not shared under the user-initiated-transfer exception** | Chat content is sent to the user-selected server. |
+| Photos and videos → Photos / Videos | **Collected only when attached; app functionality; optional** | Only media explicitly selected by the user is uploaded. |
+| Audio files → Voice or sound recordings | **Collected only when voice input is used; app functionality; optional; may be processed ephemerally** | Android's installed speech-recognition service may send audio to its provider. |
+| Files and docs | **Collected only when attached; app functionality; optional** | Only files explicitly selected by the user are uploaded. |
+| App activity → Other user-generated content | **Collected when applicable; app functionality; optional** | Open-ended content such as workspace edits may be sent to the configured server. |
 | Data safety section — Device or other IDs | **"No data collected"** | |
 | Data safety section — App info and performance | **"No data collected"** | |
 
@@ -186,10 +199,11 @@ telemetry is enabled.
 |---|---|
 | `INTERNET` | The app's only function is to talk to a user-configured server. No network access is possible without this permission. |
 | `POST_NOTIFICATIONS` (Android 13+) | Used to alert the user when a long-running chat turn completes while the user is in another app. The user can disable this in the app's settings or in Android's per-app notification settings; the app continues to function without it. |
-| `RECORD_AUDIO` | Used only when the user taps the microphone icon in the chat composer. Audio is captured for the duration of the input and streamed to the user-configured server for transcription. The app does not retain audio locally after the request completes. |
-| `READ_MEDIA_IMAGES` / legacy `READ_EXTERNAL_STORAGE` | Used to open the system file picker when the user attaches a file. The app only sees the file the user explicitly selects; it does not enumerate or read other media. |
-| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` | Used to keep an in-flight chat stream alive when the user backgrounds the app. The service is started and stopped by the app based on stream state; no background work happens without the user initiating a turn. |
-| `RECEIVE_BOOT_COMPLETED` | Used to re-arm any user-enabled background work after a device reboot. No data is read or transmitted by this receiver. |
+| `RECORD_AUDIO` | Used only when the user taps the microphone icon in the chat composer. Audio is supplied to Android's installed speech-recognition service. Depending on the device and provider, recognition may happen on-device or remotely. Hermex does not create a persistent audio recording. |
+
+Attachments use Android's system picker. The release manifest does not request
+`READ_MEDIA_IMAGES`, `READ_EXTERNAL_STORAGE`, `FOREGROUND_SERVICE`, or
+`RECEIVE_BOOT_COMPLETED`.
 
 ## Target-audience recommendation
 
@@ -215,10 +229,9 @@ Hermex:
   app.
 - "Account deletion" in the Play Console sense does not apply: there is no
   developer-side account to delete.
-- The user can remove the app's locally stored credentials and cache at any time
-  by signing out, clearing the app's data in Android Settings, or uninstalling
-  the app. This should be described in the privacy policy and the in-app About
-  screen.
+- The user can remove the selected server's cookie by signing out. Forget Server
+  also removes its configuration, custom headers, and cache. Android Clear Data or
+  uninstall removes all app-local data.
 
 The recommended Play Console answer is: **"Account deletion is not applicable
 because the app does not provide user accounts."** Owner should confirm wording

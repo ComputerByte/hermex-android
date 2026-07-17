@@ -62,6 +62,7 @@ import android.os.Build
 import android.provider.Settings
 import coil3.compose.AsyncImage
 import com.hermex.android.BuildConfig
+import com.hermex.android.PRIVACY_POLICY_URL
 import com.hermex.android.R
 import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
@@ -356,7 +357,18 @@ fun SettingsScreen(
                 SectionLabel("App")
                 Card {
                     SettingsRow("Version", BuildConfig.VERSION_NAME)
-                    SettingsRow("Build", BuildConfig.VERSION_CODE.toString(), showDivider = false)
+                    SettingsRow("Build", BuildConfig.VERSION_CODE.toString())
+                    SettingsRow(
+                        "Privacy Policy",
+                        "View online",
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL)),
+                                )
+                            }
+                        },
+                    )
                     SettingsRow(
                         "Copy Diagnostics",
                         "Version, server, headers",

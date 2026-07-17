@@ -1,5 +1,7 @@
 package com.hermex.android.onboarding
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.PRIVACY_POLICY_URL
 import com.hermex.android.R
 import com.hermex.android.auth.ServerUrlPolicy
 import com.hermex.android.ui.theme.HermexRadii
@@ -59,6 +64,7 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val fieldShape = RoundedCornerShape(HermexRadii.Cell)
     val passwordFocusRequester = remember { FocusRequester() }
 
@@ -258,6 +264,19 @@ fun OnboardingScreen(
                     Text(if (uiState.requiresPassword) "Sign In" else "Continue")
                 }
             }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        TextButton(
+            onClick = {
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL)),
+                    )
+                }
+            },
+        ) {
+            Text("Privacy Policy")
         }
     }
 }

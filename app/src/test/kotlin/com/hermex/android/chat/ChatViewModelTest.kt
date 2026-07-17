@@ -1575,6 +1575,10 @@ class ChatViewModelTest {
             awaitUntil { !it.isLoading }
             viewModel.onComposerTextChanged("hello")
             viewModel.sendMessage()
+            val immediate = viewModel.uiState.value
+            assertTrue(immediate.isSending)
+            assertEquals("", immediate.composerText)
+            assertEquals("hello", immediate.messages.last().content)
             val afterSend = awaitUntil { it.isStreaming }
             assertEquals("hello", afterSend.messages.last().content)
             cancelAndIgnoreRemainingEvents()
@@ -1605,11 +1609,19 @@ class ChatViewModelTest {
         viewModel.uiState.test {
             viewModel.onComposerTextChanged("check these out")
             viewModel.sendMessage()
+            val immediate = viewModel.uiState.value
+            assertTrue(immediate.isSending)
+            assertEquals("", immediate.composerText)
+            assertTrue(immediate.pendingAttachments.isEmpty())
+            assertEquals(2, immediate.messages.last().attachments?.size)
+            assertEquals("one.png", immediate.messages.last().attachments?.first()?.name)
+            assertEquals("image/png", immediate.messages.last().attachments?.first()?.mime)
             val afterSend = awaitUntil { it.isStreaming }
             assertEquals(
                 "check these out\n\n[Attached files: /x/one.png, /x/two.pdf]",
                 afterSend.messages.last().content,
             )
+            assertEquals(listOf("one.png", "two.pdf"), afterSend.messages.last().attachments?.map { it.name })
             assertTrue(afterSend.pendingAttachments.isEmpty())
             cancelAndIgnoreRemainingEvents()
         }
@@ -1673,10 +1685,16 @@ class ChatViewModelTest {
         viewModel.uiState.test {
             viewModel.onComposerTextChanged("check this out")
             viewModel.sendMessage()
+            val immediate = viewModel.uiState.value
+            assertTrue(immediate.isSending)
+            assertEquals("", immediate.composerText)
+            assertTrue(immediate.pendingAttachments.isEmpty())
+            assertEquals(1, immediate.messages.size)
             val afterFailure = awaitUntil { it.errorMessage != null }
             assertEquals(1, afterFailure.pendingAttachments.size)
             assertEquals("check this out", afterFailure.composerText)
             assertEquals(false, afterFailure.isSending)
+            assertTrue(afterFailure.messages.isEmpty())
             cancelAndIgnoreRemainingEvents()
         }
     }

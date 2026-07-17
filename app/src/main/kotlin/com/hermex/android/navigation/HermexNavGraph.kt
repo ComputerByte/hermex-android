@@ -513,7 +513,11 @@ fun HermexNavGraph(
                     ?.let { decodeUriList(it) }
                     ?.ifEmpty { null }
                 val viewModel: ChatViewModel = viewModel(
-                    key = sessionId,
+                    viewModelStoreOwner = appContainer.retainedChatViewModelStoreOwner,
+                    key = retainedChatViewModelKey(
+                        serverId = appContainer.authRepository.activeServerId(),
+                        sessionId = sessionId,
+                    ),
                     factory = appContainer.chatViewModelFactory(sessionId),
                 )
                 ChatScreen(
@@ -532,6 +536,8 @@ fun HermexNavGraph(
                     initialComposerDraft = initialDraft,
                     pendingFileUploadUris = pendingUploadUris,
                     isPaneMode = isWideLayout,
+                    sessionId = sessionId,
+                    serverBaseUrl = appContainer.authRepository.activeServerBaseUrl(),
                 )
             }
             composable(

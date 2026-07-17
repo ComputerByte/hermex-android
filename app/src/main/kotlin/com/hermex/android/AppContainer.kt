@@ -5,13 +5,17 @@ import android.content.res.Configuration
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
+import coil3.ImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.chat.ChatViewModel
 import com.hermex.android.chat.ContentResolverAttachmentReader
+import com.hermex.android.chat.RetainedChatViewModelStoreOwner
 import com.hermex.android.core.appicon.AppIconSwitcher
 import com.hermex.android.core.appicon.PackageManagerAppIconAliasWriter
 import com.hermex.android.core.cache.HermexDatabase
 import com.hermex.android.core.cache.MIGRATION_1_2
+import com.hermex.android.core.cache.MIGRATION_2_3
 import com.hermex.android.core.cache.OfflineCacheRepository
 import com.hermex.android.core.cache.RoomOfflineCacheRepository
 import com.hermex.android.core.network.NetworkModule
@@ -43,6 +47,7 @@ import com.hermex.android.tasks.TasksViewModel
 import com.hermex.android.workspace.WorkspaceViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -58,6 +63,7 @@ import kotlinx.coroutines.launch
  */
 class AppContainer(val context: Context) {
     private val applicationContext = context.applicationContext
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
     private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
@@ -95,7 +101,7 @@ class AppContainer(val context: Context) {
     // kind of payload. Never holds cookies/custom headers/secrets.
     private val database: HermexDatabase = Room
         .databaseBuilder(context.applicationContext, HermexDatabase::class.java, "hermex_cache.db")
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
     private val offlineCacheRepository: OfflineCacheRepository = RoomOfflineCacheRepository(database.cachedSessionDao())
 
@@ -109,6 +115,9 @@ class AppContainer(val context: Context) {
     )
 
     private lateinit var authRepositoryRef: AuthRepository
+
+    /** The process-level owner that keeps each session's ChatViewModel alive across navigation. */
+    internal val retainedChatViewModelStoreOwner = RetainedChatViewModelStoreOwner()
 
     init {
         // Load the cached notification preference so the notifier gate has a value
@@ -132,7 +141,30 @@ class AppContainer(val context: Context) {
         onServerForgotten = { serverId -> offlineCacheRepository.clearServer(serverId) },
     ).also { authRepositoryRef = it }
 
+    init {
+        applicationScope.launch {
+            var previousState = authRepository.state.value
+            authRepository.state.collect { state ->
+                if (state != previousState) {
+                    // Logout, login, and server switches all define a new authentication scope.
+                    // Cancel retained streams so none can keep using a superseded network scope.
+                    retainedChatViewModelStoreOwner.reset()
+                    previousState = state
+                }
+            }
+        }
+    }
+
     private val sseClient: SseStreamSource = SseClient(networkModule.sseClient)
+
+    /** Coil's default singleton has no network fetcher in Coil 3, and a standalone fetcher would
+     * not share Hermex's session cookies/custom proxy headers. Reusing [NetworkModule.restClient]
+     * makes `/api/file/raw` image requests authenticate exactly like every Retrofit call. */
+    fun newImageLoader(context: Context): ImageLoader = ImageLoader.Builder(context)
+        .components {
+            add(OkHttpNetworkFetcherFactory(networkModule.restClient))
+        }
+        .build()
 
     fun onboardingViewModelFactory() = viewModelFactory {
         initializer { OnboardingViewModel(authRepository) }

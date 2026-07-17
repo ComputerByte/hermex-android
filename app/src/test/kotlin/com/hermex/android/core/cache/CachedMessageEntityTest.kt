@@ -1,6 +1,7 @@
 package com.hermex.android.core.cache
 
 import com.hermex.android.core.network.dto.ChatMessage
+import com.hermex.android.core.network.dto.MessageAttachment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -16,6 +17,16 @@ class CachedMessageEntityTest {
             name = "tool-name",
             toolCallId = "call-1",
             reasoning = "Thinking it over...",
+            attachments = listOf(
+                MessageAttachment(
+                    name = "photo.png",
+                    path = "/state/attachments/session-1/photo.png",
+                    mime = "image/png",
+                    size = 1234,
+                    isImage = true,
+                ),
+                MessageAttachment(name = "historical.jpg", wasBareReference = true),
+            ),
         )
 
         val entity = original.toCachedEntity(serverId = "server-a", sessionId = "session-1", orderIndex = 3, cachedAtEpochMillis = 42L)
@@ -28,6 +39,7 @@ class CachedMessageEntityTest {
         assertEquals(original.name, roundTripped.name)
         assertEquals(original.toolCallId, roundTripped.toolCallId)
         assertEquals(original.reasoning, roundTripped.reasoning)
+        assertEquals(original.attachments, roundTripped.attachments)
         assertEquals("server-a", entity.serverId)
         assertEquals("session-1", entity.sessionId)
         assertEquals(3, entity.orderIndex)

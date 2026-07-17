@@ -1,3 +1,21 @@
+# Hermex Android v0.12.6-preview
+
+## Sidebar: Active Profile
+
+The navigation drawer was missing an entry for switching profiles, even though the
+underlying navigation route was already wired up — the "Active Profile" row simply
+wasn't rendered. Added it back between Insights and Projects, matching the iOS layout.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android), current rotated certificate
+
+**SHA-256 (APK):** `073b5b8776a7050f59d448c8e7d1b3a3ccc4c0196f1d025d0825d224f39c34e3`
+
+---
+
 # Hermex Android v0.12.5-preview
 
 ## Chat reliability and attachment history

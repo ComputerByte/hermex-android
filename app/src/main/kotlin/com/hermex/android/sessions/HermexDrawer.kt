@@ -110,6 +110,12 @@ fun HermexDrawerContent(
                     onClick = { onNavItemSelected(SessionListNavItem.INSIGHTS) },
                 )
                 DrawerNavItem(
+                    icon = Icons.Filled.Person,
+                    label = "Active Profile",
+                    isSelected = selectedNavItem == SessionListNavItem.PROFILES,
+                    onClick = { onNavItemSelected(SessionListNavItem.PROFILES) },
+                )
+                DrawerNavItem(
                     icon = Icons.AutoMirrored.Filled.List,
                     label = "Projects",
                     isSelected = selectedNavItem == SessionListNavItem.PROJECTS,

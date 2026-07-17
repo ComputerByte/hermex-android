@@ -1,3 +1,28 @@
+# Hermex Android v0.12.5-preview
+
+## Chat reliability and attachment history
+
+This preview fixes two chat reliability issues reported on long-running conversations:
+
+- Sent user turns now appear immediately, with safe rollback of the draft and attachments if
+  `/api/chat/start` fails.
+- Image attachment metadata is retained in optimistic state and offline cache; historical images
+  render through the authenticated `/api/file/raw` endpoint.
+- In-flight chat streams are retained outside individual navigation destinations, so switching to
+  another conversation no longer cancels the original response. Returning to the conversation
+  reuses its live state without creating a duplicate SSE collector.
+- Retained chat state is cleared on logout and server changes to prevent cross-server leakage.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android), current rotated certificate
+
+**SHA-256 (APK):** `390320e640f30ab0759efb208092905a955cdb6abb95a0ea3f250a39a8215177`
+
+---
+
 # Hermex Android v0.12.4-preview
 
 ## Security maintenance release — signing key rotation

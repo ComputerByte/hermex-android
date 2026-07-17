@@ -63,6 +63,8 @@ fun copyableTextFor(message: ChatMessage): String = message.content.orEmpty()
 fun MessageBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
+    sessionId: String? = null,
+    serverBaseUrl: String? = null,
     /** Non-null only for the message this action currently applies to (the editable user turn /
      * the regenerable assistant turn) -- absence of the callback is what hides the icon, so
      * callers gate applicability rather than this composable guessing from [message] alone. */
@@ -89,6 +91,13 @@ fun MessageBubble(
                     .widthIn(max = 320.dp),
                 horizontalAlignment = Alignment.End,
             ) {
+                MessageAttachments(
+                    message = message,
+                    context = context,
+                    sessionId = sessionId,
+                    serverBaseUrl = serverBaseUrl,
+                    onOpenImage = { showImageViewer = it },
+                )
                 Box(
                     modifier = Modifier
                         .background(
@@ -105,26 +114,6 @@ fun MessageBubble(
                         markdown = displayContent.orEmpty(),
                         textColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
-                }
-                // Attachment chips
-                message.attachments?.let { attachments ->
-                    AttachmentChips(attachments = attachments, context = context)
-                }
-                // Image attachment thumbnails
-                message.attachments?.forEach { attachment ->
-                    if (attachment.mime?.startsWith("image/") == true && attachment.path != null) {
-                        val imageUrl = attachment.path
-                        AsyncImage(
-                            model = imageUrl,
-                            contentDescription = attachment.name ?: "Image",
-                            modifier = Modifier
-                                .padding(top = 6.dp)
-                                .widthIn(max = 260.dp)
-                                .clip(RoundedCornerShape(HermexRadii.Accessory))
-                                .clickable { showImageViewer = imageUrl },
-                            contentScale = ContentScale.FillWidth,
-                        )
-                    }
                 }
                 if (message.effectiveTimestamp != null || onEdit != null) {
                     Row(
@@ -160,30 +149,17 @@ fun MessageBubble(
                 .then(copyOnLongClick)
                 .padding(end = 48.dp, top = 2.dp, bottom = 2.dp),
         ) {
+            MessageAttachments(
+                message = message,
+                context = context,
+                sessionId = sessionId,
+                serverBaseUrl = serverBaseUrl,
+                onOpenImage = { showImageViewer = it },
+            )
             MarkdownText(
                 markdown = displayContent.orEmpty(),
                 textColor = MaterialTheme.colorScheme.onSurface,
             )
-            // Attachment chips
-            message.attachments?.let { attachments ->
-                AttachmentChips(attachments = attachments, context = context)
-            }
-            // Image attachment thumbnails
-            message.attachments?.forEach { attachment ->
-                if (attachment.mime?.startsWith("image/") == true && attachment.path != null) {
-                    val imageUrl = attachment.path
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = attachment.name ?: "Image",
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .widthIn(max = 260.dp)
-                            .clip(RoundedCornerShape(HermexRadii.Accessory))
-                            .clickable { showImageViewer = imageUrl },
-                        contentScale = ContentScale.FillWidth,
-                    )
-                }
-            }
             if (message.effectiveTimestamp != null || onRegenerate != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -227,10 +203,50 @@ fun MessageBubble(
 private fun messageTimeText(epochSeconds: Double): String =
     SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date((epochSeconds * 1000).toLong()))
 
+/** Attachment indicators precede the message text, matching the upload preview and making it
+ * immediately clear which turn an image belonged to when a historical conversation reloads. */
+@Composable
+private fun MessageAttachments(
+    message: ChatMessage,
+    context: android.content.Context,
+    sessionId: String?,
+    serverBaseUrl: String?,
+    onOpenImage: (String) -> Unit,
+) {
+    val attachments = message.attachments.orEmpty()
+    if (attachments.isEmpty()) return
+
+    AttachmentChips(
+        attachments = attachments,
+        context = context,
+        sessionId = sessionId,
+        serverBaseUrl = serverBaseUrl,
+        onOpenImage = onOpenImage,
+    )
+    attachments.forEach { attachment ->
+        val imageUrl = attachmentRawUrl(serverBaseUrl, sessionId, attachment)
+        if (attachment.isImageForDisplay() && imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = attachment.displayFileName() ?: "Image",
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .widthIn(max = 260.dp)
+                    .clip(RoundedCornerShape(HermexRadii.Accessory))
+                    .clickable { onOpenImage(imageUrl) },
+                contentScale = ContentScale.FillWidth,
+            )
+        }
+    }
+}
+
 @Composable
 private fun AttachmentChips(
     attachments: List<MessageAttachment>,
     context: android.content.Context,
+    sessionId: String?,
+    serverBaseUrl: String?,
+    onOpenImage: (String) -> Unit,
 ) {
     if (attachments.isEmpty()) return
     LazyRow(
@@ -240,7 +256,13 @@ private fun AttachmentChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(attachments, key = { it.path ?: it.name ?: it.hashCode().toString() }) { attachment ->
-            AttachmentChip(attachment = attachment, context = context)
+            AttachmentChip(
+                attachment = attachment,
+                context = context,
+                imageUrl = attachmentRawUrl(serverBaseUrl, sessionId, attachment)
+                    ?.takeIf { attachment.isImageForDisplay() },
+                onOpenImage = onOpenImage,
+            )
         }
     }
 }
@@ -249,10 +271,16 @@ private fun AttachmentChips(
 private fun AttachmentChip(
     attachment: MessageAttachment,
     context: android.content.Context,
+    imageUrl: String?,
+    onOpenImage: (String) -> Unit,
 ) {
     Surface(
         onClick = {
-            AttachmentFileOpener.openAttachment(context, attachment)
+            if (imageUrl != null) {
+                onOpenImage(imageUrl)
+            } else {
+                AttachmentFileOpener.openAttachment(context, attachment)
+            }
         },
         shape = RoundedCornerShape(HermexRadii.Accessory),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -262,14 +290,16 @@ private fun AttachmentChip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = fileTypeIcon(attachment.mime),
+                imageVector = fileTypeIcon(
+                    attachment.mime ?: if (attachment.isImageForDisplay()) "image/*" else null,
+                ),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                text = attachment.name ?: attachment.path ?: "file",
+                text = attachment.displayFileName() ?: "file",
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

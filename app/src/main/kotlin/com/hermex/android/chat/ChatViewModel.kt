@@ -55,7 +55,9 @@ private const val OFFLINE_CACHE_MESSAGE = "Unable to reach server -- showing cac
 
 /**
  * Drives one chat session: loads recent history, sends a message, opens the SSE stream for the
- * reply, and folds each [SseEvent] into [ChatUiState] as it arrives. Mirrors iOS's
+ * reply, and folds each [SseEvent] into [ChatUiState] as it arrives. Instances are retained in
+ * an app-owned ViewModelStore (server + session keyed) rather than a chat destination's store, so
+ * replacing a navigation entry does not cancel an in-flight response. Mirrors iOS's
  * `ChatViewModel` streaming state machine, minus reconnect-with-replay (explicitly deferred --
  * see API_CONTRACT.md).
  *
@@ -495,8 +497,10 @@ class ChatViewModel(
     }
 
     fun sendMessage() {
-        val text = _uiState.value.composerText.trim()
-        if (text.isEmpty() || _uiState.value.isSending || _uiState.value.isStreaming) return
+        val stateAtTap = _uiState.value
+        val originalComposerText = stateAtTap.composerText
+        val text = originalComposerText.trim()
+        if (text.isEmpty() || stateAtTap.isSending || stateAtTap.isStreaming) return
 
         // Handle slash commands before sending
         val command = CommandRegistry.matchCommand(text)
@@ -520,38 +524,49 @@ class ChatViewModel(
         // here is indistinguishable from the true tap instant.
         TtftTracer.start()
         TtftTracer.mark("ViewModel begins processing")
+
+        // Capture and render the turn before any network suspension. `/api/chat/start` can take
+        // noticeably longer for an old session, but that server acknowledgement is not what
+        // makes a user action "sent" from the UI's perspective. The WebUI follows the same
+        // ordering: clear the submitted draft and append the local user turn first, then roll it
+        // back if the start request is rejected.
+        val explicitModelPick = stateAtTap.pendingExplicitModelPick && !stateAtTap.currentModel.isNullOrBlank()
+        TtftTracer.mark("Request serialization begins")
+        val cappedAttachments = stateAtTap.pendingAttachments.map { it.toMessageAttachment() }.capAtChatStartLimit()
+        val attachmentReferences = cappedAttachments.mapNotNull { it.chatReference() }
+        val messageForApi = text + buildAttachedFilesMarker(attachmentReferences)
+        val chatStartRequest = ChatStartRequest(
+            sessionId = sessionId,
+            message = messageForApi,
+            workspace = stateAtTap.currentWorkspace,
+            model = stateAtTap.currentModel,
+            modelProvider = stateAtTap.currentModelProvider?.takeIf { it.isNotBlank() },
+            profile = stateAtTap.selectedProfileName?.takeIf { it.isNotBlank() },
+            explicitModelPick = if (explicitModelPick) true else null,
+            attachments = cappedAttachments.ifEmpty { null },
+        )
+        TtftTracer.mark("Request serialization ends")
+        val optimisticUserMessage = ChatMessage(
+            role = "user",
+            content = messageForApi,
+            timestamp = nowEpochSeconds(),
+            attachments = cappedAttachments.ifEmpty { null },
+        )
+        _uiState.update {
+            it.copy(
+                isSending = true,
+                errorMessage = null,
+                composerText = "",
+                messages = it.messages + optimisticUserMessage,
+                pendingAttachments = emptyList(),
+            )
+        }
+
         viewModelScope.launch {
             // Issue #10: if a server cancel is still in flight (e.g. user tapped Stop then Send
             // quickly), wait for it to complete before issuing chat/start -- otherwise the start
             // can race the cancel and get a 409 "session already has an active stream" back.
             awaitPendingCancel()
-            val state = _uiState.value
-            // Captured now, not re-read on completion: if the user picks a *different* model
-            // while this request is in flight, that pick's own true value must win, not get
-            // clobbered by this (now-stale) request's completion. Only sent when there's an
-            // actual current model to attribute the pick to, matching iOS's
-            // `explicitModelPickForChatStart`.
-            val explicitModelPick = state.pendingExplicitModelPick && !state.currentModel.isNullOrBlank()
-            // Capped the same way the server itself caps them (`_normalize_chat_attachments(...)[:20]`,
-            // V5 Phase 5 recon) -- deriving the marker from this same capped list, not the
-            // uncapped one, keeps the marker and the structured `attachments` field in agreement
-            // about which files actually went out.
-            TtftTracer.mark("Request serialization begins")
-            val cappedAttachments = state.pendingAttachments.map { it.toMessageAttachment() }.capAtChatStartLimit()
-            val attachmentReferences = cappedAttachments.mapNotNull { it.chatReference() }
-            val messageForApi = text + buildAttachedFilesMarker(attachmentReferences)
-            val chatStartRequest = ChatStartRequest(
-                sessionId = sessionId,
-                message = messageForApi,
-                workspace = state.currentWorkspace,
-                model = state.currentModel,
-                modelProvider = state.currentModelProvider?.takeIf { it.isNotBlank() },
-                profile = state.selectedProfileName?.takeIf { it.isNotBlank() },
-                explicitModelPick = if (explicitModelPick) true else null,
-                attachments = cappedAttachments.ifEmpty { null },
-            )
-            TtftTracer.mark("Request serialization ends")
-            _uiState.update { it.copy(isSending = true, errorMessage = null) }
 
             val startResponse = try {
                 // Up to 2 attempts: the first is the normal start; if the server still has a
@@ -582,49 +597,48 @@ class ChatViewModel(
                 // After 2 attempts: a 409 from chat/start means the server has a stream we don't
                 // know how to claim. Surface a clear "Previous stream is still stopping" message
                 // rather than the raw API error -- the user knows to wait a moment and retry.
-                _uiState.update {
-                    it.copy(
-                        isSending = false,
-                        errorMessage = "Previous stream is still stopping. Please wait a moment and tap Send again.",
-                    )
-                }
+                rollbackOptimisticSend(
+                    optimisticUserMessage,
+                    originalComposerText,
+                    stateAtTap.pendingAttachments,
+                    "Previous stream is still stopping. Please wait a moment and tap Send again.",
+                )
                 return@launch
             } catch (e: ApiError.Network) {
-                // A connectivity/IO failure specifically (see ApiError.Network) -- never queued,
-                // never shown as if it sent; the composer keeps the unsent text so nothing is lost.
-                _uiState.update { it.copy(isSending = false, errorMessage = "You're offline. Reconnect to send messages.") }
+                rollbackOptimisticSend(
+                    optimisticUserMessage,
+                    originalComposerText,
+                    stateAtTap.pendingAttachments,
+                    "You're offline. Reconnect to send messages.",
+                )
                 return@launch
             } catch (e: ApiError) {
-                _uiState.update { it.copy(isSending = false, errorMessage = e.message ?: "Could not send message.") }
+                rollbackOptimisticSend(
+                    optimisticUserMessage,
+                    originalComposerText,
+                    stateAtTap.pendingAttachments,
+                    e.message ?: "Could not send message.",
+                )
                 return@launch
             }
 
             val streamId = startResponse.streamId
             if (streamId == null) {
                 HermexLog.w("Chat", "chat/start returned no stream_id: ${startResponse.error}")
-                _uiState.update {
-                    it.copy(isSending = false, errorMessage = startResponse.error ?: "Server did not start a stream.")
-                }
+                rollbackOptimisticSend(
+                    optimisticUserMessage,
+                    originalComposerText,
+                    stateAtTap.pendingAttachments,
+                    startResponse.error ?: "Server did not start a stream.",
+                )
                 return@launch
             }
             HermexLog.d("Chat", "chat/start ok, streamId=$streamId -- opening SSE")
 
-            // Append the user's own message immediately (optimistic) and clear the composer.
-            // Uses messageForApi (marker included, same as what the server will persist and
-            // eventually echo back on reload) rather than the bare typed text, so this optimistic
-            // bubble already matches what a reload would show -- display-layer marker stripping
-            // is a separate, not-yet-built concern (see MessageAttachment's iOS equivalent).
-            val userMessage = ChatMessage(
-                role = "user",
-                content = messageForApi,
-                timestamp = nowEpochSeconds(),
-            )
             _uiState.update {
                 it.copy(
                     isSending = false,
                     isStreaming = true,
-                    composerText = "",
-                    messages = it.messages + userMessage,
                     streamingText = "",
                     streamingReasoning = "",
                     // NOT resetting activeToolCalls here: each entry is anchored to the message
@@ -632,16 +646,36 @@ class ChatViewModel(
                     // past turns' tool cards must persist across a new send to stay visible in
                     // their correct position in the transcript.
                     pendingExplicitModelPick = if (explicitModelPick) false else it.pendingExplicitModelPick,
-                    // Only cleared on this success path -- a failed send (any return@launch above)
-                    // leaves pendingAttachments untouched, matching the composer text's own
-                    // failure behavior.
-                    pendingAttachments = emptyList(),
                 )
             }
 
             _uiState.update { it.copy(hasDisconnectedStream = false, disconnectedStreamId = null) }
             activeStreamId = streamId
             observeStream(serverBaseUrl, streamId)
+        }
+    }
+
+    /** Removes one locally-rendered turn and restores the exact submitted draft after
+     * `/api/chat/start` fails. The composer is disabled while [ChatUiState.isSending], so the
+     * normal path always restores into an empty field. The blank check is still defensive: a
+     * programmatic draft staged during the request must not be overwritten by a stale failure. */
+    private fun rollbackOptimisticSend(
+        optimisticMessage: ChatMessage,
+        originalComposerText: String,
+        originalAttachments: List<PendingAttachmentUi>,
+        errorMessage: String,
+    ) {
+        TtftTracer.finish()
+        _uiState.update { state ->
+            state.copy(
+                isSending = false,
+                composerText = if (state.composerText.isEmpty()) originalComposerText else state.composerText,
+                // Remove only the exact object appended for this attempt. A synthetic stableId
+                // can theoretically collide with an older same-content message.
+                messages = state.messages.filterNot { it === optimisticMessage },
+                pendingAttachments = (originalAttachments + state.pendingAttachments).distinctBy { it.id },
+                errorMessage = errorMessage,
+            )
         }
     }
 
@@ -1115,6 +1149,8 @@ class ChatViewModel(
     }
 
     override fun onCleared() {
+        // App-retained ownership means this runs on logout/server switch/process teardown, not
+        // merely when the user switches to another chat destination.
         streamJob?.cancel()
     }
 

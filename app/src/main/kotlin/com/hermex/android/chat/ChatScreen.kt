@@ -94,6 +94,7 @@ fun ChatScreen(
     // than shown redundantly. Back/Files/Refresh stay exactly as they are either way.
     isPaneMode: Boolean = false,
     sessionId: String? = null,
+    serverBaseUrl: String? = null,
     sessionTitle: String? = null,
     sessionProjectId: String? = null,
     projects: List<ProjectSummary> = emptyList(),
@@ -415,6 +416,8 @@ fun ChatScreen(
                                 } else {
                                     MessageBubble(
                                         message = message,
+                                        sessionId = sessionId,
+                                        serverBaseUrl = serverBaseUrl,
                                         onEdit = if (canMutateHistory && message.role == "user") {
                                             { viewModel.editMessage(index) }
                                         } else null,

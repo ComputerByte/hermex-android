@@ -23,3 +23,11 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
         )
     }
 }
+
+/** Preserves attachment chips/thumbnails when a live session falls back to its Room snapshot.
+ * Existing cached rows simply receive null, which is the exact prior behavior. */
+val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `cached_messages` ADD COLUMN `attachmentsJson` TEXT")
+    }
+}

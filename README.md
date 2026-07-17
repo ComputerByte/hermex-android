@@ -227,4 +227,5 @@ asset when present.
 
 ## License
 
-See the repository license file, if present.
+Hermex Android is licensed under the [MIT License](LICENSE). See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream and dependency notices.

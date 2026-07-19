@@ -128,6 +128,34 @@ fun stripAttachedFilesMarker(content: String?): String? {
     return content.replace(markerRegex, "")
 }
 
+private val attachedFilesMarkerCapture = Regex("\n\n\\[Attached files: ?(.*?)]", RegexOption.DOT_MATCHES_ALL)
+
+/**
+ * Extracts the raw references (`chatReference()` output -- usually a full server path, sometimes
+ * a bare filename) back out of the `[Attached files: ...]` marker. Some session/history payloads
+ * omit [ChatMessage.attachments] entirely for a message even though the marker text itself always
+ * round-trips as ordinary message content (confirmed against a live server: issue #16 recon) --
+ * this is what lets [ChatMessage.attachmentsForDisplay] fall back to *something* rather than
+ * showing no attachment cue at all.
+ */
+fun parseAttachedFilesMarker(content: String?): List<String> {
+    val match = content?.let { attachedFilesMarkerCapture.find(it) } ?: return emptyList()
+    return match.groupValues[1].split(", ").map { it.trim() }.filter { it.isNotEmpty() }
+}
+
+/**
+ * The attachments to render for this message: [ChatMessage.attachments] when the server provided
+ * it, otherwise a best-effort reconstruction from the `[Attached files: ...]` marker still present
+ * in [ChatMessage.content]. Reconstructed entries carry only [MessageAttachment.path] (reduced to a
+ * basename by [displayFileName] the same way a bare-string wire attachment already is) -- there's
+ * no MIME/size/isImage to recover, so [isImageForDisplay]'s extension-sniffing fallback is what
+ * decides whether a thumbnail is attempted.
+ */
+fun ChatMessage.attachmentsForDisplay(): List<MessageAttachment> {
+    attachments?.let { if (it.isNotEmpty()) return it }
+    return parseAttachedFilesMarker(content).map { reference -> MessageAttachment(path = reference, wasBareReference = true) }
+}
+
 /**
  * Returns a Material icon for the given MIME type. Used in both the composer's pending
  * attachment strip and in message-history attachment chips. Falls back to a generic file icon.

@@ -31,8 +31,25 @@ interface SseStreamSource {
  *
  * Must be given an [OkHttpClient] with `readTimeout = 0` (see [NetworkModule.sseClient]) -- the
  * server holds the connection open far longer than any bounded read timeout would allow.
+ *
+ * [readTimeoutMs] gates each individual line read (see [readLoopTimeoutMs] below) and is also the
+ * single source [timeoutMessage] derives its user-facing "no data received for Ns" text from --
+ * the two can never drift apart the way a hardcoded 120s timeout and a hardcoded "30s" message
+ * once did. Overridable (default [DEFAULT_READ_TIMEOUT_MS]) so tests can exercise the timeout path
+ * with a short real wait instead of the real 120s.
  */
-class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
+class SseClient(
+    private val okHttpClient: OkHttpClient,
+    private val readTimeoutMs: Long = DEFAULT_READ_TIMEOUT_MS,
+) : SseStreamSource {
+    companion object {
+        const val DEFAULT_READ_TIMEOUT_MS = 120_000L
+
+        /** Pure text derivation from [timeoutMs] -- kept free of any Android/coroutine dependency
+         * so the message itself is directly unit-testable without waiting out a real timeout. */
+        fun timeoutMessage(timeoutMs: Long): String = "Stream timeout — no data received for ${timeoutMs / 1000}s"
+    }
+
     override fun stream(url: HttpUrl): Flow<SseEvent> = callbackFlow {
         val request = Request.Builder()
             .url(url)
@@ -78,7 +95,7 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
             val dataLines = StringBuilder()
             while (isActive) {
                 val line = try {
-                    withTimeout(120_000L) {  // 120s — long responses can have multi-minute gaps
+                    withTimeout(readTimeoutMs) {  // long responses can have multi-minute gaps
                         source.readUtf8Line()
                     }
                 } catch (e: IOException) {
@@ -91,8 +108,9 @@ class SseClient(private val okHttpClient: OkHttpClient) : SseStreamSource {
                     trySend(SseEvent.TransportError(e.message ?: "Stream read error"))
                     null
                 } catch (e: TimeoutCancellationException) {
-                    HermexLog.w("Sse", "read timeout — no data for 30s")
-                    trySend(SseEvent.TransportError("Stream timeout — no data received for 30s"))
+                    val message = timeoutMessage(readTimeoutMs)
+                    HermexLog.w("Sse", message)
+                    trySend(SseEvent.TransportError(message))
                     null
                 } ?: break
 

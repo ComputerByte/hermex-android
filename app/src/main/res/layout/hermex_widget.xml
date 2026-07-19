@@ -48,7 +48,7 @@
             android:includeFontPadding="false"
             android:clickable="true"
             android:focusable="true"
-            android:background="@android:drawable/list_selector_background"
+            android:background="@drawable/widget_clickable_pill_background"
             android:paddingHorizontal="12dp"
             android:paddingVertical="4dp" />
     </LinearLayout>

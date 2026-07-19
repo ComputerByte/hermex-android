@@ -3,6 +3,7 @@ package com.hermex.android.chat
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.ModelCatalogGroup
 import com.hermex.android.core.network.dto.ProfileSummary
+import com.hermex.android.core.network.dto.ProjectSummary
 
 data class ChatUiState(
     val isLoading: Boolean = true,
@@ -36,6 +37,18 @@ data class ChatUiState(
     val currentWorkspace: String? = null,
     val currentModel: String? = null,
     val currentModelProvider: String? = null,
+    /** This session's project assignment, loaded the same place [currentWorkspace] is (the
+     * `SessionDetail` returned by [ChatViewModel.loadSession]) and updated locally by
+     * [ChatViewModel.moveSessionToProject] on success. Null means "no project", same as
+     * [com.hermex.android.core.network.dto.SessionSummary.projectId]. */
+    val currentProjectId: String? = null,
+    /** Backs the "Move to Project" dialog's picker -- loaded on demand by
+     * [ChatViewModel.loadProjects] (same `api.projects()` call
+     * [com.hermex.android.sessions.SessionListViewModel] uses for its own copy of this dialog;
+     * not a shared repository, just the same endpoint). */
+    val projects: List<ProjectSummary> = emptyList(),
+    val isLoadingProjects: Boolean = false,
+    val projectsErrorMessage: String? = null,
     val modelCatalogGroups: List<ModelCatalogGroup> = emptyList(),
     val isLoadingModelCatalog: Boolean = false,
     /** Covers both the model-switch and (existing) profile-switch API calls -- either one

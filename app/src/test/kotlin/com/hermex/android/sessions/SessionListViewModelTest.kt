@@ -420,6 +420,94 @@ class SessionListViewModelTest {
         }
     }
 
+    // ── Projects (Move to Project dialog wiring) ──
+
+    @Test
+    fun `loadProjects populates the project list for the Move to Project dialog`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"projects":[{"project_id":"p1","name":"Work"},{"project_id":"p2","name":"Personal"}]}""",
+                ),
+            )
+            viewModel.loadProjects()
+            val loaded = awaitUntil { !it.isLoadingProjects }
+            assertEquals(2, loaded.projects.size)
+            assertEquals(listOf("Work", "Personal"), loaded.projects.map { it.displayName })
+            assertNull(loaded.projectsErrorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a failure loading projects leaves the list empty instead of crashing`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[]}"""))
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(MockResponse().setResponseCode(500))
+            viewModel.loadProjects()
+            val settled = awaitUntil { !it.isLoadingProjects }
+            assertTrue(settled.projects.isEmpty())
+            assertTrue(settled.projectsErrorMessage != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `moveSessionToProject sends the session id and target project id, then reloads sessions`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"a","title":"First"}]}"""))
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"a","title":"First","project_id":"p1"}]}"""))
+            viewModel.moveSessionToProject("a", "p1")
+            // moveSessionToProject's own isMutating flip (finally block) races the fire-and-forget
+            // load() it triggers, so wait for the reloaded session data itself, not isMutating.
+            val settled = awaitUntil { it.sessions.firstOrNull()?.projectId == "p1" }
+            assertEquals("p1", settled.sessions.first().projectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        val moveRequestBody = (0 until server.requestCount)
+            .map { server.takeRequest() }
+            .first { it.path == "/api/session/project" }
+            .body.readUtf8()
+        assertTrue(moveRequestBody.contains("\"a\""))
+        assertTrue(moveRequestBody.contains("\"p1\""))
+    }
+
+    @Test
+    fun `moveSessionToProject with a null project id removes it from its project`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"a","title":"First","project_id":"p1"}]}"""))
+        val viewModel = SessionListViewModel(authRepository)
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            server.enqueue(MockResponse().setBody("""{"sessions":[{"session_id":"a","title":"First"}]}"""))
+            viewModel.moveSessionToProject("a", null)
+            val settled = awaitUntil { !it.isMutating && it.sessions.firstOrNull()?.projectId == null }
+            assertNull(settled.sessions.first().projectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test
     fun `loadShowSubagentSessions re-reads the toggle -- the refresh HermexNavGraph fires on return from Settings`() = runTest {
         authRepository = loggedInRepository()

@@ -263,6 +263,19 @@ fun HermexNavGraph(
                         backStackEntry.savedStateHandle["refreshShowSubagentSessions"] = false
                     }
                 }
+                // Same pattern again -- a "Move to Project" made from ChatScreen's own copy of this
+                // dialog (see ChatViewModel.moveSessionToProject) doesn't otherwise reach this
+                // ViewModel's project list, since they're separate instances hitting the same
+                // api.projects() endpoint independently, not a shared repository.
+                val shouldRefreshProjects by backStackEntry.savedStateHandle
+                    .getStateFlow("refreshProjects", false)
+                    .collectAsStateWithLifecycle()
+                LaunchedEffect(shouldRefreshProjects) {
+                    if (shouldRefreshProjects) {
+                        viewModel.loadProjects()
+                        backStackEntry.savedStateHandle["refreshProjects"] = false
+                    }
+                }
                 // In wide layout the left pane already shows this exact content, so this
                 // destination becomes a quiet "nothing selected" placeholder instead of a second
                 // copy of the session list.
@@ -522,7 +535,13 @@ fun HermexNavGraph(
                 )
                 ChatScreen(
                     viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        // A "Move to Project" done here won't otherwise reach SessionListViewModel's
+                        // own copy of the project list -- same round-trip-refresh signal as
+                        // refreshHeaderLogoColor/refreshShowSubagentSessions above.
+                        navController.previousBackStackEntry?.savedStateHandle?.set("refreshProjects", true)
+                        navController.popBackStack()
+                    },
                     onRenameSession = { newTitle ->
                         viewModel.renameSession(sessionId, newTitle)
                     },

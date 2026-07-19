@@ -21,6 +21,7 @@ import com.hermex.android.core.network.dto.ModelCatalogOption
 import com.hermex.android.core.network.dto.ModelCatalogParser
 import com.hermex.android.core.network.dto.NewSessionRequest
 import com.hermex.android.core.network.dto.ProfileSwitchRequest
+import com.hermex.android.core.network.dto.SessionProjectRequest
 import com.hermex.android.core.network.dto.UpdateSessionRequest
 import com.hermex.android.core.network.dto.UploadResponse
 import com.hermex.android.core.network.dto.buildAttachedFilesMarker
@@ -164,6 +165,7 @@ class ChatViewModel(
                             currentWorkspace = cached.workspace,
                             currentModel = cached.model,
                             currentModelProvider = cached.modelProvider,
+                            currentProjectId = cached.projectId,
                             isShowingCachedData = true,
                             cacheStatusMessage = OFFLINE_CACHE_MESSAGE,
                         )
@@ -185,6 +187,7 @@ class ChatViewModel(
                         currentWorkspace = session?.workspace,
                         currentModel = session?.model,
                         currentModelProvider = session?.modelProvider,
+                        currentProjectId = session?.projectId,
                         isShowingCachedData = false,
                         cacheStatusMessage = null,
                         errorMessage = null,
@@ -978,6 +981,49 @@ class ChatViewModel(
                 safeApiCall { api.renameSession(SessionRenameRequest(sessionId, newTitle)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Could not rename session.") }
+            }
+        }
+    }
+
+    /** Loads the projects available for this screen's own "Move to Project" dialog -- the same
+     * `api.projects()` call [com.hermex.android.sessions.SessionListViewModel.loadProjects] makes
+     * for its copy of the dialog. Called on demand when the menu item opens (see
+     * [com.hermex.android.chat.ChatScreen]), not eagerly at session load, since most chat visits
+     * never open it. A failure just leaves the picker showing "No project" ([ChatUiState.projects]
+     * stays empty) rather than blocking the rest of the screen. */
+    fun loadProjects() {
+        viewModelScope.launch {
+            val api = authRepository.apiForActiveServer()
+            if (api == null) {
+                _uiState.update { it.copy(isLoadingProjects = false, projectsErrorMessage = "Not signed in.") }
+                return@launch
+            }
+            _uiState.update { it.copy(isLoadingProjects = true, projectsErrorMessage = null) }
+            try {
+                val response = safeApiCall { api.projects() }
+                _uiState.update {
+                    it.copy(isLoadingProjects = false, projects = response.projects.orEmpty(), projectsErrorMessage = null)
+                }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(isLoadingProjects = false, projectsErrorMessage = e.message ?: "Could not load projects.") }
+            }
+        }
+    }
+
+    /** Moves (or, with a null [projectId], removes) *this* session's project assignment via the
+     * same `/api/session/project` endpoint [com.hermex.android.sessions.SessionListViewModel.moveSessionToProject]
+     * uses. Unlike that ViewModel's own list-owning version, this updates [ChatUiState.currentProjectId]
+     * directly from the call that just succeeded rather than re-fetching the whole session --
+     * there's no list here to keep in sync, just this one session's own state, matching how
+     * [selectComposerModel] already applies its own response in place. */
+    fun moveSessionToProject(projectId: String?) {
+        viewModelScope.launch {
+            try {
+                val api = authRepository.apiForActiveServer() ?: throw ApiError.Network(Exception("Not signed in"))
+                safeApiCall { api.moveSessionToProject(SessionProjectRequest(sessionId, projectId)) }
+                _uiState.update { it.copy(currentProjectId = projectId) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Could not move session.") }
             }
         }
     }

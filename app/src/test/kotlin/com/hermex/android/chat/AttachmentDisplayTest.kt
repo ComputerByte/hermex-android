@@ -92,4 +92,68 @@ class AttachmentDisplayTest {
         assertEquals("report.pdf", attachment.displayFileName())
         assertFalse(attachment.isImageForDisplay())
     }
+
+    // ── isImageForDisplay: MIME detection and extension fallback ──
+
+    @Test
+    fun `every recognized image extension is detected case-insensitively when MIME is absent`() {
+        val extensions = listOf("avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "webp")
+        for (ext in extensions) {
+            assertTrue("lowercase .$ext should be an image", MessageAttachment(name = "photo.$ext").isImageForDisplay())
+            assertTrue("uppercase .${ext.uppercase()} should be an image", MessageAttachment(name = "photo.${ext.uppercase()}").isImageForDisplay())
+        }
+    }
+
+    @Test
+    fun `an unrecognized extension with no MIME is not treated as an image`() {
+        assertFalse(MessageAttachment(name = "archive.zip").isImageForDisplay())
+        assertFalse(MessageAttachment(name = "no-extension-at-all").isImageForDisplay())
+    }
+
+    @Test
+    fun `the isImage flag wins even when mime and extension both disagree`() {
+        val attachment = MessageAttachment(name = "data.zip", mime = "application/zip", isImage = true)
+        assertTrue(attachment.isImageForDisplay())
+    }
+
+    @Test
+    fun `an image MIME type wins even when the extension is not in the known image list`() {
+        val attachment = MessageAttachment(name = "photo.unknownext", mime = "image/svg+xml")
+        assertTrue(attachment.isImageForDisplay())
+    }
+
+    @Test
+    fun `a non-image MIME type does not suppress the extension fallback`() {
+        // isImageForDisplay() only ever treats "isImage" / an image/* mime as a positive signal --
+        // a present-but-non-image mime is not a veto, so an image-looking extension still wins.
+        val attachment = MessageAttachment(name = "fake.png", mime = "application/octet-stream")
+        assertTrue(attachment.isImageForDisplay())
+    }
+
+    @Test
+    fun `a non-image MIME type with a non-image extension is correctly not an image`() {
+        val attachment = MessageAttachment(name = "notes.txt", mime = "application/octet-stream")
+        assertFalse(attachment.isImageForDisplay())
+    }
+
+    // ── displayFileName / attachmentRawUrl edge cases ──
+
+    @Test
+    fun `an attachment with neither name nor path has no display filename and no raw url`() {
+        val attachment = MessageAttachment()
+        assertNull(attachment.displayFileName())
+        assertNull(attachmentRawUrl("https://hermes.example", "session-1", attachment))
+    }
+
+    @Test
+    fun `unicode and punctuation in a filename survive basename extraction`() {
+        val attachment = MessageAttachment(path = "/state/attachments/sess-1/résumé (final) #2.pdf")
+        assertEquals("résumé (final) #2.pdf", attachment.displayFileName())
+    }
+
+    @Test
+    fun `name takes precedence over path when both are present`() {
+        val attachment = MessageAttachment(name = "preferred.png", path = "/state/attachments/sess-1/other.png")
+        assertEquals("preferred.png", attachment.displayFileName())
+    }
 }

@@ -21,6 +21,7 @@ import com.hermex.android.core.cache.RoomOfflineCacheRepository
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
+import com.hermex.android.core.notifications.HermexNotifier
 import com.hermex.android.core.notifications.HermexResponseCompletionNotifier
 import com.hermex.android.core.storage.DataStoreAppearancePreferencesStore
 import com.hermex.android.core.storage.DataStoreChatPreferencesStore
@@ -82,8 +83,8 @@ class AppContainer(val context: Context) {
 
     /** Cached copy of [ChatPreferencesStore.loadNotificationsEnabled] -- loaded once on app start
      * and kept in sync by [SettingsViewModel.setNotificationsEnabled]. Read synchronously by
-     * [HermexResponseCompletionNotifier] at notification time (never calls a suspend DataStore
-     * read on the hot notification path). */
+     * [HermexNotifier] (wired below) at notification time, never via a suspend DataStore read on
+     * the hot notification path. */
     @Volatile
     var notificationsEnabled: Boolean = false
         private set
@@ -120,6 +121,10 @@ class AppContainer(val context: Context) {
     internal val retainedChatViewModelStoreOwner = RetainedChatViewModelStoreOwner()
 
     init {
+        // HermexNotifier itself (not each individual caller) enforces the in-app notification
+        // preference for every public entry point it exposes -- wiring this once here means
+        // there's exactly one path to that Volatile-cached value, not a per-call-site copy.
+        HermexNotifier.isNotificationsEnabled = { notificationsEnabled }
         // Load the cached notification preference so the notifier gate has a value
         // before the user ever opens Settings. Default false until the DataStore read completes.
         CoroutineScope(Dispatchers.IO).launch {
@@ -186,7 +191,6 @@ class AppContainer(val context: Context) {
                 HermexResponseCompletionNotifier(
                     context = applicationContext,
                     isAppInForeground = { this@AppContainer.isAppInForeground },
-                    isNotificationsEnabled = { this@AppContainer.notificationsEnabled },
                 ),
             )
         }

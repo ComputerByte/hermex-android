@@ -16,6 +16,16 @@ object HermexNotifier {
     const val SESSION_ATTENTION_NOTIFICATION_ID = 1200
     const val TASK_DONE_NOTIFICATION_ID = 1300
 
+    /** Single synchronous source of truth for Hermex's own in-app "Notifications" preference
+     * (separate from the OS permission [canPostNotifications] checks). Set once by AppContainer
+     * at startup to read its already-coroutine-synced, [Volatile]-cached copy of
+     * [com.hermex.android.core.storage.ChatPreferencesStore.loadNotificationsEnabled] -- this
+     * object never reads DataStore itself, so there is exactly one place the preference lives.
+     * Every public entry point below funnels through [showStatus], so none of them can forget
+     * this check the way only [com.hermex.android.core.notifications.HermexResponseCompletionNotifier]
+     * used to. */
+    var isNotificationsEnabled: () -> Boolean = { false }
+
     fun canPostNotifications(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -33,16 +43,31 @@ object HermexNotifier {
     fun showTaskDone(context: Context, jobId: String) {
         showStatus(
             context = context,
-            notificationId = TASK_DONE_NOTIFICATION_ID,
+            notificationId = taskNotificationId(jobId),
             title = "Task done",
             text = "Open Hermex",
             intent = deepLinkIntent(context, HermexNotificationRoutes.task(jobId)),
         )
     }
 
+    /** Derives a stable per-task notification ID from [jobId] so two tasks completing near each
+     * other get distinct notifications instead of clobbering each other under one constant ID --
+     * while re-posting for the *same* [jobId] always resolves to the same ID, so
+     * [android.app.NotificationManager.notify] updates that one notification in place rather than
+     * creating a duplicate. Collisions between different job ids are possible (this is a plain
+     * hash, not a guaranteed-unique id) but rare enough for practical notification use, matching
+     * how [android.util.SparseArray]-style hash-based ids are used elsewhere in the platform. */
+    internal fun taskNotificationId(jobId: String): Int = TASK_DONE_NOTIFICATION_ID + nonNegativeHash(jobId.hashCode())
+
+    /** abs(Int.MIN_VALUE) overflows back to Int.MIN_VALUE itself rather than throwing --
+     * special-cased so a hash of exactly Int.MIN_VALUE can't silently produce a surprising
+     * negative id. Extracted as a pure function of the hash (rather than of a String) so the
+     * exact edge case is directly testable without needing a real string that hashes to it. */
+    internal fun nonNegativeHash(hash: Int): Int = if (hash == Int.MIN_VALUE) 0 else kotlin.math.abs(hash)
+
     private fun showStatus(context: Context, notificationId: Int, title: String, text: String, intent: Intent) {
         HermexNotificationChannels.ensureCreated(context)
-        if (!canPostNotifications(context)) return
+        if (!NotificationGate.shouldPost(isNotificationsEnabled(), canPostNotifications(context))) return
 
         val pendingIntent = PendingIntent.getActivity(
             context,

@@ -1,5 +1,6 @@
 package com.hermex.android.sessions
 
+import com.hermex.android.core.network.dto.ProjectSummary
 import com.hermex.android.core.network.dto.SessionSummary
 import com.hermex.android.core.storage.HeaderLogoColor
 
@@ -21,6 +22,12 @@ data class SessionListUiState(
     /** User-facing explanation for [isShowingCachedData], e.g. "Unable to reach server -- showing
      * cached sessions." Null whenever [isShowingCachedData] is false. */
     val cacheStatusMessage: String? = null,
+    /** Backs the "Move to Project" dialog's project picker -- loaded once at init (see
+     * [SessionListViewModel.loadProjects]), same as [ProjectsViewModel][com.hermex.android.projects.ProjectsViewModel]'s
+     * own fetch, so the dialog is never stuck showing an empty list. */
+    val projects: List<ProjectSummary> = emptyList(),
+    val isLoadingProjects: Boolean = false,
+    val projectsErrorMessage: String? = null,
 ) {
     /** Filters by title only -- [SessionSummary] carries no message content client-side to
      * search against. */

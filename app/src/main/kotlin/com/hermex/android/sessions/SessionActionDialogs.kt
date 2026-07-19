@@ -1,14 +1,18 @@
 package com.hermex.android.sessions
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -88,6 +92,8 @@ fun MoveToProjectDialog(
     currentProjectId: String?,
     onConfirm: (String?) -> Unit,
     onDismiss: () -> Unit,
+    isLoadingProjects: Boolean = false,
+    projectsErrorMessage: String? = null,
 ) {
     var selectedProjectId by remember { mutableStateOf(currentProjectId) }
     AlertDialog(
@@ -107,18 +113,34 @@ fun MoveToProjectDialog(
                     Spacer(Modifier.width(8.dp))
                     Text("No project")
                 }
-                projects.forEach { project ->
-                    val id = project.projectId ?: return@forEach
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedProjectId = id }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = selectedProjectId == id, onClick = { selectedProjectId = id })
-                        Spacer(Modifier.width(8.dp))
-                        Text(project.displayName)
+                // Projects load asynchronously (see SessionListViewModel.loadProjects) -- while in
+                // flight or on failure, the picker still degrades to just "No project" above rather
+                // than looking broken or blocking the dialog.
+                if (isLoadingProjects && projects.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                } else if (projectsErrorMessage != null && projects.isEmpty()) {
+                    Text(
+                        text = projectsErrorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                } else {
+                    projects.forEach { project ->
+                        val id = project.projectId ?: return@forEach
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedProjectId = id }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = selectedProjectId == id, onClick = { selectedProjectId = id })
+                            Spacer(Modifier.width(8.dp))
+                            Text(project.displayName)
+                        }
                     }
                 }
             }

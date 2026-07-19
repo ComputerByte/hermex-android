@@ -309,13 +309,15 @@ fun SessionListBody(
     }
     pendingMoveSession?.let { session ->
         MoveToProjectDialog(
-            projects = emptyList(),
+            projects = uiState.projects,
             currentProjectId = session.projectId,
             onConfirm = { projectId ->
                 session.sessionId?.let { viewModel.moveSessionToProject(it, projectId) }
                 pendingMoveSession = null
             },
             onDismiss = { pendingMoveSession = null },
+            isLoadingProjects = uiState.isLoadingProjects,
+            projectsErrorMessage = uiState.projectsErrorMessage,
         )
     }
 
@@ -462,7 +464,11 @@ fun SessionListBody(
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Move to Project") },
-                                        onClick = { showMenu = false; pendingMoveSession = parent },
+                                        onClick = {
+                                            showMenu = false
+                                            pendingMoveSession = parent
+                                            viewModel.loadProjects()
+                                        },
                                         leadingIcon = { Icon(Icons.Filled.Folder, null) },
                                     )
                                     DropdownMenuItem(

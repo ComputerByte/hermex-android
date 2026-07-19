@@ -118,6 +118,32 @@ class SessionListViewModel(
         }
     }
 
+    /** Loads the projects available for the "Move to Project" dialog -- the same `api.projects()`
+     * call [com.hermex.android.projects.ProjectsViewModel] uses, fetched here too since this screen
+     * (not the Projects screen) owns the dialog that needs the list. Called on demand when the
+     * "Move to Project" menu item is opened (see [SessionListScreen][com.hermex.android.sessions.SessionListScreen])
+     * rather than eagerly at init, since most session-list visits never open that dialog. A failure
+     * here just leaves the picker showing "No project" (via [SessionListUiState.projects] staying
+     * empty) rather than blocking the rest of the session list. */
+    fun loadProjects() {
+        viewModelScope.launch {
+            val api = authRepository.apiForActiveServer()
+            if (api == null) {
+                _uiState.update { it.copy(isLoadingProjects = false, projectsErrorMessage = "Not signed in.") }
+                return@launch
+            }
+            _uiState.update { it.copy(isLoadingProjects = true, projectsErrorMessage = null) }
+            try {
+                val response = safeApiCall { api.projects() }
+                _uiState.update {
+                    it.copy(isLoadingProjects = false, projects = response.projects.orEmpty(), projectsErrorMessage = null)
+                }
+            } catch (e: ApiError) {
+                _uiState.update { it.copy(isLoadingProjects = false, projectsErrorMessage = e.message ?: "Could not load projects.") }
+            }
+        }
+    }
+
     fun onSearchQueryChanged(value: String) {
         _uiState.update { it.copy(searchQuery = value) }
     }

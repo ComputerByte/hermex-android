@@ -68,7 +68,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.hermex.android.core.network.dto.ProjectSummary
 import com.hermex.android.core.notifications.HermexNotificationRoutes
 import com.hermex.android.core.util.HermexLog
 import com.hermex.android.core.util.TtftTracer
@@ -97,11 +96,8 @@ fun ChatScreen(
     sessionId: String? = null,
     serverBaseUrl: String? = null,
     sessionTitle: String? = null,
-    sessionProjectId: String? = null,
-    projects: List<ProjectSummary> = emptyList(),
     onRenameSession: ((String) -> Unit)? = null,
     onDeleteSession: (() -> Unit)? = null,
-    onMoveSession: ((String?) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val openDrawer = LocalHermexDrawerOpener.current
@@ -181,7 +177,11 @@ fun ChatScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("Move to Project") },
-                                onClick = { showSessionMenu = false; showMoveDialog = true },
+                                onClick = {
+                                    showSessionMenu = false
+                                    showMoveDialog = true
+                                    viewModel.loadProjects()
+                                },
                                 leadingIcon = { Icon(Icons.Filled.Folder, null) },
                             )
                             DropdownMenuItem(
@@ -597,13 +597,15 @@ fun ChatScreen(
     }
     if (showMoveDialog) {
         MoveToProjectDialog(
-            projects = projects,
-            currentProjectId = sessionProjectId,
+            projects = uiState.projects,
+            currentProjectId = uiState.currentProjectId,
             onConfirm = { projectId ->
-                onMoveSession?.invoke(projectId)
+                viewModel.moveSessionToProject(projectId)
                 showMoveDialog = false
             },
             onDismiss = { showMoveDialog = false },
+            isLoadingProjects = uiState.isLoadingProjects,
+            projectsErrorMessage = uiState.projectsErrorMessage,
         )
     }
     } // end outer Box

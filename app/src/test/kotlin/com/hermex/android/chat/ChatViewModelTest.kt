@@ -147,6 +147,147 @@ class ChatViewModelTest {
         }
     }
 
+    // ── Project state (Move to Project dialog wiring) ──
+
+    @Test
+    fun `loadSession populates currentProjectId from the session response`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[],"project_id":"p1"}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals("p1", loaded.currentProjectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadSession with no project on the session leaves currentProjectId null`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertNull(loaded.currentProjectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loadProjects populates the project list for the Move to Project dialog`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"projects":[{"project_id":"p1","name":"Work"},{"project_id":"p2","name":"Personal"}]}""",
+                ),
+            )
+            viewModel.loadProjects()
+            val loaded = awaitUntil { !it.isLoadingProjects }
+            assertEquals(2, loaded.projects.size)
+            assertEquals(listOf("Work", "Personal"), loaded.projects.map { it.displayName })
+            assertNull(loaded.projectsErrorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a failure loading projects leaves the list empty instead of crashing`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(MockResponse().setResponseCode(500))
+            viewModel.loadProjects()
+            val settled = awaitUntil { !it.isLoadingProjects }
+            assertTrue(settled.projects.isEmpty())
+            assertTrue(settled.projectsErrorMessage != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `moveSessionToProject updates currentProjectId on success`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            viewModel.moveSessionToProject("p1")
+            val moved = awaitUntil { it.currentProjectId == "p1" }
+            assertEquals("p1", moved.currentProjectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        val moveRequestBody = (0 until server.requestCount)
+            .map { server.takeRequest() }
+            .first { it.path == "/api/session/project" }
+            .body.readUtf8()
+        assertTrue(moveRequestBody.contains("\"s1\""))
+        assertTrue(moveRequestBody.contains("\"p1\""))
+    }
+
+    @Test
+    fun `moveSessionToProject with a null project id removes it from its project`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[],"project_id":"p1"}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            val loaded = awaitUntil { !it.isLoading }
+            assertEquals("p1", loaded.currentProjectId)
+
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            viewModel.moveSessionToProject(null)
+            val moved = awaitUntil { !it.isLoading && it.currentProjectId == null }
+            assertNull(moved.currentProjectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `moveSessionToProject failure surfaces an error message and does not crash`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        val viewModel = ChatViewModel("s1", authRepository, FakeSseClient { emptyList<SseEvent>().asFlow() }, FakeChatPreferencesStore())
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+
+            server.enqueue(MockResponse().setResponseCode(500))
+            viewModel.moveSessionToProject("p1")
+            val settled = awaitUntil { it.errorMessage != null }
+            assertNull(settled.currentProjectId)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test
     fun `stageDraftIfComposerEmpty stages shared text without sending`() = runTest {
         authRepository = loggedInRepository()

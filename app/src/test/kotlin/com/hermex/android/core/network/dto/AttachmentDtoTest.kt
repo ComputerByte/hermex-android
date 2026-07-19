@@ -1,5 +1,11 @@
 package com.hermex.android.core.network.dto
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Videocam
 import com.hermex.android.chat.displayFileName
 import com.hermex.android.core.network.HermexJson
 import kotlinx.serialization.decodeFromString
@@ -141,6 +147,35 @@ class AttachmentDtoTest {
     }
 
     @Test
+    fun `parseAttachedFilesMarker returns empty list for a marker missing its closing bracket`() {
+        assertEquals(emptyList<String>(), parseAttachedFilesMarker("hi\n\n[Attached files: a.png, b.png"))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker returns empty list for a marker missing the colon`() {
+        assertEquals(emptyList<String>(), parseAttachedFilesMarker("hi\n\n[Attached files a.png]"))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker with an empty file list inside the brackets yields an empty list`() {
+        assertEquals(emptyList<String>(), parseAttachedFilesMarker("hi\n\n[Attached files: ]"))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker only recovers the first marker when content has more than one`() {
+        // Documents current behavior: attachedFilesMarkerCapture.find() stops at the first match,
+        // so a message with two marker-shaped blocks only yields the first block's references.
+        val content = "one\n\n[Attached files: a.png]\n\ntwo\n\n[Attached files: b.png]"
+        assertEquals(listOf("a.png"), parseAttachedFilesMarker(content))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker handles filenames with spaces and special characters`() {
+        val content = "hi\n\n[Attached files: my photo (1).png, résumé #final.pdf]"
+        assertEquals(listOf("my photo (1).png", "résumé #final.pdf"), parseAttachedFilesMarker(content))
+    }
+
+    @Test
     fun `ChatMessage attachmentsForDisplay prefers the structured attachments field when present`() {
         val message = ChatMessage(
             role = "user",
@@ -186,6 +221,47 @@ class AttachmentDtoTest {
     }
 
     @Test
+    fun `ChatMessage attachmentsForDisplay does not duplicate when the marker text overlaps structured attachments`() {
+        // Both the structured `attachments` field and the marker describe the same upload here --
+        // attachmentsForDisplay() must return only the structured entry, not both.
+        val message = ChatMessage(
+            role = "user",
+            content = "hi\n\n[Attached files: /state/attachments/sess-1/photo.png]",
+            attachments = listOf(MessageAttachment(name = "photo.png", path = "/state/attachments/sess-1/photo.png", isImage = true)),
+        )
+
+        val display = message.attachmentsForDisplay()
+
+        assertEquals(1, display.size)
+        assertEquals("photo.png", display.first().name)
+    }
+
+    @Test
+    fun `ChatMessage attachmentsForDisplay recovers every reference from multiple attached-file markers`() {
+        val message = ChatMessage(
+            role = "user",
+            content = "hi\n\n[Attached files: a.png, b.pdf, c.jpg]",
+            attachments = null,
+        )
+
+        val display = message.attachmentsForDisplay()
+
+        assertEquals(listOf("a.png", "b.pdf", "c.jpg"), display.map { it.path })
+        assertTrue(display.all { it.wasBareReference })
+    }
+
+    @Test
+    fun `ChatMessage attachmentsForDisplay handles a malformed marker by producing no attachments, not a crash`() {
+        val message = ChatMessage(
+            role = "user",
+            content = "hi\n\n[Attached files a.png]", // missing colon -- not a recognized marker
+            attachments = null,
+        )
+
+        assertEquals(emptyList<MessageAttachment>(), message.attachmentsForDisplay())
+    }
+
+    @Test
     fun `capAtChatStartLimit truncates to the server-enforced 20-attachment cap`() {
         val attachments = (1..25).map { MessageAttachment(name = "file-$it.txt") }
 
@@ -201,5 +277,26 @@ class AttachmentDtoTest {
         val attachments = (1..5).map { MessageAttachment(name = "file-$it.txt") }
 
         assertEquals(5, attachments.capAtChatStartLimit().size)
+    }
+
+    // ── fileTypeIcon MIME detection ──
+
+    @Test
+    fun `fileTypeIcon maps known MIME prefixes and types to their icons`() {
+        assertEquals(Icons.Filled.Image, fileTypeIcon("image/png"))
+        assertEquals(Icons.Filled.Image, fileTypeIcon("image/jpeg"))
+        assertEquals(Icons.Filled.Videocam, fileTypeIcon("video/mp4"))
+        assertEquals(Icons.Filled.Description, fileTypeIcon("text/plain"))
+        assertEquals(Icons.Filled.PictureAsPdf, fileTypeIcon("application/pdf"))
+        assertEquals(Icons.Filled.Description, fileTypeIcon("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        assertEquals(Icons.Filled.Description, fileTypeIcon("application/vnd.oasis.opendocument.text"))
+        assertEquals(Icons.Filled.Description, fileTypeIcon("application/msword"))
+    }
+
+    @Test
+    fun `fileTypeIcon falls back to a generic file icon for null or unrecognized MIME types`() {
+        assertEquals(Icons.Filled.InsertDriveFile, fileTypeIcon(null))
+        assertEquals(Icons.Filled.InsertDriveFile, fileTypeIcon("application/zip"))
+        assertEquals(Icons.Filled.InsertDriveFile, fileTypeIcon("application/octet-stream"))
     }
 }

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    App-owned replacement for @android:drawable/list_selector_background (deprecated Holo-era
+    selector, not guaranteed to render a visible pressed state on modern Android) on the
+    hermex_widget "New Chat" text. A static ripple/shape resource, unlike a `?android:attr/...`
+    theme reference, resolves the same way regardless of which launcher/theme context RemoteViews
+    inflates this layout under, so it works reliably as a RemoteViews background.
+
+    hermex_widget's root is a fixed black background (see hermex_widget_background) in both light
+    and dark launcher environments, so the resting/pressed fills below are white-on-black overlays
+    tuned for contrast and legibility against that, not theme-adaptive.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#3DFFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1FFFFFFF" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</ripple>

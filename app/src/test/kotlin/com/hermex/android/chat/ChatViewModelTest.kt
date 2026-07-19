@@ -20,8 +20,10 @@ import com.hermex.android.core.storage.FakeServerStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -239,6 +241,212 @@ class ChatViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertTrue(fakeSseClient.lastUrl.toString().contains("stream_id=stream-1"))
+    }
+
+    // ── Optimistic send / background continuity (Issue #15) ──
+
+    @Test
+    fun `sendMessage clears the composer and renders the user turn synchronously, before chat-start resolves`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}""")) // GET /api/profiles
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { listOf(SseEvent.Done(null, null)).asFlow() },
+            FakeChatPreferencesStore(),
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hello there")
+            viewModel.sendMessage()
+
+            // Read the StateFlow's current value directly rather than awaiting an emission --
+            // sendMessage() appends the optimistic user turn and clears the composer as plain
+            // synchronous code before it ever suspends on chat/start's network round trip, so
+            // this must already hold true even though the mock response above hasn't been
+            // consumed yet.
+            val immediate = viewModel.uiState.value
+            assertEquals("", immediate.composerText)
+            assertEquals(1, immediate.messages.size)
+            assertEquals("user", immediate.messages.first().role)
+            assertEquals("hello there", immediate.messages.first().content)
+            assertEquals(true, immediate.isSending)
+            // No SSE event has arrived yet -- the assistant's loading state is carried by
+            // isSending, not by anything that depends on retaining composer text.
+            assertEquals(false, immediate.isStreaming)
+            assertEquals("", immediate.streamingText)
+
+            awaitUntil { !it.isSending }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a session refresh after send does not duplicate the optimistic user message`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        // Background cache refresh (ChatViewModel.refreshCacheInBackground) fires its own GET
+        // after the turn completes and now echoes the persisted user+assistant pair back --
+        // this must never be folded into ChatUiState.messages (see that function's own doc), so
+        // it can't duplicate the already-rendered optimistic turn.
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[
+                    {"role":"user","content":"hello there"},
+                    {"role":"assistant","content":"hi back"}
+                ]}}""",
+            ),
+        )
+
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { listOf(SseEvent.Token("hi back"), SseEvent.Done(null, null)).asFlow() },
+            FakeChatPreferencesStore(),
+        )
+
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("hello there")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            val finalState = awaitUntil { !it.isStreaming }
+
+            assertEquals(2, finalState.messages.size)
+            assertEquals("user", finalState.messages[0].role)
+            assertEquals("assistant", finalState.messages[1].role)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `background continuity -- accumulated tokens and completion survive with no active uiState collector`() = runTest {
+        authRepository = loggedInRepository()
+        val serverId = authRepository.activeServerId()!!
+        val cache = FakeOfflineCacheRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-1","session_id":"s1"}"""))
+        server.enqueue(
+            MockResponse().setBody(
+                """{"session":{"session_id":"s1","messages":[{"role":"user","content":"go"},{"role":"assistant","content":"Hello world"}]}}""",
+            ),
+        ) // background cache refresh after completion
+
+        // An explicit channel (rather than a pre-scripted list) so events can be delivered on
+        // demand, after the section below that drops every uiState collector -- proving the
+        // fold-in doesn't depend on something actively observing uiState (e.g. Compose's
+        // collectAsStateWithLifecycle, which stops collecting when a screen is navigated away
+        // from). This is the ViewModel-level half of Issue #15's background-continuity fix; the
+        // other half (that the ViewModel instance itself survives navigation) is covered by
+        // ChatViewModelRetentionTest.
+        val eventChannel = Channel<SseEvent>(Channel.UNLIMITED)
+        val viewModel = ChatViewModel(
+            "s1", authRepository,
+            FakeSseClient { eventChannel.consumeAsFlow() },
+            FakeChatPreferencesStore(),
+            cache,
+        )
+
+        // Simulates opening chat A and starting a turn, then switching away: the collector below
+        // is torn down (as Compose would on navigating to another screen) while the turn is still
+        // in flight.
+        viewModel.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModel.onComposerTextChanged("go")
+            viewModel.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // Nothing is collecting uiState right now, yet the ViewModel's own coroutine (retained
+        // in RetainedChatViewModelStoreOwner in the real app, alive here simply because nothing
+        // cancelled it) is still suspended on the event channel and keeps folding events in.
+        assertTrue(eventChannel.trySend(SseEvent.Token("Hello ")).isSuccess)
+        assertTrue(eventChannel.trySend(SseEvent.Token("world")).isSuccess)
+        assertTrue(eventChannel.trySend(SseEvent.Done(null, null)).isSuccess)
+
+        // Simulates returning to chat A: a fresh collector must see the fully accumulated,
+        // finalized reply -- it was never dropped just because no one was watching while it
+        // streamed.
+        viewModel.uiState.test {
+            val finalState = awaitUntil { !it.isStreaming }
+            assertEquals(2, finalState.messages.size)
+            assertEquals("assistant", finalState.messages[1].role)
+            assertEquals("Hello world", finalState.messages[1].content)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // Done's finalize also kicks off the untracked background cache refresh (see
+        // refreshCacheInBackground) -- wait for that real second round trip to actually land
+        // before the test returns, matching the existing "a completed turn refreshes the cache"
+        // test's own reasoning: leaving it racing against JUnit teardown is what caused a
+        // Dispatchers.Main-unset flake here (the MockWebServer callback thread firing after
+        // Dispatchers.resetMain() had already run).
+        waitUntilCached(cache, serverId, "s1") { it.messages.orEmpty().size == 2 }
+    }
+
+    @Test
+    fun `two sessions' ChatViewModel instances never cross-contaminate streamed tokens`() = runTest {
+        authRepository = loggedInRepository()
+        // Session A: load, profiles, chat/start. Neither turn reaches Done in this test, so no
+        // background-cache-refresh response is queued for either -- an unconsumed extra response
+        // here would misalign the MockWebServer queue for whichever session's request comes next.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"a","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-a","session_id":"a"}"""))
+        // Session B: same shape, independent stream id.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"b","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"stream-b","session_id":"b"}"""))
+
+        val channelA = Channel<SseEvent>(Channel.UNLIMITED)
+        val viewModelA = ChatViewModel("a", authRepository, FakeSseClient { channelA.consumeAsFlow() }, FakeChatPreferencesStore())
+        viewModelA.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModelA.onComposerTextChanged("from A")
+            viewModelA.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // B is constructed (and its own init-time session/profile GETs fired) only once A's own
+        // request sequence has fully drained against the shared MockWebServer queue -- both view
+        // models' requests land on real OkHttp background threads, so constructing them back to
+        // back would race for the same FIFO response queue and could swap responses across
+        // sessions.
+        val channelB = Channel<SseEvent>(Channel.UNLIMITED)
+        val viewModelB = ChatViewModel("b", authRepository, FakeSseClient { channelB.consumeAsFlow() }, FakeChatPreferencesStore())
+        viewModelB.uiState.test {
+            awaitUntil { !it.isLoading }
+            viewModelB.onComposerTextChanged("from B")
+            viewModelB.sendMessage()
+            awaitUntil { it.isStreaming }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        // Only A's channel gets a token -- B must not observe it under any key.
+        assertTrue(channelA.trySend(SseEvent.Token("A's reply")).isSuccess)
+
+        viewModelA.uiState.test {
+            val state = awaitUntil { it.streamingText.isNotEmpty() }
+            assertEquals("A's reply", state.streamingText)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals("", viewModelB.uiState.value.streamingText)
+
+        assertTrue(channelB.trySend(SseEvent.Token("B's reply")).isSuccess)
+        viewModelB.uiState.test {
+            val state = awaitUntil { it.streamingText.isNotEmpty() }
+            assertEquals("B's reply", state.streamingText)
+            cancelAndIgnoreRemainingEvents()
+        }
+        // A's own buffer is unaffected by B's token.
+        assertEquals("A's reply", viewModelA.uiState.value.streamingText)
     }
 
     // ── Response-completion notification tests ──

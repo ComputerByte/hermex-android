@@ -76,6 +76,46 @@ class HermexIntentRouterTest {
         assertEquals(HermexIntentDestination.Tasks, hermexDeepLinkDestination("hermex://task/%ZZ"))
     }
 
+    // ── Malformed percent-encoding (each must fail safely into the route's fallback, never crash) ──
+
+    @Test
+    fun `a bare percent sign with no hex digits recovers to sessions`() {
+        assertEquals(HermexIntentDestination.Sessions, hermexDeepLinkDestination("hermex://session/%"))
+    }
+
+    @Test
+    fun `an incomplete two-character escape recovers to sessions`() {
+        assertEquals(HermexIntentDestination.Sessions, hermexDeepLinkDestination("hermex://session/%2"))
+    }
+
+    @Test
+    fun `non-hex escape characters recover to sessions`() {
+        assertEquals(HermexIntentDestination.Sessions, hermexDeepLinkDestination("hermex://session/%GG"))
+    }
+
+    @Test
+    fun `the same malformed escapes recover to tasks on the task route`() {
+        assertEquals(HermexIntentDestination.Tasks, hermexDeepLinkDestination("hermex://task/%"))
+        assertEquals(HermexIntentDestination.Tasks, hermexDeepLinkDestination("hermex://task/%2"))
+        assertEquals(HermexIntentDestination.Tasks, hermexDeepLinkDestination("hermex://task/%GG"))
+    }
+
+    @Test
+    fun `validly encoded unicode decodes to the original characters`() {
+        // "日本" (Japanese for Japan) UTF-8 percent-encoded
+        assertEquals(HermexIntentDestination.Session("日本"), hermexDeepLinkDestination("hermex://session/%E6%97%A5%E6%9C%AC"))
+    }
+
+    @Test
+    fun `an encoded slash within a session id segment decodes to a literal slash`() {
+        assertEquals(HermexIntentDestination.Session("abc/def"), hermexDeepLinkDestination("hermex://session/abc%2Fdef"))
+    }
+
+    @Test
+    fun `mixed valid and invalid encoding in the same segment recovers to sessions rather than crashing`() {
+        assertEquals(HermexIntentDestination.Sessions, hermexDeepLinkDestination("hermex://session/abc%20def%ZZghi"))
+    }
+
     // ── Share content (multi-URI) ──
 
     @Test

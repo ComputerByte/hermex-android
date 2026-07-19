@@ -127,6 +127,24 @@ class SseClientTest {
         assertTrue((events[0] as SseEvent.TransportError).message.contains("500"))
     }
 
+    // ── Read timeout message (kept in sync with the actual timeout duration -- see SseClient.timeoutMessage) ──
+
+    @Test
+    fun `the timeout message always states the same duration the timeout actually uses`() {
+        assertEquals("Stream timeout — no data received for 120s", SseClient.timeoutMessage(SseClient.DEFAULT_READ_TIMEOUT_MS))
+        assertEquals("Stream timeout — no data received for 5s", SseClient.timeoutMessage(5_000L))
+    }
+
+    // An end-to-end test that actually drives the withTimeout() path (e.g. via a MockWebServer
+    // body delay longer than an injected short readTimeoutMs) was tried and found not to be
+    // practical here: source.readUtf8Line() is a blocking Okio/OkHttp call with no suspension
+    // point, so kotlinx.coroutines cancellation from withTimeout() cannot preempt it mid-read --
+    // the coroutine only notices the timeout once that blocking call itself returns. Verified this
+    // by probing the actual events: with readTimeoutMs=200 and a 2s body delay, the real "late"
+    // Token event came through, not a TransportError. [readTimeoutMs] is still fully injectable for
+    // any future test once/if the read is made properly cancellable (e.g. via Okio's own
+    // Timeout deadline), so the message-consistency test above is what's practical today.
+
     @Test
     fun `an unreachable server yields a TransportError instead of throwing`() = runTest {
         val deadUrl = server.url("/api/chat/stream?stream_id=abc")

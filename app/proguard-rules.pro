@@ -70,8 +70,15 @@
     @android.speech.SpeechRecognizer *;
 }
 
-# Keep notification and widget receivers
--keep class com.hermex.android.notification.** { *; }
+# Keep widget receivers (manifest-declared AppWidgetProvider -- R8 already keeps manifest
+# components automatically, but this makes the intent explicit).
+#
+# Notification classes (com.hermex.android.core.notifications.**) previously had a keep rule here
+# under a nonexistent com.hermex.android.notification.** package (note: singular, missing the
+# "core." prefix -- it matched nothing). They don't need one: none of them are manifest-declared,
+# none are looked up via reflection/Class.forName, and they're all plainly referenced from Kotlin
+# call sites R8 already traces (AppContainer, ChatViewModel, etc.), so normal reachability keeps
+# what's used and correctly shrinks what isn't.
 -keep class com.hermex.android.widget.** { *; }
 
 # Keep Hermex data classes

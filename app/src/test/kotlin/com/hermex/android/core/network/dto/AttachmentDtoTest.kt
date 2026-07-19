@@ -1,5 +1,6 @@
 package com.hermex.android.core.network.dto
 
+import com.hermex.android.chat.displayFileName
 import com.hermex.android.core.network.HermexJson
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -119,6 +120,69 @@ class AttachmentDtoTest {
     @Test
     fun `buildAttachedFilesMarker returns empty string for no attachments`() {
         assertEquals("", buildAttachedFilesMarker(emptyList()))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker recovers a single full server path`() {
+        val content = "check this out\n\n[Attached files: /state/attachments/sess-1/photo.png]"
+        assertEquals(listOf("/state/attachments/sess-1/photo.png"), parseAttachedFilesMarker(content))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker recovers multiple comma-separated references`() {
+        val content = "hello\n\n[Attached files: path1, path2, path3]"
+        assertEquals(listOf("path1", "path2", "path3"), parseAttachedFilesMarker(content))
+    }
+
+    @Test
+    fun `parseAttachedFilesMarker returns empty list when there is no marker`() {
+        assertEquals(emptyList<String>(), parseAttachedFilesMarker("just a plain message"))
+        assertEquals(emptyList<String>(), parseAttachedFilesMarker(null))
+    }
+
+    @Test
+    fun `ChatMessage attachmentsForDisplay prefers the structured attachments field when present`() {
+        val message = ChatMessage(
+            role = "user",
+            content = "hi\n\n[Attached files: ignored.png]",
+            attachments = listOf(MessageAttachment(name = "real.png", isImage = true)),
+        )
+
+        assertEquals(listOf(MessageAttachment(name = "real.png", isImage = true)), message.attachmentsForDisplay())
+    }
+
+    @Test
+    fun `ChatMessage attachmentsForDisplay falls back to the marker when attachments is null`() {
+        val message = ChatMessage(
+            role = "user",
+            content = "check this out\n\n[Attached files: /state/attachments/sess-1/photo.png]",
+            attachments = null,
+        )
+
+        val display = message.attachmentsForDisplay()
+
+        assertEquals(1, display.size)
+        assertEquals("/state/attachments/sess-1/photo.png", display.first().path)
+        assertTrue(display.first().wasBareReference)
+        assertEquals("photo.png", display.first().displayFileName())
+    }
+
+    @Test
+    fun `ChatMessage attachmentsForDisplay falls back to the marker when attachments is an empty list`() {
+        val message = ChatMessage(
+            role = "user",
+            content = "hi\n\n[Attached files: a.png, b.png]",
+            attachments = emptyList(),
+        )
+
+        assertEquals(2, message.attachmentsForDisplay().size)
+    }
+
+    @Test
+    fun `ChatMessage attachmentsForDisplay is empty when there is neither structured data nor a marker`() {
+        val message = ChatMessage(role = "assistant", content = "no attachments here", attachments = null)
+
+        assertEquals(emptyList<MessageAttachment>(), message.attachmentsForDisplay())
     }
 
     @Test

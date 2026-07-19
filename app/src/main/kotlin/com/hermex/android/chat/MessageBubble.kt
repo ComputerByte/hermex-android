@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.MessageAttachment
+import com.hermex.android.core.network.dto.attachmentsForDisplay
 import com.hermex.android.core.network.dto.fileTypeIcon
 import com.hermex.android.core.network.dto.stripAttachedFilesMarker
 import com.hermex.android.chat.AttachmentFileOpener
@@ -213,7 +214,7 @@ private fun MessageAttachments(
     serverBaseUrl: String?,
     onOpenImage: (String) -> Unit,
 ) {
-    val attachments = message.attachments.orEmpty()
+    val attachments = message.attachmentsForDisplay()
     if (attachments.isEmpty()) return
 
     AttachmentChips(

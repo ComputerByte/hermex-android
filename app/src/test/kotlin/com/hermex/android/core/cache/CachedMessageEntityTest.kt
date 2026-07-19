@@ -2,8 +2,10 @@ package com.hermex.android.core.cache
 
 import com.hermex.android.core.network.dto.ChatMessage
 import com.hermex.android.core.network.dto.MessageAttachment
+import com.hermex.android.core.network.dto.attachmentsForDisplay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CachedMessageEntityTest {
@@ -55,6 +57,49 @@ class CachedMessageEntityTest {
         assertNull(roundTripped.messageId)
         assertNull(roundTripped.reasoning)
         assertNull(roundTripped.name)
+    }
+
+    @Test
+    fun `a message with null attachments but a surviving marker still recovers a display attachment after a cache round trip`() {
+        // Reproduces issue #16: a server whose history payload omits the structured `attachments`
+        // array for a message still echoes the `[Attached files: ...]` marker in its content.
+        val original = ChatMessage(
+            role = "user",
+            content = "check this out\n\n[Attached files: /state/attachments/session-1/photo.png]",
+            attachments = null,
+        )
+
+        val entity = original.toCachedEntity("server-a", "session-1", 0, 0L)
+        val roundTripped = entity.toChatMessage()
+
+        assertNull(roundTripped.attachments)
+        val display = roundTripped.attachmentsForDisplay()
+        assertEquals(1, display.size)
+        assertEquals("/state/attachments/session-1/photo.png", display.first().path)
+        assertTrue(display.first().wasBareReference)
+    }
+
+    @Test
+    fun `a corrupted attachmentsJson column decodes to null instead of throwing`() {
+        val entity = CachedMessageEntity(
+            serverId = "server-a",
+            sessionId = "session-1",
+            orderIndex = 0,
+            role = "user",
+            content = "hi\n\n[Attached files: photo.png]",
+            reasoning = null,
+            timestamp = null,
+            messageId = null,
+            name = null,
+            toolCallId = null,
+            attachmentsJson = "{not valid json[",
+            cachedAtEpochMillis = 0L,
+        )
+
+        val roundTripped = entity.toChatMessage()
+
+        assertNull(roundTripped.attachments)
+        assertEquals(1, roundTripped.attachmentsForDisplay().size)
     }
 
     @Test

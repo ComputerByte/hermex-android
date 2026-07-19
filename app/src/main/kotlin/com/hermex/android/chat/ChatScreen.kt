@@ -69,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.ProjectSummary
+import com.hermex.android.core.notifications.HermexNotificationRoutes
 import com.hermex.android.core.util.HermexLog
 import com.hermex.android.core.util.TtftTracer
 import com.hermex.android.navigation.LocalHermexDrawerOpener
@@ -609,7 +610,7 @@ fun ChatScreen(
 }
 
 private fun chatShareSession(context: Context, sessionId: String, sessionTitle: String) {
-    val uri = "hermex://session/$sessionId"
+    val uri = HermexNotificationRoutes.session(sessionId)
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, uri)

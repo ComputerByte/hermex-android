@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hermex.android.core.network.dto.SessionSummary
+import com.hermex.android.core.notifications.HermexNotificationRoutes
 import com.hermex.android.navigation.LocalHermexDrawerOpener
 import com.hermex.android.ui.theme.HermexColors
 import com.hermex.android.ui.theme.HermexErrorBanner
@@ -529,7 +530,7 @@ fun SessionListBody(
 }
 
 private fun shareSession(context: Context, sessionId: String, sessionTitle: String) {
-    val uri = "hermex://session/$sessionId"
+    val uri = HermexNotificationRoutes.session(sessionId)
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, uri)

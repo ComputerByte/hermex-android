@@ -1,3 +1,51 @@
+# Hermex Android v1.0.0
+
+## The first stable release
+
+Hermex Android graduates from preview to `1.0.0`. This release folds in everything staged
+since `v0.12.6-preview` — most notably chat-stream reliability during backgrounding — plus a
+final release pass: debug-only logging confirmed stripped by R8, a clean lint pass, and
+ProGuard/R8 shrinking verified against the built APK.
+
+### Chat streams survive backgrounding
+
+Backgrounding the app during a streaming reply used to get the connection frozen and killed by
+Android ("Software caused connection abort"), cutting the response short. A foreground service
+now keeps the process alive for the duration of an active chat stream, shown as a low-priority
+"Response in progress" notification, and is torn down on every terminal path (normal
+completion, cancel, error, reattach).
+
+Follow-up fixes to that mechanism, found during review:
+- A reattach from the notification while the app was still backgrounded could crash the
+  service-start call; it now retries cleanly instead of getting stuck.
+- Replacing one stream with another no longer leaves the old service running orphaned.
+- A stream that ends with a clean connection close (no explicit terminal event) now still
+  releases the service and finalizes state correctly — including when reached via reattach.
+- Android 15's 24-hour foreground-service timeout is now handled explicitly, and the app's
+  internal bookkeeping resyncs afterward instead of silently blocking future streams from
+  getting foreground protection.
+
+### Also in this release
+
+- Image attachments now render in message history, not just in the live conversation.
+- The "Move to Project" dialog is wired to the real project list instead of a placeholder.
+- Shared session links are percent-encoded correctly, fixing deep links with special
+  characters in session ids.
+- The in-app notification preference is enforced consistently and task ids are stabilized.
+- The SSE timeout message now stays in sync with its actual configured duration.
+- The home-screen widget uses an app-owned drawable instead of a deprecated selector
+  background.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android), current rotated certificate
+
+**SHA-256 (APK):** `ce6f41d3893349feebfc92efad0eb0624ba67547eb038eb0c146d5eae3d2de72`
+
+---
+
 # Hermex Android v0.12.7-preview
 
 ## Chat streams survive backgrounding

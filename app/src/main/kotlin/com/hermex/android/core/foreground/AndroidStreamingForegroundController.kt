@@ -18,6 +18,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [onStreamStopped] is idempotent: concurrent or repeated terminal signals cannot double-stop
  * or leak the service. The [AtomicBoolean] guard also prevents [onStreamStarted] from sending
  * a second start intent if the service is already running.
+ *
+ * Also registers itself for [ChatStreamForegroundService.onSystemTimeout] while running, so a
+ * system-initiated stop (the Android 15+ dataSync 24h foreground service timeout) resets
+ * [isRunning] the same as an explicit [onStreamStopped] would -- otherwise it would stay stuck
+ * true and silently block every future [onStreamStarted] call.
  */
 class AndroidStreamingForegroundController(
     private val context: Context,
@@ -29,6 +34,9 @@ class AndroidStreamingForegroundController(
         if (isRunning.compareAndSet(false, true)) {
             try {
                 ContextCompat.startForegroundService(context, ChatStreamForegroundService.startIntent(context))
+                // Hear about a system-initiated stop (Android 15+ dataSync 24h timeout) so
+                // isRunning doesn't stay stuck true forever after the service is gone.
+                ChatStreamForegroundService.onSystemTimeout = { isRunning.set(false) }
             } catch (e: IllegalStateException) {
                 HermexLog.w("StreamService", "startForegroundService failed (likely backgrounded): ${e.message}")
                 isRunning.set(false)
@@ -38,6 +46,7 @@ class AndroidStreamingForegroundController(
 
     override fun onStreamStopped() {
         if (isRunning.compareAndSet(true, false)) {
+            ChatStreamForegroundService.onSystemTimeout = null
             context.startService(ChatStreamForegroundService.stopIntent(context))
         }
     }

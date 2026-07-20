@@ -2853,4 +2853,30 @@ class ChatViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `reattachStream that ends without a terminal event still stops the foreground service and finalizes state`() = runTest {
+        authRepository = loggedInRepository()
+        // active_stream_id present with no local activeStreamId yet is what makes loadSession
+        // mark this session as reattachable.
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[],"active_stream_id":"str1"}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val controller = FakeStreamingForegroundController()
+        // A flow that emits a token and then completes without any terminal SSE event -- same
+        // clean-EOF shape as the sendMessage case above, but reached via reattachStream.
+        val vm = viewModelWithController(controller, listOf(SseEvent.Token("partial content")))
+
+        vm.uiState.test {
+            awaitUntil { it.hasDisconnectedStream }
+            vm.reattachStream()
+            awaitUntil { it.isStreaming }
+            awaitUntil { !it.isStreaming }
+
+            assertEquals(1, controller.startedCount)
+            assertEquals(1, controller.stoppedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

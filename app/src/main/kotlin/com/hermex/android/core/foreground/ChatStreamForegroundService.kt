@@ -47,15 +47,25 @@ internal class ChatStreamForegroundService : Service() {
 
     /** Android 15+ (API 35) enforces a 24-hour timeout on [android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC]
      * foreground services. When the timeout fires without a corresponding stop, the system calls
-     * this method. We stop cleanly rather than letting the system kill the process. */
+     * this method. We stop cleanly rather than letting the system kill the process, and notify
+     * [onSystemTimeout] so [AndroidStreamingForegroundController]'s running-state guard doesn't
+     * stay stuck true forever -- otherwise every future [AndroidStreamingForegroundController.onStreamStarted]
+     * would silently no-op, permanently starving new streams of foreground protection. */
     @Suppress("OVERRIDE_DEPRECATION")
     override fun onTimeout(startId: Int, fgsType: Int) {
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+        onSystemTimeout?.invoke()
     }
 
     companion object {
         private const val ACTION_STOP = "com.hermex.android.ACTION_STREAM_STOP"
+
+        /** Set by [AndroidStreamingForegroundController] for as long as it believes this service
+         * is running, so it can hear about a system-initiated stop (the 24h dataSync timeout)
+         * as opposed to its own explicit [AndroidStreamingForegroundController.onStreamStopped].
+         * Cleared on every stop so a later start/stop cycle isn't spuriously notified. */
+        var onSystemTimeout: (() -> Unit)? = null
 
         fun startIntent(context: Context): Intent =
             Intent(context, ChatStreamForegroundService::class.java)

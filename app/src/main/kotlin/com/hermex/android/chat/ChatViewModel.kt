@@ -1141,7 +1141,11 @@ class ChatViewModel(
         // observe can't get misattributed to whatever unrelated turn last called
         // TtftTracer.start().
         TtftTracer.finish()
-        _uiState.update { it.copy(isReattaching = true, hasDisconnectedStream = false) }
+        // isStreaming must be set true here (sendMessage's equivalent is line ~647) -- the
+        // clean-EOF safety net in observeStream()'s finally block only finalizes when
+        // isStreaming is true, and without this a reattached stream that ends without a
+        // terminal SSE event would leak the foreground service and never finalize.
+        _uiState.update { it.copy(isReattaching = true, hasDisconnectedStream = false, isStreaming = true) }
         activeStreamId = streamId
         observeStream(serverBaseUrl, streamId)
         _uiState.update { it.copy(isReattaching = false) }

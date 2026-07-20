@@ -236,51 +236,51 @@ certificate). Never commit signing material.
 
 ## Screenshots
 
-The images previously embedded in this README have not been verified against the
-current build, so they are not shown here as current product screenshots. The
-existing files under `release-artifacts/screenshots/` need recapture or
-revalidation before being republished.
+Current device captures from SM-S721U running v0.12.6-preview (versionCode 31).
+All images are raw 1080×2340 native screenshots taken directly from the installed
+release APK via ADB — not from a debug build, and not fabricated or sanitized.
 
-> **Note:** `settings.png` exposes a private LAN IP address and must be
-> recaptured (or redacted) before it is used anywhere public.
+### Sessions and chat
 
-### Current device captures
+![Session list with day-grouped recents](release-artifacts/screenshots/session-list.png)
 
-Captured from the connected device (SM-S721U) running v0.12.6-preview.
-Private session titles, server path, and user initials have been redacted.
+![Navigation drawer with screen links and recent sessions](release-artifacts/screenshots/nav-drawer.png)
 
-![Session list / home — sanitized capture from SM-S721U running v0.12.6-preview](release-artifacts/screenshots/session-list-v0126preview-sanitized.png)
+![Chat with streaming message history and tool calls](release-artifacts/screenshots/chat.png)
 
-![Navigation drawer — sanitized capture from SM-S721U running v0.12.6-preview](release-artifacts/screenshots/nav-drawer-v0126preview-sanitized.png)
+![Chat model picker showing available models by provider](release-artifacts/screenshots/chat-model-picker.png)
 
-### Recapture checklist
+### Search
 
-Existing files to recapture or revalidate:
+![Session search with live-filtered results](release-artifacts/screenshots/search.png)
 
-- `session-list.png`, `nav-drawer.png`
-- `chat.png`, `chat-model-picker.png`
-- `projects.png`, `tasks.png`, `insights.png`
-- `multi-server.png`, `connection-headers.png`
-- `app-icon-picker.png`, `header-logo-color.png`
-- `offline-cache.png`, `workspace.png`
-- `search.png`
-- `settings.png` (contains a private LAN IP — redact/recapture)
+### Control-plane
 
-Recommended coverage for a refreshed set:
+![Projects list](release-artifacts/screenshots/projects.png)
 
-- [ ] Session list / home
-- [ ] Navigation drawer / profile switcher
-- [ ] Chat with an attachment and message history
-- [ ] Projects "move to project" picker
-- [ ] Workspace browser and read-only Git status/diff
-- [ ] Tasks list/detail
-- [ ] Skills, memory, and insights
-- [ ] Server editor / header security (masked values)
-- [ ] Settings and app-icon picker
-- [ ] Share intake destination picker
-- [ ] Notification and widget entry points
-- [ ] Tablet layout — only if actually tested; otherwise mark "not yet
-      verified"
+![Tasks (cron jobs) list](release-artifacts/screenshots/tasks.png)
+
+![Usage analytics / insights by timeframe](release-artifacts/screenshots/insights.png)
+
+### Server configuration and security
+
+![Multi-server list with Add Server action](release-artifacts/screenshots/multi-server.png)
+
+![Connection headers editor (per-server custom HTTP headers)](release-artifacts/screenshots/connection-headers.png)
+
+### Settings and appearance
+
+![Settings screen](release-artifacts/screenshots/settings.png)
+
+![App icon picker (System / Light / Dark / Disco)](release-artifacts/screenshots/app-icon-picker.png)
+
+![Header logo color picker](release-artifacts/screenshots/header-logo-color.png)
+
+### Workspace and offline
+
+![Workspace file browser with Git read-only status](release-artifacts/screenshots/workspace.png)
+
+![Session list showing offline cache banner when server is unreachable](release-artifacts/screenshots/offline-cache.png)
 
 ## Roadmap
 

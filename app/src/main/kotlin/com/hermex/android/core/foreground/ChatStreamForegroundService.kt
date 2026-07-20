@@ -45,6 +45,15 @@ internal class ChatStreamForegroundService : Service() {
         return START_NOT_STICKY
     }
 
+    /** Android 15+ (API 35) enforces a 24-hour timeout on [android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC]
+     * foreground services. When the timeout fires without a corresponding stop, the system calls
+     * this method. We stop cleanly rather than letting the system kill the process. */
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     companion object {
         private const val ACTION_STOP = "com.hermex.android.ACTION_STREAM_STOP"
 

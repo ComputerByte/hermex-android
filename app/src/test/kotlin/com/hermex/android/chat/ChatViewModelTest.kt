@@ -2828,4 +2828,29 @@ class ChatViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `stream that ends with collect completing normally but no terminal event still stops the foreground service and finalizes state`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"str1"}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val controller = FakeStreamingForegroundController()
+        // A flow that emits a token and then completes without any terminal SSE event
+        val vm = viewModelWithController(controller, listOf(SseEvent.Token("partial content")))
+
+        vm.uiState.test {
+            awaitUntil { !it.isLoading }
+            vm.onComposerTextChanged("hello")
+            vm.sendMessage()
+            awaitUntil { it.isStreaming }
+            awaitUntil { !it.isStreaming }
+
+            assertEquals(1, controller.stoppedCount)
+            assertEquals(1, controller.startedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

@@ -20,19 +20,24 @@ class StreamingForegroundControllerTest {
     // ── Fake records calls for ViewModel integration tests ──
 
     @Test
-    fun `fake records onStreamStarted calls`() {
+    fun `fake records onStreamStarted calls with AtomicBoolean semantics`() {
         val fake = FakeStreamingForegroundController()
         assertEquals(0, fake.startedCount)
         fake.onStreamStarted()
         assertEquals(1, fake.startedCount)
         fake.onStreamStarted()
-        assertEquals(2, fake.startedCount)
+        // Second start is a no-op -- production AtomicBoolean prevents double-start.
+        assertEquals(1, fake.startedCount)
     }
 
     @Test
-    fun `fake records onStreamStopped calls`() {
+    fun `fake records onStreamStopped calls with AtomicBoolean semantics`() {
         val fake = FakeStreamingForegroundController()
         assertEquals(0, fake.stoppedCount)
+        // Stop on a fresh controller is a no-op -- nothing running.
+        fake.onStreamStopped()
+        assertEquals(0, fake.stoppedCount)
+        fake.onStreamStarted()
         fake.onStreamStopped()
         assertEquals(1, fake.stoppedCount)
     }

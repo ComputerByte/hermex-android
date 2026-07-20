@@ -654,7 +654,6 @@ class ChatViewModel(
                     pendingExplicitModelPick = if (explicitModelPick) false else it.pendingExplicitModelPick,
                 )
             }
-            streamingForegroundController.onStreamStarted()
 
             _uiState.update { it.copy(hasDisconnectedStream = false, disconnectedStreamId = null) }
             activeStreamId = streamId
@@ -687,9 +686,27 @@ class ChatViewModel(
     }
 
     private fun observeStream(serverBaseUrl: String, streamId: String) {
+        // Release the previous stream's foreground service claim before cancelling it.
+        // sendMessage used to call onStreamStarted() itself but that raced with the
+        // cancellation below -- the old stream's coroutine never finalizes, so
+        // onStreamStopped() was never called and the AtomicBoolean stayed true, starving
+        // the new stream's start.  Placing both stop and start here in the right order
+        // ensures the controller always mirrors the active stream.
+        streamingForegroundController.onStreamStopped()
         streamJob?.cancel()
+        streamingForegroundController.onStreamStarted()
         streamJob = viewModelScope.launch {
-            sseClient.stream(chatStreamUrl(serverBaseUrl, streamId)).collect(::handleEvent)
+            try {
+                sseClient.stream(chatStreamUrl(serverBaseUrl, streamId)).collect(::handleEvent)
+            } finally {
+                // Safety net: if the SSE connection closes cleanly without any terminal
+                // SSE event (done/stream_end/cancel/error), collect() returns normally
+                // and finalizeStream() would never be called.  The isStreaming guard
+                // prevents double-finalization when handleEvent already called it.
+                if (_uiState.value.isStreaming) {
+                    finalizeStream(reason = StreamCompletionReason.NORMAL)
+                }
+            }
         }
     }
 
@@ -772,13 +789,9 @@ class ChatViewModel(
         // trace here (rather than separately per reason) guarantees no late/unrelated event can
         // log a mark against this turn's timer after it's genuinely over.
         TtftTracer.finish()
-        streamJob?.cancel()
-        streamJob = null
-        activeStreamId = null
-        approvalPollingJob?.cancel()
-        approvalPollingJob = null
-        clarificationPollingJob?.cancel()
-        clarificationPollingJob = null
+        // Set isStreaming=false BEFORE cancelling streamJob so any synchronous
+        // CancellationException that unwinds through the try/finally block in
+        // observeStream sees the final state and does not double-finalize.
         _uiState.update { state ->
             val hasPartialReply = state.streamingText.isNotEmpty() || state.streamingReasoning.isNotEmpty()
             val finalizedMessages = if (hasPartialReply) {
@@ -806,6 +819,13 @@ class ChatViewModel(
             )
         }
         HermexLog.d("Chat", "isRunning=false messages=${_uiState.value.messages.size}")
+        streamJob?.cancel()
+        streamJob = null
+        activeStreamId = null
+        approvalPollingJob?.cancel()
+        approvalPollingJob = null
+        clarificationPollingJob?.cancel()
+        clarificationPollingJob = null
         refreshCacheInBackground()
         if (reason == StreamCompletionReason.NORMAL) {
             responseCompletionNotifier.onResponseCompleted(sessionId, completedNormally = true)
@@ -1122,7 +1142,6 @@ class ChatViewModel(
         // TtftTracer.start().
         TtftTracer.finish()
         _uiState.update { it.copy(isReattaching = true, hasDisconnectedStream = false) }
-        streamingForegroundController.onStreamStarted()
         activeStreamId = streamId
         observeStream(serverBaseUrl, streamId)
         _uiState.update { it.copy(isReattaching = false) }

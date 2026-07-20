@@ -3,6 +3,7 @@ package com.hermex.android.core.foreground
 import android.content.Context
 import androidx.core.content.ContextCompat
 import com.hermex.android.chat.StreamingForegroundController
+import com.hermex.android.core.util.HermexLog
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -11,7 +12,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * [onStreamStarted] uses [ContextCompat.startForegroundService] so the service has the
  * required time window to call [android.app.Service.startForeground]. Must be called while
- * the app is still foregrounded (Android 14+ disallows background service starts).
+ * the app is still foregrounded (Android 14+ disallows background service starts). A failed
+ * start (e.g. called after backgrounding) resets the internal guard so a retry can succeed.
  *
  * [onStreamStopped] is idempotent: concurrent or repeated terminal signals cannot double-stop
  * or leak the service. The [AtomicBoolean] guard also prevents [onStreamStarted] from sending
@@ -25,7 +27,12 @@ class AndroidStreamingForegroundController(
 
     override fun onStreamStarted() {
         if (isRunning.compareAndSet(false, true)) {
-            ContextCompat.startForegroundService(context, ChatStreamForegroundService.startIntent(context))
+            try {
+                ContextCompat.startForegroundService(context, ChatStreamForegroundService.startIntent(context))
+            } catch (e: IllegalStateException) {
+                HermexLog.w("StreamService", "startForegroundService failed (likely backgrounded): ${e.message}")
+                isRunning.set(false)
+            }
         }
     }
 

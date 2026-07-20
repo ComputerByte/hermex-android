@@ -244,6 +244,15 @@ revalidation before being republished.
 > **Note:** `settings.png` exposes a private LAN IP address and must be
 > recaptured (or redacted) before it is used anywhere public.
 
+### Current device captures
+
+Captured from the connected device (SM-S721U) running v0.12.6-preview.
+Private session titles, server path, and user initials have been redacted.
+
+![Session list / home — sanitized capture from SM-S721U running v0.12.6-preview](release-artifacts/screenshots/session-list-v0126preview-sanitized.png)
+
+![Navigation drawer — sanitized capture from SM-S721U running v0.12.6-preview](release-artifacts/screenshots/nav-drawer-v0126preview-sanitized.png)
+
 ### Recapture checklist
 
 Existing files to recapture or revalidate:

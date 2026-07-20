@@ -1,3 +1,33 @@
+# Hermex Android v0.12.7-preview
+
+## Chat streams survive backgrounding
+
+Backgrounding the app during a streaming reply used to get the connection frozen and killed by
+Android ("Software caused connection abort"), cutting the response short. A foreground service
+now keeps the process alive for the duration of an active chat stream, shown as a low-priority
+"Response in progress" notification, and is torn down on every terminal path (normal
+completion, cancel, error, reattach).
+
+Follow-up fixes to that mechanism, found during review:
+- A reattach from the notification while the app was still backgrounded could crash the
+  service-start call; it now retries cleanly instead of getting stuck.
+- Replacing one stream with another no longer leaves the old service running orphaned.
+- A stream that ends with a clean connection close (no explicit terminal event) now still
+  releases the service and finalizes state correctly — including when reached via reattach.
+- Android 15's 24-hour foreground-service timeout is now handled explicitly, and the app's
+  internal bookkeeping resyncs afterward instead of silently blocking future streams from
+  getting foreground protection.
+
+## Installation
+
+**Minimum Android version:** 8.0 (API 26)
+**Target Android version:** 16 (API 36)
+**Signed:** Yes, v2 APK Signature Scheme (signer CN=Hermex Android), current rotated certificate
+
+**SHA-256 (APK):** `8f3c0246d6a52670429b4853109401b1439dbc70db4b9a76d3521174b3013afc`
+
+---
+
 # Hermex Android v0.12.6-preview
 
 ## Sidebar: Active Profile

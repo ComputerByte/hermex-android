@@ -242,45 +242,45 @@ release APK via ADB — not from a debug build, and not fabricated or sanitized.
 
 ### Sessions and chat
 
-![Session list with day-grouped recents](release-artifacts/screenshots/session-list.png)
+| Session list | Navigation drawer |
+| --- | --- |
+| ![Session list with day-grouped recents](release-artifacts/screenshots/session-list.png) | ![Navigation drawer with screen links and recent sessions](release-artifacts/screenshots/nav-drawer.png) |
 
-![Navigation drawer with screen links and recent sessions](release-artifacts/screenshots/nav-drawer.png)
+| Chat | Model picker |
+| --- | --- |
+| ![Chat with streaming message history and tool calls](release-artifacts/screenshots/chat.png) | ![Chat model picker showing available models by provider](release-artifacts/screenshots/chat-model-picker.png) |
 
-![Chat with streaming message history and tool calls](release-artifacts/screenshots/chat.png)
+### Search and control-plane
 
-![Chat model picker showing available models by provider](release-artifacts/screenshots/chat-model-picker.png)
+| Session search | Projects |
+| --- | --- |
+| ![Session search with live-filtered results](release-artifacts/screenshots/search.png) | ![Projects list](release-artifacts/screenshots/projects.png) |
 
-### Search
-
-![Session search with live-filtered results](release-artifacts/screenshots/search.png)
-
-### Control-plane
-
-![Projects list](release-artifacts/screenshots/projects.png)
-
-![Tasks (cron jobs) list](release-artifacts/screenshots/tasks.png)
-
-![Usage analytics / insights by timeframe](release-artifacts/screenshots/insights.png)
+| Tasks | Insights |
+| --- | --- |
+| ![Tasks (cron jobs) list](release-artifacts/screenshots/tasks.png) | ![Usage analytics / insights by timeframe](release-artifacts/screenshots/insights.png) |
 
 ### Server configuration and security
 
-![Multi-server list with Add Server action](release-artifacts/screenshots/multi-server.png)
-
-![Connection headers editor (per-server custom HTTP headers)](release-artifacts/screenshots/connection-headers.png)
+| Servers | Connection headers |
+| --- | --- |
+| ![Multi-server list with Add Server action](release-artifacts/screenshots/multi-server.png) | ![Connection headers editor (per-server custom HTTP headers)](release-artifacts/screenshots/connection-headers.png) |
 
 ### Settings and appearance
 
-![Settings screen](release-artifacts/screenshots/settings.png)
+| Settings | App icon picker |
+| --- | --- |
+| ![Settings screen](release-artifacts/screenshots/settings.png) | ![App icon picker (System / Light / Dark / Disco)](release-artifacts/screenshots/app-icon-picker.png) |
 
-![App icon picker (System / Light / Dark / Disco)](release-artifacts/screenshots/app-icon-picker.png)
+| Header logo color | Offline cache |
+| --- | --- |
+| ![Header logo color picker](release-artifacts/screenshots/header-logo-color.png) | ![Session list showing offline cache banner when server is unreachable](release-artifacts/screenshots/offline-cache.png) |
 
-![Header logo color picker](release-artifacts/screenshots/header-logo-color.png)
+### Workspace
 
-### Workspace and offline
-
-![Workspace file browser with Git read-only status](release-artifacts/screenshots/workspace.png)
-
-![Session list showing offline cache banner when server is unreachable](release-artifacts/screenshots/offline-cache.png)
+| Workspace |
+| --- |
+| ![Workspace file browser with Git read-only status](release-artifacts/screenshots/workspace.png) |
 
 ## Roadmap
 

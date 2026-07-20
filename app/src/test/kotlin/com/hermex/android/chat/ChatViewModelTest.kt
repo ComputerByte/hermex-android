@@ -2691,4 +2691,141 @@ class ChatViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // ── StreamingForegroundController integration ──
+
+    private fun viewModelWithController(
+        controller: FakeStreamingForegroundController,
+        sseEvents: List<SseEvent> = emptyList(),
+    ): ChatViewModel = ChatViewModel(
+        "s1", authRepository,
+        FakeSseClient { sseEvents.asFlow() },
+        FakeChatPreferencesStore(),
+        streamingForegroundController = controller,
+    )
+
+    private fun openStreamViewModel(
+        controller: FakeStreamingForegroundController,
+        sseFlow: Flow<SseEvent>,
+    ): ChatViewModel = ChatViewModel(
+        "s1", authRepository,
+        FakeSseClient { sseFlow },
+        FakeChatPreferencesStore(),
+        streamingForegroundController = controller,
+    )
+
+    @Test
+    fun `sendMessage calls onStreamStarted exactly once when a stream begins`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"str1"}"""))
+
+        val controller = FakeStreamingForegroundController()
+        val vm = openStreamViewModel(controller, flow { awaitCancellation() })
+
+        vm.uiState.test {
+            awaitUntil { !it.isLoading }
+            vm.onComposerTextChanged("hello")
+            vm.sendMessage()
+            awaitUntil { it.isStreaming }
+
+            assertEquals(1, controller.startedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a normally completed stream calls onStreamStopped exactly once`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"str1"}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val controller = FakeStreamingForegroundController()
+        val vm = viewModelWithController(controller, listOf(SseEvent.Token("hi"), SseEvent.Done(null, null)))
+
+        vm.uiState.test {
+            awaitUntil { !it.isLoading }
+            vm.onComposerTextChanged("hello")
+            vm.sendMessage()
+            awaitUntil { it.isStreaming }
+            awaitUntil { !it.isStreaming }
+
+            assertEquals(1, controller.stoppedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelStream calls onStreamStopped`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"str1"}"""))
+
+        val controller = FakeStreamingForegroundController()
+        val vm = openStreamViewModel(controller, flow { awaitCancellation() })
+
+        vm.uiState.test {
+            awaitUntil { !it.isLoading }
+            vm.onComposerTextChanged("hello")
+            vm.sendMessage()
+            awaitUntil { it.isStreaming }
+
+            vm.cancelStream()
+            awaitUntil { !it.isStreaming }
+
+            assertEquals(1, controller.stoppedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a transport error during streaming calls onStreamStopped`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"stream_id":"str1"}"""))
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+
+        val controller = FakeStreamingForegroundController()
+        val vm = viewModelWithController(
+            controller,
+            listOf(SseEvent.TransportError("Software caused connection abort")),
+        )
+
+        vm.uiState.test {
+            awaitUntil { !it.isLoading }
+            vm.onComposerTextChanged("hello")
+            vm.sendMessage()
+            awaitUntil { it.isStreaming }
+            awaitUntil { !it.isStreaming }
+
+            assertEquals(1, controller.stoppedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `onStreamStarted is not called when stream cannot start due to chat-start error`() = runTest {
+        authRepository = loggedInRepository()
+        server.enqueue(MockResponse().setBody("""{"session":{"session_id":"s1","messages":[]}}"""))
+        server.enqueue(MockResponse().setBody("""{"profiles":[]}"""))
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val controller = FakeStreamingForegroundController()
+        val vm = viewModelWithController(controller)
+
+        vm.uiState.test {
+            awaitUntil { !it.isLoading }
+            vm.onComposerTextChanged("hello")
+            vm.sendMessage()
+            awaitUntil { it.errorMessage != null }
+
+            assertEquals(0, controller.startedCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

@@ -13,6 +13,8 @@ import com.hermex.android.MainActivity
 import com.hermex.android.R
 
 object HermexNotifier {
+    /** Ongoing notification shown while a foreground service keeps the SSE stream alive. */
+    const val STREAM_SERVICE_NOTIFICATION_ID = 1100
     const val SESSION_ATTENTION_NOTIFICATION_ID = 1200
     const val TASK_DONE_NOTIFICATION_ID = 1300
 

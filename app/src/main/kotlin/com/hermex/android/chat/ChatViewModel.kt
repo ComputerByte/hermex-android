@@ -81,6 +81,9 @@ class ChatViewModel(
     /** Injected callback for local response-completion notifications. No-op by default so every
      * existing test/call site keeps compiling unchanged. */
     private val responseCompletionNotifier: ResponseCompletionNotifier = ResponseCompletionNotifier { _, _ -> },
+    /** Injected controller for the chat-stream foreground service. No-op by default so every
+     * existing test/call site keeps compiling unchanged. */
+    private val streamingForegroundController: StreamingForegroundController = StreamingForegroundController.NoOp,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -651,6 +654,7 @@ class ChatViewModel(
                     pendingExplicitModelPick = if (explicitModelPick) false else it.pendingExplicitModelPick,
                 )
             }
+            streamingForegroundController.onStreamStarted()
 
             _uiState.update { it.copy(hasDisconnectedStream = false, disconnectedStreamId = null) }
             activeStreamId = streamId
@@ -806,6 +810,7 @@ class ChatViewModel(
         if (reason == StreamCompletionReason.NORMAL) {
             responseCompletionNotifier.onResponseCompleted(sessionId, completedNormally = true)
         }
+        streamingForegroundController.onStreamStopped()
     }
 
     /** Re-fetches this session's detail from the network and caches *that* -- deliberately never
@@ -1117,6 +1122,7 @@ class ChatViewModel(
         // TtftTracer.start().
         TtftTracer.finish()
         _uiState.update { it.copy(isReattaching = true, hasDisconnectedStream = false) }
+        streamingForegroundController.onStreamStarted()
         activeStreamId = streamId
         observeStream(serverBaseUrl, streamId)
         _uiState.update { it.copy(isReattaching = false) }
@@ -1198,6 +1204,7 @@ class ChatViewModel(
         // App-retained ownership means this runs on logout/server switch/process teardown, not
         // merely when the user switches to another chat destination.
         streamJob?.cancel()
+        streamingForegroundController.onStreamStopped()
     }
 
     private fun nowEpochSeconds(): Double = System.currentTimeMillis() / 1000.0

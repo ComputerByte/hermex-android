@@ -2,6 +2,7 @@ package com.hermex.android.core.notifications
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HermexNotifierTest {
@@ -35,5 +36,25 @@ class HermexNotifierTest {
     @Test
     fun `an ordinary negative hash is made non-negative`() {
         assertEquals(42, HermexNotifier.nonNegativeHash(-42))
+    }
+
+    // ── Notification ID safety: stream service must not clobber completion/session notifications ──
+
+    @Test
+    fun `stream service notification id is distinct from session attention id`() {
+        assertNotEquals(HermexNotifier.STREAM_SERVICE_NOTIFICATION_ID, HermexNotifier.SESSION_ATTENTION_NOTIFICATION_ID)
+    }
+
+    @Test
+    fun `stream service notification id is distinct from base task done id`() {
+        assertNotEquals(HermexNotifier.STREAM_SERVICE_NOTIFICATION_ID, HermexNotifier.TASK_DONE_NOTIFICATION_ID)
+    }
+
+    @Test
+    fun `stream service notification id is less than base task done id so hash expansion cannot reach it`() {
+        // taskNotificationId() returns TASK_DONE_NOTIFICATION_ID + nonNegativeHash(...) >= TASK_DONE_NOTIFICATION_ID.
+        // STREAM_SERVICE_NOTIFICATION_ID is strictly below TASK_DONE_NOTIFICATION_ID, so no job id
+        // can produce a taskNotificationId equal to it.
+        assertTrue(HermexNotifier.STREAM_SERVICE_NOTIFICATION_ID < HermexNotifier.TASK_DONE_NOTIFICATION_ID)
     }
 }

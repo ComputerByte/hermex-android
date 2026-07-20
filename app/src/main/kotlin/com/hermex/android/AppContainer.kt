@@ -21,6 +21,7 @@ import com.hermex.android.core.cache.RoomOfflineCacheRepository
 import com.hermex.android.core.network.NetworkModule
 import com.hermex.android.core.network.SseClient
 import com.hermex.android.core.network.SseStreamSource
+import com.hermex.android.core.foreground.AndroidStreamingForegroundController
 import com.hermex.android.core.notifications.HermexNotifier
 import com.hermex.android.core.notifications.HermexResponseCompletionNotifier
 import com.hermex.android.core.storage.DataStoreAppearancePreferencesStore
@@ -192,6 +193,7 @@ class AppContainer(val context: Context) {
                     context = applicationContext,
                     isAppInForeground = { this@AppContainer.isAppInForeground },
                 ),
+                AndroidStreamingForegroundController(applicationContext),
             )
         }
     }

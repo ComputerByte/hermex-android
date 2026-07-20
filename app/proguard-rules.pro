@@ -95,15 +95,10 @@
     public static final ** CREATOR;
 }
 
-# Logging: strip verbose/debug logs in release, keep error/warning
+# Logging: strip verbose/debug/info logs in release, keep warning/error
 # HermexLog uses android.util.Log internally
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
     public static int i(...);
-}
-# Keep error and warning for crash reporting in release
--assumenosideeffects class android.util.Log {
-    public static int e(...);
-    public static int w(...);
 }

@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required on Android 14+ (API 34) when declaring foregroundServiceType="dataSync" -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".HermexApplication"
@@ -55,6 +58,17 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+
+        <!--
+          Foreground service that keeps the SSE stream alive while the user is backgrounded.
+          foregroundServiceType="dataSync" is required on Android 14+ for services maintaining
+          a live network data sync connection; pairing permission is declared above.
+          Not exported: started only via explicit intent from within this package.
+        -->
+        <service
+            android:name=".core.foreground.ChatStreamForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <receiver
             android:name=".widget.HermexWidgetProvider"

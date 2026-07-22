@@ -24,6 +24,7 @@ import com.hermex.android.core.network.SseStreamSource
 import com.hermex.android.core.foreground.AndroidStreamingForegroundController
 import com.hermex.android.core.notifications.HermexNotifier
 import com.hermex.android.core.notifications.HermexResponseCompletionNotifier
+import com.hermex.android.core.storage.AppearancePreferencesStore
 import com.hermex.android.core.storage.DataStoreAppearancePreferencesStore
 import com.hermex.android.core.storage.DataStoreChatPreferencesStore
 import com.hermex.android.core.storage.DataStoreCookieStore
@@ -68,7 +69,9 @@ class AppContainer(val context: Context) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val serverStore = DataStoreServerStore(context)
     private val chatPreferencesStore = DataStoreChatPreferencesStore(context)
-    private val appearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
+    /** Appearance preferences (font, header color, app icon, initials). Exposed for
+     * [MainActivity] to observe font-preference flows reactively. */
+    val appearancePreferencesStore: AppearancePreferencesStore = DataStoreAppearancePreferencesStore(context)
 
     /** Best-effort foreground/background signal. True while at least one activity is started.
      * Updated by [MainActivity.onStart] / [MainActivity.onStop]. Single-activity app, so this

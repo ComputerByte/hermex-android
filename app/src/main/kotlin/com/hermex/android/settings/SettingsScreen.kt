@@ -64,6 +64,8 @@ import coil3.compose.AsyncImage
 import com.hermex.android.BuildConfig
 import com.hermex.android.PRIVACY_POLICY_URL
 import com.hermex.android.R
+import com.hermex.android.core.font.FontFamilyOption
+import com.hermex.android.core.font.FontPickerDialog
 import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
 import com.hermex.android.ui.theme.HermexReadableContent
@@ -97,6 +99,8 @@ fun SettingsScreen(
     var showAppIconPicker by remember { mutableStateOf(false) }
     var showInitialsDialog by remember { mutableStateOf(false) }
     var showNotificationEducation by remember { mutableStateOf(false) }
+    var showUiFontPicker by remember { mutableStateOf(false) }
+    var showMonoFontPicker by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -188,6 +192,26 @@ fun SettingsScreen(
                 showAppIconPicker = false
             },
             onDismiss = { showAppIconPicker = false },
+        )
+    }
+
+    if (showUiFontPicker) {
+        FontPickerDialog(
+            title = "UI Font",
+            currentKey = uiState.uiFontFamily,
+            isMonoPicker = false,
+            onSelect = { viewModel.setUiFontFamily(it) },
+            onDismiss = { showUiFontPicker = false },
+        )
+    }
+
+    if (showMonoFontPicker) {
+        FontPickerDialog(
+            title = "Monospace Font",
+            currentKey = uiState.monospaceFontFamily,
+            isMonoPicker = true,
+            onSelect = { viewModel.setMonospaceFontFamily(it) },
+            onDismiss = { showMonoFontPicker = false },
         )
     }
 
@@ -349,6 +373,22 @@ fun SettingsScreen(
                         "App Icon",
                         uiState.appIconVariant.displayName,
                         onClick = { showAppIconPicker = true },
+                        showDivider = false,
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+                SectionLabel("Font")
+                Card {
+                    SettingsRow(
+                        "UI Font",
+                        FontFamilyOption.fromStorageKey(uiState.uiFontFamily).displayName,
+                        onClick = { showUiFontPicker = true },
+                    )
+                    SettingsRow(
+                        "Monospace Font",
+                        FontFamilyOption.fromStorageKey(uiState.monospaceFontFamily).displayName,
+                        onClick = { showMonoFontPicker = true },
                         showDivider = false,
                     )
                 }

@@ -1,5 +1,6 @@
 package com.hermex.android.settings
 
+import com.hermex.android.core.font.FontFamilyOption
 import com.hermex.android.core.storage.AppIconVariant
 import com.hermex.android.core.storage.HeaderLogoColor
 
@@ -24,4 +25,9 @@ data class SettingsUiState(
     val notificationsEnabled: Boolean = false,
     val showSubagentSessions: Boolean = true,
     val userInitials: String = "BD",
+    // ── Font preferences ──
+    /** Stored font key for the UI font (see [FontFamilyOption.storageKey]). */
+    val uiFontFamily: String = FontFamilyOption.SystemDefault.storageKey,
+    /** Stored font key for the monospace/code font. */
+    val monospaceFontFamily: String = FontFamilyOption.SystemDefault.storageKey,
 )

@@ -8,7 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hermex.android.core.font.FontFamilyOption
+import com.hermex.android.core.font.resolveMonospaceFontFamily
+import com.hermex.android.core.font.resolveUiFontFamily
 import com.hermex.android.navigation.HermexNavGraph
 import com.hermex.android.navigation.HermexIntentDestination
 import com.hermex.android.navigation.hermexDestination
@@ -24,7 +29,17 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val appContainer = (application as HermexApplication).appContainer
         setContent {
-            HermexTheme {
+            val uiFontKey by appContainer.appearancePreferencesStore
+                .observeUiFontFamily()
+                .collectAsStateWithLifecycle(FontFamilyOption.SystemDefault.storageKey)
+            val monoFontKey by appContainer.appearancePreferencesStore
+                .observeMonospaceFontFamily()
+                .collectAsStateWithLifecycle(FontFamilyOption.SystemDefault.storageKey)
+
+            HermexTheme(
+                uiFontFamily = resolveUiFontFamily(uiFontKey),
+                monospaceFontFamily = resolveMonospaceFontFamily(monoFontKey),
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

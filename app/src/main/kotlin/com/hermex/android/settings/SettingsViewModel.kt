@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.hermex.android.auth.AuthRepository
 import com.hermex.android.core.appicon.AppIconSwitcher
 import com.hermex.android.core.appicon.NoOpAppIconAliasWriter
+import com.hermex.android.core.font.FontFamilyOption
 import com.hermex.android.core.network.ApiError
 import com.hermex.android.core.network.safeApiCall
 import com.hermex.android.core.storage.AppIconVariant
@@ -57,6 +58,9 @@ class SettingsViewModel(
             _uiState.update { it.copy(appIconVariant = appearancePreferencesStore.loadAppIconVariant()) }
             val initials = appearancePreferencesStore.loadUserInitials()
             _uiState.update { it.copy(userInitials = initials) }
+            // Font prefs
+            _uiState.update { it.copy(uiFontFamily = appearancePreferencesStore.loadUiFontFamily()) }
+            _uiState.update { it.copy(monospaceFontFamily = appearancePreferencesStore.loadMonospaceFontFamily()) }
             val customHeaders = customHeadersStore.load()
             _uiState.update { it.copy(customHeaderCount = customHeaders.size) }
             val api = authRepository.apiForActiveServer()
@@ -125,6 +129,30 @@ class SettingsViewModel(
         onNotificationsChanged?.invoke(value)
     }
 
+    // ── Font setters ──
+
+    fun setUiFontFamily(fontKey: String) {
+        _uiState.update { it.copy(uiFontFamily = fontKey) }
+        viewModelScope.launch { appearancePreferencesStore.setUiFontFamily(fontKey) }
+    }
+
+    fun setMonospaceFontFamily(fontKey: String) {
+        _uiState.update { it.copy(monospaceFontFamily = fontKey) }
+        viewModelScope.launch { appearancePreferencesStore.setMonospaceFontFamily(fontKey) }
+    }
+
+    // ── Display helpers ──
+
+    /** Display name for the currently selected UI font. */
+    fun uiFontDisplayName(): String {
+        return FontFamilyOption.fromStorageKey(_uiState.value.uiFontFamily).displayName
+    }
+
+    /** Display name for the currently selected monospace font. */
+    fun monospaceFontDisplayName(): String {
+        return FontFamilyOption.fromStorageKey(_uiState.value.monospaceFontFamily).displayName
+    }
+
     /** Doesn't need to navigate or flip [SettingsUiState.isSigningOut] back -- once
      * [AuthRepository.state] flips to `Unconfigured`, `HermexNavGraph` routes back to Onboarding
      * and unmounts this screen. */
@@ -149,6 +177,8 @@ class SettingsViewModel(
             appendLine("Custom Headers: ${state.customHeaderCount}")
             appendLine("Notifications: ${state.notificationsEnabled}")
             appendLine("Show Subagent Sessions: ${state.showSubagentSessions}")
+            appendLine("UI Font: ${uiFontDisplayName()}")
+            appendLine("Monospace Font: ${monospaceFontDisplayName()}")
         }
         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Hermex Diagnostics", diagnostics))
